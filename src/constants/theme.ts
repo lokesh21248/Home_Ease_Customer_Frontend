@@ -1,69 +1,73 @@
 /**
- * HomeEase Design System — Color tokens, typography, spacing, shadows
- * Single source of truth for all visual design decisions.
+ * HomeEase Design System — Pronto-style premium blue & white theme.
  */
 
 export const Colors = {
-  // Brand
-  primary: '#6C63FF',
-  primaryDark: '#4B44CC',
-  primaryLight: '#9D97FF',
-  primaryFade: 'rgba(108,99,255,0.12)',
+  // Brand — HomeEase Blue
+  primary: '#1479F8',
+  primaryDark: '#0D62D1',
+  primaryLight: '#3D92FA',
+  primaryFade: 'rgba(20, 121, 248, 0.10)',
+  primaryFade2: 'rgba(20, 121, 248, 0.05)',
 
   // Accent
-  accent: '#FF6584',
-  accentLight: 'rgba(255,101,132,0.15)',
+  accent: '#FF6B35',
+  accentLight: 'rgba(255,107,53,0.12)',
+  accentYellow: '#F59E0B',
+  accentGreen: '#10B981',
 
   // Semantic
-  success: '#22C55E',
-  successLight: 'rgba(34,197,94,0.15)',
+  success: '#10B981',
+  successLight: 'rgba(16,185,129,0.12)',
   warning: '#F59E0B',
-  warningLight: 'rgba(245,158,11,0.15)',
+  warningLight: 'rgba(245,158,11,0.12)',
   error: '#EF4444',
-  errorLight: 'rgba(239,68,68,0.15)',
-  info: '#38BDF8',
+  errorLight: 'rgba(239,68,68,0.12)',
+  info: '#3B82F6',
 
-  // Neutrals
-  background: '#0F0E17',
-  surface: '#1A1929',
-  surfaceLight: '#252438',
-  card: '#1E1D2E',
-  cardHover: '#2A2940',
-  border: 'rgba(255,255,255,0.08)',
-  borderActive: 'rgba(108,99,255,0.5)',
-  divider: 'rgba(255,255,255,0.06)',
+  // Neutrals — Light theme
+  background: '#F3F4F8',
+  surface: '#FFFFFF',
+  surfaceLight: '#F8F9FC',
+  surfaceDark: '#EEF0F5',
+  card: '#FFFFFF',
+  border: '#E5E7EB',
+  borderLight: '#F3F4F6',
+  borderActive: '#2563EB',
+  divider: '#F3F4F6',
 
   // Text
-  textPrimary: '#FFFFFF',
-  textSecondary: '#A0A0BB',
-  textMuted: '#6B6B88',
-  textDisabled: '#3E3E55',
+  textPrimary: '#111827',
+  textSecondary: '#6B7280',
+  textMuted: '#9CA3AF',
+  textDisabled: '#D1D5DB',
   textOnPrimary: '#FFFFFF',
   textOnAccent: '#FFFFFF',
+  textBlue: '#2563EB',
 
   // Overlay
-  overlay: 'rgba(0,0,0,0.6)',
-  overlayLight: 'rgba(0,0,0,0.3)',
-  glassBg: 'rgba(30,29,46,0.85)',
-  glassBorder: 'rgba(255,255,255,0.1)',
+  overlay: 'rgba(0,0,0,0.45)',
+  overlayLight: 'rgba(0,0,0,0.12)',
+  glassBg: 'rgba(255,255,255,0.92)',
+  glassBorder: 'rgba(0,0,0,0.06)',
 
-  // Status chips
+  // Status
   searching: '#F59E0B',
-  accepted: '#38BDF8',
-  inProgress: '#6C63FF',
-  completed: '#22C55E',
+  accepted: '#3B82F6',
+  inProgress: '#2563EB',
+  completed: '#10B981',
   cancelled: '#EF4444',
 
-  // Gradients (used as string arrays)
-  gradientPrimary: ['#6C63FF', '#4B44CC'] as const,
-  gradientAccent: ['#FF6584', '#FF8C60'] as const,
-  gradientSuccess: ['#22C55E', '#16A34A'] as const,
-  gradientCard: ['#1E1D2E', '#252438'] as const,
-  gradientBg: ['#0F0E17', '#1A1929'] as const,
+  // Gradients
+  gradientPrimary: ['#2563EB', '#1D4ED8'] as const,
+  gradientAccent: ['#FF6B35', '#FF8C00'] as const,
+  gradientSuccess: ['#10B981', '#059669'] as const,
+  gradientCard: ['#FFFFFF', '#F8F9FC'] as const,
+  gradientBg: ['#FFFFFF', '#F3F4F8'] as const,
+  gradientHero: ['#1E40AF', '#2563EB'] as const,
 };
 
 export const Typography = {
-  // Font family
   fontFamily: {
     regular: 'Outfit_400Regular',
     medium: 'Outfit_500Medium',
@@ -71,8 +75,6 @@ export const Typography = {
     bold: 'Outfit_700Bold',
     extraBold: 'Outfit_800ExtraBold',
   },
-
-  // Font sizes
   fontSize: {
     xs: 10,
     sm: 12,
@@ -85,15 +87,11 @@ export const Typography = {
     '4xl': 32,
     '5xl': 38,
   },
-
-  // Line heights
   lineHeight: {
     tight: 1.2,
     normal: 1.5,
     relaxed: 1.75,
   },
-
-  // Letter spacing
   letterSpacing: {
     tight: -0.5,
     normal: 0,
@@ -128,29 +126,43 @@ export const BorderRadius = {
 };
 
 export const Shadows = {
+  xs: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
   sm: {
-    shadowColor: '#6C63FF',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 2,
   },
   md: {
-    shadowColor: '#6C63FF',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 4,
   },
   lg: {
-    shadowColor: '#6C63FF',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.10,
     shadowRadius: 16,
-    elevation: 8,
+    elevation: 6,
   },
   card: {
     shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  blue: {
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -169,7 +181,7 @@ export const Layout = {
   screenPadding: Spacing.base,
   cardPadding: Spacing.base,
   headerHeight: 60,
-  tabBarHeight: 70,
+  tabBarHeight: 68,
   inputHeight: 52,
-  buttonHeight: 52,
+  buttonHeight: 54,
 };

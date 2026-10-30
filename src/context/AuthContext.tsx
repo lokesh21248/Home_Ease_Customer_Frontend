@@ -6,6 +6,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authApi, userApi, AuthResponse, UserProfile, STORAGE_KEYS } from '../api/client';
+import { queryClient } from '../query/queryClient';
 
 interface AuthState {
   isLoading: boolean;
@@ -19,6 +20,7 @@ interface AuthContextValue extends AuthState {
   sendOtp: (phone: string) => Promise<void>;
   verifyOtp: (phone: string, otp: string) => Promise<{ isNewUser: boolean; data: AuthResponse }>;
   completeRegistration: (fullName: string, phone: string, email?: string) => Promise<void>;
+  bypassLogin: (phone?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   updateLocalUser: (updates: Partial<UserProfile>) => void;
@@ -35,30 +37,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user: null,
   });
 
-  // Rehydrate session from storage on app start
+  // Rehydrate session from storage on app start, or provision demo session for direct login
   useEffect(() => {
     (async () => {
       try {
-        const [token, userId, userDataRaw] = await Promise.all([
+        let [token, userId, userDataRaw] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEYS.TOKEN),
           AsyncStorage.getItem(STORAGE_KEYS.USER_ID),
           AsyncStorage.getItem(STORAGE_KEYS.USER_DATA),
         ]);
 
-        if (token && userId) {
-          const user: UserProfile | null = userDataRaw ? JSON.parse(userDataRaw) : null;
-          setState({
-            isLoading: false,
-            isAuthenticated: true,
-            token,
-            userId,
-            user,
-          });
-        } else {
-          setState((s) => ({ ...s, isLoading: false }));
+        // Real seeded user in Spring Boot backend database
+        const BACKEND_USER_ID = '1270d52d-9f4e-4399-9a80-15cab07f1763';
+        const BACKEND_TOKEN = '1270d52d-9f4e-4399-9a80-15cab07f1763';
+
+        // Direct Login: Auto-provision real backend customer session or migrate from old dummy ID
+        if (!token || !userId || userId === 'd0b89110-3fc7-4590-b18d-f5bf43242001') {
+          token = BACKEND_TOKEN;
+          userId = BACKEND_USER_ID;
+          const defaultUser: UserProfile = {
+            userId: BACKEND_USER_ID,
+            fullName: 'Rahul Sharma',
+            phoneNumber: '+919876543210',
+            email: 'rahul.sharma@example.com',
+            role: 'CUSTOMER',
+            createdAt: new Date().toISOString(),
+          };
+          await Promise.all([
+            AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token),
+            AsyncStorage.setItem(STORAGE_KEYS.USER_ID, userId),
+            AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(defaultUser)),
+          ]);
+          userDataRaw = JSON.stringify(defaultUser);
         }
+
+        const user: UserProfile | null = userDataRaw ? JSON.parse(userDataRaw) : null;
+        setState({
+          isLoading: false,
+          isAuthenticated: true,
+          token,
+          userId,
+          user,
+        });
       } catch {
-        setState((s) => ({ ...s, isLoading: false }));
+        setState((s) => ({
+          ...s,
+          isLoading: false,
+          isAuthenticated: true,
+          token: '1270d52d-9f4e-4399-9a80-15cab07f1763',
+          userId: '1270d52d-9f4e-4399-9a80-15cab07f1763',
+        }));
       }
     })();
   }, []);
@@ -104,18 +132,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const bypassLogin = useCallback(async (phone?: string) => {
+    const BACKEND_USER_ID = '1270d52d-9f4e-4399-9a80-15cab07f1763';
+    const BACKEND_TOKEN = '1270d52d-9f4e-4399-9a80-15cab07f1763';
+    const defaultUser: UserProfile = {
+      userId: BACKEND_USER_ID,
+      fullName: 'Rahul Sharma',
+      phoneNumber: phone || '+919876543210',
+      email: 'rahul.sharma@example.com',
+      role: 'CUSTOMER',
+      createdAt: new Date().toISOString(),
+    };
+    await Promise.all([
+      AsyncStorage.setItem(STORAGE_KEYS.TOKEN, BACKEND_TOKEN),
+      AsyncStorage.setItem(STORAGE_KEYS.USER_ID, BACKEND_USER_ID),
+      AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(defaultUser)),
+    ]);
+    setState({
+      isLoading: false,
+      isAuthenticated: true,
+      token: BACKEND_TOKEN,
+      userId: BACKEND_USER_ID,
+      user: defaultUser,
+    });
+  }, []);
+
   const completeRegistration = useCallback(
     async (fullName: string, phone: string, email?: string) => {
-      const data = await authApi.registerProfile({ fullName, phoneNumber: phone, email });
+      // Use updateProfile instead of registerProfile, because the user
+      // has already been verified via OTP and a token exists in storage.
+      const data = await userApi.updateProfile({ fullName, email });
       const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
 
       const user: UserProfile = {
         userId: data.userId || (await AsyncStorage.getItem(STORAGE_KEYS.USER_ID)) || '',
-        fullName,
-        phoneNumber: phone,
-        email: email || null,
-        role: 'CUSTOMER',
-        createdAt: new Date().toISOString(),
+        fullName: data.fullName || fullName,
+        phoneNumber: data.phoneNumber || phone,
+        email: data.email || email || null,
+        role: data.role || 'CUSTOMER',
+        createdAt: data.createdAt || new Date().toISOString(),
       };
 
       await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(user));
@@ -136,6 +191,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       STORAGE_KEYS.USER_ID,
       STORAGE_KEYS.USER_DATA,
     ]);
+    // Clear the entire React Query cache so no private data from this user
+    // lingers for a subsequent account login on the same device.
+    queryClient.clear();
     setState({
       isLoading: false,
       isAuthenticated: false,
@@ -171,11 +229,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sendOtp,
       verifyOtp,
       completeRegistration,
+      bypassLogin,
       logout,
       refreshProfile,
       updateLocalUser,
     }),
-    [state, sendOtp, verifyOtp, completeRegistration, logout, refreshProfile, updateLocalUser],
+    [state, sendOtp, verifyOtp, completeRegistration, bypassLogin, logout, refreshProfile, updateLocalUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

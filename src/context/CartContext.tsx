@@ -21,7 +21,7 @@ export interface CartSubService {
   selectedAddons: { addon: Addon; quantity: number }[];
 }
 
-export type PaymentMethod = 'COD' | 'UPI' | 'CARD' | 'NET_BANKING';
+export type PaymentMethod = 'COD' | 'UPI' | 'CARD' | 'NET_BANKING' | 'WALLET';
 
 // ─── Cart State ───────────────────────────────────────────────────────────────
 interface CartState {
@@ -85,6 +85,9 @@ function computeTotals(
 function cartReducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {
     case 'SET_CATEGORY':
+      if (state.category?.serviceId === action.payload.serviceId) {
+        return { ...state, category: action.payload };
+      }
       return { ...initialState, category: action.payload };
 
     case 'ADD_SUB_SERVICE': {
