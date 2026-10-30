@@ -835,3 +835,19 @@ export const geoApi = {
   },
 
 };
+
+export interface AppUpdateCheckResponse {
+  updateAvailable: boolean;
+  forceUpdate: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  minimumVersion: string;
+  releaseNotes: string;
+  storeUrl: string;
+  appType: string;
+}
+
+export const systemApi = {
+  checkAppUpdate: (currentVersion = '1.0.0', platform = 'android'): Promise<AppUpdateCheckResponse> =>
+    request(`/app/check-update?appType=CUSTOMER&currentVersion=${encodeURIComponent(currentVersion)}&platform=${encodeURIComponent(platform)}`, {}, false),
+};
