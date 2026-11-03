@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
-import { MapPin, ChevronDown, Bell, AlertCircle, Wallet, Check } from 'lucide-react-native';
+import { MapPin, ChevronDown, Bell, AlertCircle, Wallet } from 'lucide-react-native';
 import { HomeColors } from './types';
 import { Typography } from '../../constants/theme';
 import { useUserLocation } from '../../hooks/useUserLocation';
@@ -190,7 +190,7 @@ export function LocationHeader({
                   ) : isUnserviceable ? (
                     <View style={styles.statusPillUnserviceable}>
                       <View style={styles.redDot} />
-                      <Text style={styles.statusPillUnserviceableText}>Not Available</Text>
+                      <Text style={styles.statusPillUnserviceableText}>Location Not Serviceable</Text>
                     </View>
                   ) : null}
                 </View>

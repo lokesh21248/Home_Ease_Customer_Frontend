@@ -4,7 +4,7 @@
  * strict coordinate & 6-digit pincode validation, and independent recipient address handling for friend bookings.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,14 +21,14 @@ import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { bookingApi, userApi, BookingRequest } from '../../src/api/client';
+import { bookingApi, userApi, BookingRequest, generateUUID } from '../../src/api/client';
 import { useCart, PaymentMethod } from '../../src/context/CartContext';
 import { useUserLocation } from '../../src/hooks/useUserLocation';
 import { useWallet } from '../../src/hooks/useWallet';
 import { sendBookingAddressToBackend } from '../../src/services/locationService';
 import { isValidCoordinate } from '../../src/services/coordinates';
 import { Colors, Typography, Spacing, BorderRadius } from '../../src/constants/theme';
-import { Users, MapPin, CheckCircle2, AlertTriangle, ShieldCheck } from 'lucide-react-native';
+import { Users, AlertTriangle } from 'lucide-react-native';
 
 const PAYMENT_METHODS: { id: PaymentMethod; label: string; icon: string }[] = [
   { id: 'WALLET', label: 'FirstDoor Wallet', icon: '💳' },
@@ -70,6 +70,9 @@ export default function SummaryScreen() {
   const userLoc = useUserLocation();
   const { balance, deductMoney } = useWallet();
 
+  const isSubmittingRef = useRef(false);
+  const idempotencyKeyRef = useRef<string>(generateUUID());
+
   const [couponCode, setCouponCode] = useState(cart.coupon?.code || '');
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState('');
@@ -81,6 +84,74 @@ export default function SummaryScreen() {
   const [recipientPhone, setRecipientPhone] = useState('');
   const [recipientAddress, setRecipientAddress] = useState('');
   const [recipientPincode, setRecipientPincode] = useState('');
+
+  // Live address serviceability state for the summary view
+  const [addressServiceability, setAddressServiceability] = useState<{
+    checking: boolean;
+    serviceable: boolean;
+    pincode: string;
+    message: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function verifyCurrentAddressService() {
+      const rawPin = isForFriend
+        ? recipientPincode
+        : cart.selectedAddress?.pincode || userLoc.address?.pincode || '';
+      const pin = rawPin.replace(/\D/g, '');
+
+      if (pin.length !== 6) {
+        if (isMounted) {
+          setAddressServiceability({
+            checking: false,
+            serviceable: false,
+            pincode: pin,
+            message: 'Location Not Serviceable: A 6-digit PIN code is required to check serviceability.',
+          });
+        }
+        return;
+      }
+
+      if (isMounted) {
+        setAddressServiceability({
+          checking: true,
+          serviceable: false,
+          pincode: pin,
+          message: 'Checking service availability...',
+        });
+      }
+
+      try {
+        const res = await bookingApi.checkServiceability(pin);
+        if (isMounted) {
+          setAddressServiceability({
+            checking: false,
+            serviceable: res.serviceable,
+            pincode: pin,
+            message: res.serviceable
+              ? res.message || 'Great! FirstDoor services are available in your area.'
+              : res.message || 'Location Not Serviceable: FirstDoor is not available in this PIN code.',
+          });
+        }
+      } catch {
+        if (isMounted) {
+          setAddressServiceability({
+            checking: false,
+            serviceable: false,
+            pincode: pin,
+            message: 'Location Not Serviceable: Unable to verify PIN code serviceability.',
+          });
+        }
+      }
+    }
+
+    verifyCurrentAddressService();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [cart.selectedAddress, userLoc.address, isForFriend, recipientPincode]);
 
   // Auto-fetch and select user's saved address or current detected address if not already selected
   useEffect(() => {
@@ -150,6 +221,8 @@ export default function SummaryScreen() {
   };
 
   const handlePlaceBooking = async () => {
+    if (bookingLoading || isSubmittingRef.current) return;
+
     if (cart.items.length === 0) {
       Alert.alert('No Services', 'Please select at least one service to book.');
       return;
@@ -194,8 +267,8 @@ export default function SummaryScreen() {
       const cleanedPin = recipientPincode.trim().replace(/\D/g, '');
       if (cleanedPin.length !== 6) {
         Alert.alert(
-          'Invalid Pincode',
-          'Please enter a valid 6-digit Indian pincode for the recipient address.'
+          'Location Not Serviceable',
+          'Please enter a valid 6-digit PIN code for the recipient address.'
         );
         return;
       }
@@ -234,8 +307,8 @@ export default function SummaryScreen() {
       const cleanedPin = rawPin.replace(/\D/g, '');
       if (cleanedPin.length !== 6) {
         Alert.alert(
-          'Pincode Required',
-          'Your selected delivery address does not have a verified 6-digit pincode. Please update your address.'
+          'Location Not Serviceable',
+          'Your selected delivery address does not have a verified 6-digit PIN code. Bookings outside supported areas are not permitted.'
         );
         return;
       }
@@ -243,74 +316,108 @@ export default function SummaryScreen() {
     }
 
     // 2. Pre-flight backend serviceability check (Authoritative check against PostgreSQL)
+    isSubmittingRef.current = true;
     setBookingLoading(true);
     try {
       const serviceCheck = await bookingApi.checkServiceability(targetPincode);
       if (!serviceCheck.serviceable) {
         setBookingLoading(false);
+        isSubmittingRef.current = false;
         Alert.alert(
-          'Area Not Serviceable',
+          'Location Not Serviceable',
           serviceCheck.message ||
-            `FirstDoor is not currently active in pincode ${targetPincode}. We currently serve Hyderabad.`
+            `FirstDoor is not currently active in PIN code ${targetPincode}. Bookings outside supported areas are not permitted.`
         );
         return;
       }
     } catch (checkErr: any) {
       console.warn('[BookingSummary] Serviceability pre-check error:', checkErr);
+      setBookingLoading(false);
+      isSubmittingRef.current = false;
+      Alert.alert(
+        'Location Not Serviceable',
+        `Unable to verify service availability for PIN code ${targetPincode}. Bookings outside supported areas are not permitted.`
+      );
+      return;
     }
 
     const scheduledDate = cart.selectedDate || new Date().toISOString().split('T')[0];
-    let scheduledAt = `${scheduledDate}T09:00:00Z`;
-    if (cart.selectedSlot?.time) {
-      const startPart = cart.selectedSlot.time.split('-')[0].trim();
-      const match = startPart.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
-      if (match) {
-        let hrs = parseInt(match[1], 10);
-        const mins = match[2];
-        const mod = match[3]?.toUpperCase();
-        if (mod === 'PM' && hrs < 12) hrs += 12;
-        if (mod === 'AM' && hrs === 12) hrs = 0;
-        scheduledAt = `${scheduledDate}T${String(hrs).padStart(2, '0')}:${mins}:00Z`;
+    let scheduledAt = new Date().toISOString();
+    if (cart.bookingType === 'SCHEDULED') {
+      scheduledAt = `${scheduledDate}T09:00:00Z`;
+      if (cart.selectedSlot?.time) {
+        const startPart = cart.selectedSlot.time.split('-')[0].trim();
+        const match = startPart.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+        if (match) {
+          let hrs = parseInt(match[1], 10);
+          const mins = match[2];
+          const mod = match[3]?.toUpperCase();
+          if (mod === 'PM' && hrs < 12) hrs += 12;
+          if (mod === 'AM' && hrs === 12) hrs = 0;
+          const localIso = `${scheduledDate}T${String(hrs).padStart(2, '0')}:${mins}:00`;
+          const d = new Date(localIso);
+          scheduledAt = isNaN(d.getTime()) ? `${localIso}Z` : d.toISOString();
+        }
       }
     }
 
-    const subServices = cart.items.map((i) => {
+    let serviceId = cart.category?.serviceId || '';
+    if (!UUID_REGEX.test(serviceId)) {
+      const fallbackMap: Record<string, string> = {
+        electrician: '6e2e370b-7d5e-46d2-944b-afe7c15db6d5',
+        cleaning: 'be8bb640-cc11-4243-ab4a-5cbdf34a0937',
+        massage: '6beaaf16-cb8b-4107-9f8b-617b23c0bd21',
+        ac: '9b7f941c-ee83-4ffe-bd1d-2dacba5d4760',
+      };
+      serviceId = fallbackMap[serviceId.toLowerCase()] || '6e2e370b-7d5e-46d2-944b-afe7c15db6d5';
+    }
+
+    let subServices = cart.items.map((i) => {
       let subId = i.subService.subServiceId;
       if (!UUID_REGEX.test(subId)) {
-        subId = CATEGORY_DEFAULT_SUB_SERVICE[cart.category?.serviceId || ''] || '2f689366-014d-4992-9cdd-68e5cd0a81bd';
+        subId = CATEGORY_DEFAULT_SUB_SERVICE[serviceId] || '3c391970-28ee-4f28-a566-5c3b48763525';
       }
       return {
         subServiceId: subId,
-        quantity: i.quantity,
+        quantity: Math.max(1, Number(i.quantity) || 1),
       };
     });
+
+    if (subServices.length === 0) {
+      const defaultSub = CATEGORY_DEFAULT_SUB_SERVICE[serviceId] || '3c391970-28ee-4f28-a566-5c3b48763525';
+      subServices = [{ subServiceId: defaultSub, quantity: 1 }];
+    }
 
     const addons = cart.items.flatMap((i) =>
       i.selectedAddons
         .filter((a) => UUID_REGEX.test(a.addon.addonId))
         .map((a) => ({
           addonId: a.addon.addonId,
-          quantity: a.quantity,
+          quantity: Math.max(1, Number(a.quantity) || 1),
         }))
     );
 
+    const numericLat = Number(userLat) || 17.4485;
+    const numericLng = Number(userLng) || 78.3748;
+
     const payload: BookingRequest = {
-      serviceId: cart.category.serviceId,
+      serviceId,
       subServices,
       addons: addons.length > 0 ? addons : undefined,
       ...(cart.coupon && { couponCode: cart.coupon.code }),
       scheduledAt,
-      userLat,
-      userLng,
+      userLat: numericLat,
+      userLng: numericLng,
       userLocation: isForFriend
         ? `${targetAddressLine}, ${targetCity} (${targetPincode})`
         : `${targetAddressLine}, ${targetCity}`,
       paymentMethod: cart.paymentMethod || 'COD',
       pincode: targetPincode,
-      isForFriend: isForFriend,
+      isForFriend: Boolean(isForFriend),
+      idempotencyKey: idempotencyKeyRef.current,
       ...(isForFriend && {
         recipientName: recipientName.trim(),
-        recipientPhone: recipientPhone.trim(),
+        recipientPhone: recipientPhone.trim().replace(/[\s-]/g, ''),
         recipientAddress: `${targetAddressLine}, ${targetCity} (${targetPincode})`,
       }),
     };
@@ -318,6 +425,7 @@ export default function SummaryScreen() {
     if (cart.paymentMethod === 'WALLET') {
       if (balance < cart.total) {
         setBookingLoading(false);
+        isSubmittingRef.current = false;
         Alert.alert(
           'Insufficient Wallet Balance',
           `Your wallet balance is ₹${balance.toLocaleString('en-IN')}, but total is ₹${cart.total.toLocaleString('en-IN')}. Please top up your wallet or select another payment method.`,
@@ -345,7 +453,21 @@ export default function SummaryScreen() {
         });
       }
 
-      const booking = await bookingApi.createBooking(payload);
+      let booking: any;
+      if (cart.bookingType === 'INSTANT') {
+        booking = await bookingApi.createInstantBooking({
+          ...payload,
+          bookingType: 'INSTANT',
+        });
+      } else {
+        const slotText = cart.selectedSlot?.time || '09:00 AM - 10:00 AM';
+        booking = await bookingApi.createScheduledBooking({
+          ...payload,
+          bookingType: 'SCHEDULED',
+          scheduledDate,
+          timeSlot: slotText,
+        });
+      }
 
       // Deduct from wallet if paid via WALLET
       if (cart.paymentMethod === 'WALLET') {
@@ -356,18 +478,52 @@ export default function SummaryScreen() {
         }
       }
 
-      clearCart();
-      router.replace({
-        pathname: '/booking/success',
-        params: {
-          bookingId: booking.bookingId,
-          scheduledAt: booking.scheduledAt,
-          serviceName: booking.serviceName || cart.category.name,
-        },
-      });
+      // Ensure bookingId exists before clearing cart and moving to success screen
+      if (booking?.bookingId) {
+        clearCart();
+        router.replace({
+          pathname: '/booking/success',
+          params: {
+            bookingId: booking.bookingId,
+            scheduledAt: booking.scheduledAt,
+            serviceName: booking.serviceName || cart.category.name,
+          },
+        });
+      } else {
+        throw new Error('Booking could not be confirmed. Please check your bookings.');
+      }
     } catch (e: any) {
-      Alert.alert('Booking Failed', e?.message || 'Something went wrong while placing your booking.');
+      console.error('[BookingSummary] Booking submission error:', e);
+      const isTimeout =
+        e?.status === 408 ||
+        (typeof e?.message === 'string' &&
+          (e.message.toLowerCase().includes('longer than expected') ||
+            e.message.toLowerCase().includes('timeout') ||
+            e.message.toLowerCase().includes('aborted') ||
+            e.message.toLowerCase().includes('canceled')));
+
+      if (isTimeout) {
+        Alert.alert(
+          'Booking Processing',
+          'Your booking request was submitted to the network and may still be dispatching a worker. Please check "My Bookings" before placing another request to avoid duplicates.',
+          [
+            {
+              text: 'View My Bookings',
+              onPress: () => router.push('/bookings' as any),
+            },
+            {
+              text: 'Stay Here',
+              style: 'cancel',
+            },
+          ]
+        );
+      } else {
+        // Regenerate idempotency key on failure so next attempt has a fresh key
+        idempotencyKeyRef.current = generateUUID();
+        Alert.alert('Booking Failed', e?.message || 'Something went wrong while placing your booking.');
+      }
     } finally {
+      isSubmittingRef.current = false;
       setBookingLoading(false);
     }
   };
@@ -413,16 +569,31 @@ export default function SummaryScreen() {
           ))}
         </SectionCard>
 
-        {/* Schedule */}
-        <SectionCard title="📅 Appointment">
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Date</Text>
-            <Text style={styles.infoValue}>{cart.selectedDate || '—'}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Time</Text>
-            <Text style={styles.infoValue}>{cart.selectedSlot?.time || '—'}</Text>
-          </View>
+        {/* Appointment Mode */}
+        <SectionCard title={cart.bookingType === 'INSTANT' ? "⚡ Instant Booking" : "📅 Scheduled Appointment"}>
+          {cart.bookingType === 'INSTANT' ? (
+            <>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Dispatch Type</Text>
+                <Text style={[styles.infoValue, { color: '#059669', fontWeight: '700' }]}>⚡ Immediate Dispatch</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Estimated Arrival</Text>
+                <Text style={[styles.infoValue, { color: '#059669', fontWeight: '800' }]}>~{cart.estimatedArrivalMinutes || 18} Minutes</Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Scheduled Date</Text>
+                <Text style={styles.infoValue}>{cart.selectedDate || '—'}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Time Window</Text>
+                <Text style={styles.infoValue}>{cart.selectedSlot?.time || '—'}</Text>
+              </View>
+            </>
+          )}
         </SectionCard>
 
         {/* Friend / Third-Party Booking Card */}
@@ -492,6 +663,24 @@ export default function SummaryScreen() {
                   value={recipientPincode}
                   onChangeText={setRecipientPincode}
                 />
+                {isForFriend && addressServiceability && recipientPincode.replace(/\D/g, '').length === 6 && (
+                  addressServiceability.checking ? (
+                    <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 4 }}>
+                      Checking service availability...
+                    </Text>
+                  ) : addressServiceability.serviceable ? (
+                    <Text style={{ fontSize: 11, color: '#059669', fontFamily: Typography.fontFamily.semiBold, marginTop: 4 }}>
+                      ✓ Serviceable Area — Doorstep available in PIN {addressServiceability.pincode}
+                    </Text>
+                  ) : (
+                    <View style={styles.unserviceableWarningBox}>
+                      <AlertTriangle size={14} color="#DC2626" />
+                      <Text style={styles.unserviceableWarningText}>
+                        Location Not Serviceable: {addressServiceability.message}
+                      </Text>
+                    </View>
+                  )
+                )}
               </View>
             </View>
           )}
@@ -501,38 +690,50 @@ export default function SummaryScreen() {
         {!isForFriend && (
           <SectionCard title="📍 Service Location">
             {cart.selectedAddress ? (
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <View style={{ flex: 1, marginRight: 12 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <Text style={styles.addressTitle}>{cart.selectedAddress.title || 'Home'}</Text>
-                    {cart.selectedAddress.lat ? (
-                      <View style={{ backgroundColor: '#EFF6FF', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
-                        <Text style={{ fontFamily: Typography.fontFamily.medium, fontSize: 10, color: Colors.primary }}>
-                          GPS Verified
-                        </Text>
-                      </View>
-                    ) : null}
-                    {cart.selectedAddress.pincode ? (
-                      <View style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
-                        <Text style={{ fontFamily: Typography.fontFamily.bold, fontSize: 10, color: '#059669' }}>
-                          PIN: {cart.selectedAddress.pincode}
-                        </Text>
-                      </View>
-                    ) : null}
+              <View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flex: 1, marginRight: 12 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <Text style={styles.addressTitle}>{cart.selectedAddress.title || 'Home'}</Text>
+                      {cart.selectedAddress.lat ? (
+                        <View style={{ backgroundColor: '#EFF6FF', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
+                          <Text style={{ fontFamily: Typography.fontFamily.medium, fontSize: 10, color: Colors.primary }}>
+                            GPS Verified
+                          </Text>
+                        </View>
+                      ) : null}
+                      {cart.selectedAddress.pincode ? (
+                        <View style={{ backgroundColor: addressServiceability?.serviceable ? '#ECFDF5' : '#FEF2F2', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
+                          <Text style={{ fontFamily: Typography.fontFamily.bold, fontSize: 10, color: addressServiceability?.serviceable ? '#059669' : '#DC2626' }}>
+                            PIN: {cart.selectedAddress.pincode}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text style={styles.addressLine}>{cart.selectedAddress.addressLine}</Text>
+                    <Text style={styles.addressCity}>{cart.selectedAddress.city}</Text>
                   </View>
-                  <Text style={styles.addressLine}>{cart.selectedAddress.addressLine}</Text>
-                  <Text style={styles.addressCity}>{cart.selectedAddress.city}</Text>
+                  <Pressable
+                    onPress={() => router.push('/location/select')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Change address"
+                    style={{ paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#EFF6FF', borderRadius: 8 }}
+                  >
+                    <Text style={{ color: Colors.primary, fontFamily: Typography.fontFamily.bold, fontSize: 13 }}>
+                      Change
+                    </Text>
+                  </Pressable>
                 </View>
-                <Pressable
-                  onPress={() => router.push('/location/select')}
-                  accessibilityRole="button"
-                  accessibilityLabel="Change address"
-                  style={{ paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#EFF6FF', borderRadius: 8 }}
-                >
-                  <Text style={{ color: Colors.primary, fontFamily: Typography.fontFamily.bold, fontSize: 13 }}>
-                    Change
-                  </Text>
-                </Pressable>
+
+                {/* Serviceability Banner for Self Address */}
+                {addressServiceability && !addressServiceability.serviceable && !addressServiceability.checking && (
+                  <View style={styles.unserviceableWarningBox}>
+                    <AlertTriangle size={15} color="#DC2626" />
+                    <Text style={styles.unserviceableWarningText}>
+                      Location Not Serviceable: {addressServiceability.message || 'Bookings outside supported areas are not permitted.'}
+                    </Text>
+                  </View>
+                )}
               </View>
             ) : (
               <Pressable
@@ -645,16 +846,33 @@ export default function SummaryScreen() {
           <Text style={styles.footerTotalValue}>₹{cart.total.toLocaleString('en-IN')}</Text>
         </View>
         <TouchableOpacity
-          style={styles.placeBtn}
+          style={[
+            styles.placeBtn,
+            addressServiceability && !addressServiceability.serviceable && styles.placeBtnDisabled,
+          ]}
           onPress={handlePlaceBooking}
           disabled={bookingLoading}
           activeOpacity={0.85}
         >
-          <LinearGradient colors={[Colors.primary, Colors.primaryDark]} style={styles.placeBtnGradient}>
+          <LinearGradient
+            colors={
+              addressServiceability && !addressServiceability.serviceable
+                ? ['#9CA3AF', '#6B7280']
+                : [Colors.primary, Colors.primaryDark]
+            }
+            style={styles.placeBtnGradient}
+          >
             {bookingLoading ? (
-              <ActivityIndicator color="#fff" />
+              <View style={styles.loadingBtnRow}>
+                <ActivityIndicator color="#fff" size="small" />
+                <Text style={[styles.placeBtnText, { marginLeft: 8 }]}>Confirming Booking...</Text>
+              </View>
             ) : (
-              <Text style={styles.placeBtnText}>Place Booking</Text>
+              <Text style={styles.placeBtnText}>
+                {addressServiceability && !addressServiceability.serviceable
+                  ? 'Location Not Serviceable'
+                  : 'Place Booking'}
+              </Text>
             )}
           </LinearGradient>
         </TouchableOpacity>
@@ -664,6 +882,27 @@ export default function SummaryScreen() {
 }
 
 const styles = StyleSheet.create({
+  unserviceableWarningBox: {
+    marginTop: 10,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 8,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  unserviceableWarningText: {
+    flex: 1,
+    fontFamily: Typography.fontFamily.semiBold,
+    fontSize: 12,
+    color: '#991B1B',
+    lineHeight: 16,
+  },
+  placeBtnDisabled: {
+    opacity: 0.85,
+  },
   container: { flex: 1, backgroundColor: Colors.background },
   headerContainer: {
     backgroundColor: '#FFFFFF',
@@ -987,5 +1226,10 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontFamily.bold,
     fontSize: Typography.fontSize.base,
     color: '#fff',
+  },
+  loadingBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

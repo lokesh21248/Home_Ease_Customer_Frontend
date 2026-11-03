@@ -1,22 +1,61 @@
-/**
- * Splash Screen — Pronto branded splash with house logo and animated entrance.
- */
-
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Animated, ActivityIndicator, Dimensions, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import Constants from 'expo-constants';
 import { useAuth } from '../src/context/AuthContext';
 import { Typography } from '../src/constants/theme';
+import { systemApi, AppUpdateCheckResponse } from '../src/api/client';
+import { AppUpdateModal } from '../src/components/common/AppUpdateModal';
 
 const { width } = Dimensions.get('window');
 
 export default function Index() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading } = useAuth();
   const [readyToNavigate, setReadyToNavigate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateCheckResponse | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(true);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
+
+  // 1. Check for App Updates on Startup
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function checkForUpdates() {
+      const currentVersion = Constants.expoConfig?.version || '1.0.0';
+      const platform = Platform.OS === 'ios' ? 'ios' : 'android';
+
+      try {
+        const info = await systemApi.checkAppUpdate(currentVersion, platform);
+        if (isCancelled) return;
+
+        if (info.forceUpdate) {
+          // Show non-dismissible modal with "Update Now" button linking to updateInfo.storeUrl
+          setUpdateInfo(info);
+          setShowUpdateModal(true);
+          return;
+        } else if (info.updateAvailable) {
+          setUpdateInfo(info);
+          setShowUpdateModal(true);
+        }
+      } catch (err) {
+        console.log('[Startup] App update check notice:', err);
+      } finally {
+        if (!isCancelled) {
+          setCheckingUpdate(false);
+        }
+      }
+    }
+
+    void checkForUpdates();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     Animated.parallel([
@@ -35,20 +74,22 @@ export default function Index() {
 
     const timer = setTimeout(() => {
       setReadyToNavigate(true);
-    }, 500);
+    }, 600);
 
     return () => clearTimeout(timer);
   }, []);
 
   const goToTabs = () => {
+    // Only navigate if there is no blocking force update
+    if (updateInfo?.forceUpdate) return;
     router.replace('/(tabs)');
   };
 
   useEffect(() => {
-    if (!isLoading && readyToNavigate) {
+    if (!isLoading && readyToNavigate && !checkingUpdate && !updateInfo?.forceUpdate) {
       goToTabs();
     }
-  }, [isLoading, readyToNavigate]);
+  }, [isLoading, readyToNavigate, checkingUpdate, updateInfo]);
 
   return (
     <View style={styles.container} onTouchStart={goToTabs}>
@@ -84,6 +125,18 @@ export default function Index() {
       <View style={styles.footer}>
         <ActivityIndicator size="small" color="#FFFFFF" />
       </View>
+
+      {/* App Update Check Modal */}
+      <AppUpdateModal
+        visible={showUpdateModal}
+        updateInfo={updateInfo}
+        onDismiss={() => {
+          setShowUpdateModal(false);
+          if (!updateInfo?.forceUpdate) {
+            goToTabs();
+          }
+        }}
+      />
     </View>
   );
 }

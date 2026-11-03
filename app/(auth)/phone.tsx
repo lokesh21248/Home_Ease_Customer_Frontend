@@ -16,6 +16,7 @@ import {
   Pressable,
   ScrollView,
 } from 'react-native';
+import type { TextInputInstance } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
@@ -33,7 +34,7 @@ export default function PhoneScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [focused, setFocused] = useState(false);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance | null>(null);
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
   const shake = () => {

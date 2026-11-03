@@ -204,6 +204,18 @@ export function useLiveTracking({
               console.warn('[LiveTracking] Ignored malformed location event:', error);
             }
           });
+
+          // Also subscribe to broadcast update stream /topic/tracking/update
+          client.subscribe('/topic/tracking/update', (message) => {
+            try {
+              const event: TrackingLocationEvent = JSON.parse(message.body);
+              if (!event.bookingId || event.bookingId === bookingId) {
+                applyLocation(event, bookingId);
+              }
+            } catch (error) {
+              console.warn('[LiveTracking] Ignored malformed location broadcast:', error);
+            }
+          });
         },
         onDisconnect: () => {
           setIsLiveConnected(false);
@@ -462,6 +474,13 @@ export function useLiveTracking({
     }
   }
 
+  const sendCoordinate = useCallback((lat: number, lng: number): boolean => {
+    if (stompClientRef.current?.connected && bookingId) {
+      return trackingApi.publishStompCoordinate(stompClientRef.current, bookingId, lat, lng);
+    }
+    return false;
+  }, [bookingId]);
+
   return {
     partnerPos,
     hasPartnerLocation,
@@ -477,5 +496,6 @@ export function useLiveTracking({
     lastUpdateTimestamp,
     trackingEnded,
     refreshLocation,
+    sendCoordinate,
   };
 }

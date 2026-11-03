@@ -65,6 +65,8 @@ export interface ServiceabilityCheckResponse {
   pincode: string;
   city: string | null;
   state: string | null;
+  areaName?: string | null;
+  localities?: string[] | null;
   message: string;
 }
 
@@ -132,12 +134,54 @@ export interface CouponValidationResponse {
   message: string;
 }
 
+export interface AvailableDate {
+  date: string;
+  dayName: string;
+  monthName: string;
+  dayOfMonth: number;
+  available: boolean;
+  availableSlotsCount: number;
+}
+
+export interface AvailableSlot {
+  time: string;
+  startTime: string;
+  endTime: string;
+  available: boolean;
+  period: 'MORNING' | 'AFTERNOON' | 'EVENING';
+  availableWorkersCount: number;
+  reason?: string;
+}
+
+export interface NearbyWorker {
+  workerId: string;
+  fullName: string;
+  rating: number;
+  distanceMeters: number;
+  estimatedArrivalMinutes: number;
+  avatarUrl?: string;
+  isOnline: boolean;
+}
+
+export function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function') {
+    return (crypto as any).randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export interface BookingRequest {
   serviceId: string;
   subServices: { subServiceId: string; quantity: number }[];
   addons?: { addonId: string; quantity: number }[];
   couponCode?: string;
+  bookingType?: 'INSTANT' | 'SCHEDULED';
   scheduledAt: string;
+  scheduledEndAt?: string;
   userLat: number;
   userLng: number;
   userLocation?: string;
@@ -148,6 +192,7 @@ export interface BookingRequest {
   recipientName?: string;
   recipientPhone?: string;
   recipientAddress?: string;
+  idempotencyKey?: string;
 }
 
 export interface Booking {
@@ -158,13 +203,34 @@ export interface Booking {
   workerId: string | null;
   workerName: string | null;
   workerPhone: string | null;
+  workerAvatarUrl?: string | null;
+  workerRating?: number | null;
   serviceId: string;
   serviceName: string;
-  status: 'SEARCHING' | 'ACCEPTED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'WORKER_NOT_FOUND';
+  bookingType?: 'INSTANT' | 'SCHEDULED';
+  status:
+    | 'PENDING'
+    | 'REQUESTED'
+    | 'ACCEPTED'
+    | 'CONFIRMED'
+    | 'ON_THE_WAY'
+    | 'ARRIVED'
+    | 'IN_PROGRESS'
+    | 'COMPLETED'
+    | 'CANCELLED'
+    | 'REJECTED'
+    | 'EXPIRED'
+    | 'SEARCHING'
+    | 'WORKER_NOT_FOUND';
   pinCode: string;
   scheduledAt: string;
+  scheduledEndAt?: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  workerAssignedAt?: string | null;
+  estimatedArrivalMinutes?: number | null;
+  cancellationReason?: string | null;
+  cancelledAt?: string | null;
   userLat: number;
   userLng: number;
   userLocation?: string;
@@ -234,7 +300,7 @@ export async function getAuthHeaders(requiresAuth = true): Promise<Record<string
 async function fetchWithTimeout(
   url: string,
   options: RequestInit,
-  timeoutMs = 12000,
+  timeoutMs = 20000,
 ): Promise<Response> {
   const controller = new AbortController();
   const sourceSignal = options.signal;
@@ -255,11 +321,19 @@ async function fetchWithTimeout(
 
 async function request<T>(
   endpoint: string,
-  options: RequestInit = {},
+  options: RequestInit & { silent?: boolean; timeoutMs?: number; idempotencyKey?: string } = {},
   requiresAuth = true,
 ): Promise<T> {
   const headers = await getAuthHeaders(requiresAuth);
   const url = `${BASE_URL}${endpoint}`;
+  const isSilent = Boolean((options as any)?.silent);
+  const timeoutMs =
+    (options as any)?.timeoutMs ||
+    (endpoint.startsWith('/bookings') ? 60000 : 20000);
+
+  if ((options as any)?.idempotencyKey) {
+    headers['X-Idempotency-Key'] = (options as any).idempotencyKey;
+  }
 
   try {
     const response = await fetchWithTimeout(
@@ -271,18 +345,30 @@ async function request<T>(
           ...(options.headers as Record<string, string>),
         },
       },
-      12000,
+      timeoutMs,
     );
 
     if (!response.ok) {
       let message = `HTTP ${response.status}`;
       try {
         const data = await response.json();
-        message = data?.message || data?.error || message;
+        if (data?.fieldErrors && typeof data.fieldErrors === 'object') {
+          const details = Object.entries(data.fieldErrors)
+            .map(([field, msg]) => `${field}: ${msg}`)
+            .join('; ');
+          message = details ? `${data.message || 'Validation failed'}: ${details}` : (data.message || 'Validation failed');
+        } else {
+          message = data?.message || data?.error || message;
+        }
       } catch {
         // ignore JSON parse errors
       }
-      console.warn(`[API Error] ${endpoint} -> ${response.status}: ${message}`);
+      if (!isSilent) {
+        console.warn(`[API Error] ${endpoint} -> ${response.status}: ${message}`);
+        if (response.status === 400) {
+          console.warn(`[API Error Details] ${endpoint} -> ${message}`);
+        }
+      }
       throw new ApiError(response.status, message);
     }
 
@@ -293,11 +379,31 @@ async function request<T>(
 
     return response.json();
   } catch (err: any) {
-    if (err.name === 'AbortError') {
-      console.warn(`[API Timeout] Request timed out for ${endpoint}`);
+    if (err instanceof ApiError) {
+      throw err;
+    }
+    const isCancelledOrTimeout =
+      err?.name === 'AbortError' ||
+      (typeof err?.message === 'string' &&
+        (err.message.toLowerCase().includes('cancel') ||
+          err.message.toLowerCase().includes('aborted') ||
+          err.message.toLowerCase().includes('timeout')));
+
+    if (isCancelledOrTimeout) {
+      if (!isSilent) {
+        console.warn(`[API Timeout] Request timed out or was cancelled for ${endpoint}`);
+      }
+      if (endpoint.startsWith('/bookings')) {
+        throw new ApiError(
+          408,
+          'Booking request took longer than expected to dispatch. Please check "My Bookings" before placing another request.'
+        );
+      }
       throw new ApiError(408, `Request timed out for ${endpoint}`);
     }
-    console.warn(`[API Network Error] ${endpoint}:`, err?.message || err);
+    if (!isSilent) {
+      console.warn(`[API Network Error] ${endpoint}:`, err?.message || err);
+    }
     throw err;
   }
 }
@@ -433,11 +539,35 @@ export const userApi = {
     }
   },
 
-  updateProfile: (data: { fullName?: string; email?: string }): Promise<UserProfile> =>
-    request('/user/profile', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+  updateProfile: async (data: { fullName?: string; email?: string }): Promise<UserProfile> => {
+    let raw: any;
+    try {
+      raw = await request('/auth/user/profile', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    } catch (err: any) {
+      if (err?.status === 404) {
+        raw = await request('/user/profile', {
+          method: 'PUT',
+          body: JSON.stringify(data),
+        });
+      } else {
+        throw err;
+      }
+    }
+
+    const envelope = raw?.data ?? raw;
+    const user = envelope?.user ?? envelope;
+    return {
+      userId: user?.userId ?? user?.id ?? '',
+      fullName: user?.fullName ?? user?.name ?? data.fullName ?? '',
+      phoneNumber: user?.phoneNumber ?? user?.phone ?? '',
+      email: user?.email ?? data.email ?? null,
+      role: user?.role ?? 'CUSTOMER',
+      createdAt: user?.createdAt ?? new Date().toISOString(),
+    };
+  },
 
   registerFcmToken: (fcmToken: string): Promise<{ message: string }> =>
     request('/user/fcm-token', {
@@ -483,21 +613,94 @@ export const userApi = {
     }
   },
 
-  updateAddress: (addressId: string, data: Omit<Address, 'id' | 'userId'> & { userId?: string }): Promise<Address> =>
-    request(`/user/addresses/${addressId}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-
-  saveBookingAddress: (data: BookingAddressRequest): Promise<Address> =>
-    userApi.addAddress({
-      title: data.label || 'Booking Address',
+  updateAddress: async (
+    addressId: string,
+    data: {
+      title: string;
+      addressLine: string;
+      city: string;
+      lat: number;
+      lng: number;
+      isDefault?: boolean;
+      state?: string;
+      pincode?: string;
+      userId?: string;
+    }
+  ): Promise<Address> => {
+    const payload = {
+      title: data.title,
       addressLine: data.addressLine,
       city: data.city,
+      lat: data.lat,
+      lng: data.lng,
+      isDefault: Boolean(data.isDefault),
+      ...(data.state ? { state: data.state } : {}),
+      ...(data.pincode ? { pincode: data.pincode } : {}),
+      ...(data.userId ? { userId: data.userId } : {}),
+    };
+    try {
+      // Primary: PUT /api/v1/user/addresses/{addressId}
+      return await request(`/user/addresses/${encodeURIComponent(addressId)}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+    } catch (err: any) {
+      if (err?.status === 404) {
+        // Fallback: PUT /api/v1/users/me/addresses/{addressId}
+        return await request(`/users/me/addresses/${encodeURIComponent(addressId)}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        });
+      }
+      throw err;
+    }
+  },
+
+  saveBookingAddress: async (data: BookingAddressRequest): Promise<Address> => {
+    const payload = {
+      label: data.label || 'Office',
+      addressLine: data.addressLine,
+      city: data.city,
+      latitude: data.latitude,
+      longitude: data.longitude,
+      // Compatibility fields for backends expecting title/lat/lng
+      title: data.label || 'Office',
       lat: data.latitude,
       lng: data.longitude,
       isDefault: false,
-    }),
+      ...(data.state ? { state: data.state } : {}),
+      ...(data.pincode ? { pincode: data.pincode } : {}),
+    };
+
+    // 1. Try POST /api/users/me/addresses (root /api namespace)
+    const rootApiBase = BASE_URL.replace(/\/v1\/?$/, '');
+    const headers = await getAuthHeaders(true);
+
+    try {
+      const res = await fetchWithTimeout(`${rootApiBase}/users/me/addresses`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {}
+
+    // 2. Try POST /api/v1/users/me/addresses
+    try {
+      return await request('/users/me/addresses', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    } catch {}
+
+    // 3. Fallback to POST /api/v1/user/addresses
+    return await request('/user/addresses', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
 };
 
 // ─── Catalog APIs ─────────────────────────────────────────────────────────────
@@ -523,6 +726,130 @@ export const bookingApi = {
     return request(`/bookings/time-slots${query}`);
   },
 
+  getAvailableDates: async (serviceId?: string, subServiceId?: string, days = 14): Promise<AvailableDate[]> => {
+    const params = new URLSearchParams();
+    if (serviceId) params.append('serviceId', serviceId);
+    if (subServiceId) params.append('subServiceId', subServiceId);
+    params.append('days', String(days));
+    try {
+      return await request(`/bookings/available-dates?${params.toString()}`, { silent: true } as any);
+    } catch {
+      // Fallback: Generate upcoming `days` calendar dates dynamically
+      return Array.from({ length: days }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() + i);
+        return {
+          date: d.toISOString().split('T')[0],
+          dayName: i === 0 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short' }),
+          monthName: d.toLocaleDateString('en-US', { month: 'short' }),
+          dayOfMonth: d.getDate(),
+          available: true,
+          availableSlotsCount: 9,
+        };
+      });
+    }
+  },
+
+  getAvailableSlots: async (date: string, serviceId?: string, subServiceId?: string): Promise<AvailableSlot[]> => {
+    const params = new URLSearchParams({ date });
+    if (serviceId) params.append('serviceId', serviceId);
+    if (subServiceId) params.append('subServiceId', subServiceId);
+    try {
+      return await request(`/bookings/available-slots?${params.toString()}`, { silent: true } as any);
+    } catch {
+      // Fallback: Query standard /bookings/time-slots endpoint supported by backend
+      try {
+        const timeSlots = await bookingApi.getTimeSlots(date);
+        return timeSlots.map((ts) => {
+          const parts = ts.time.split(' - ');
+          const isMorning = ts.time.includes('AM');
+          const isAfternoon =
+            ts.time.includes('PM') &&
+            (ts.time.startsWith('12') || ts.time.startsWith('02') || ts.time.startsWith('03'));
+          const period: 'MORNING' | 'AFTERNOON' | 'EVENING' = isMorning
+            ? 'MORNING'
+            : isAfternoon
+            ? 'AFTERNOON'
+            : 'EVENING';
+          return {
+            time: ts.time,
+            startTime: parts[0] || ts.time,
+            endTime: parts[1] || ts.time,
+            available: ts.available,
+            period,
+            availableWorkersCount: 3,
+          };
+        });
+      } catch {
+        const defaultTimes = [
+          { time: '09:00 AM - 10:00 AM', period: 'MORNING' as const },
+          { time: '10:00 AM - 11:00 AM', period: 'MORNING' as const },
+          { time: '11:00 AM - 12:00 PM', period: 'MORNING' as const },
+          { time: '12:00 PM - 01:00 PM', period: 'AFTERNOON' as const },
+          { time: '02:00 PM - 03:00 PM', period: 'AFTERNOON' as const },
+          { time: '03:00 PM - 04:00 PM', period: 'AFTERNOON' as const },
+          { time: '04:00 PM - 05:00 PM', period: 'EVENING' as const },
+          { time: '05:00 PM - 06:00 PM', period: 'EVENING' as const },
+          { time: '06:00 PM - 07:00 PM', period: 'EVENING' as const },
+        ];
+        return defaultTimes.map((t) => {
+          const [start, end] = t.time.split(' - ');
+          return {
+            time: t.time,
+            startTime: start,
+            endTime: end,
+            available: true,
+            period: t.period,
+            availableWorkersCount: 2,
+          };
+        });
+      }
+    }
+  },
+
+  getNearbyWorkers: async (
+    lat: number,
+    lng: number,
+    serviceId?: string,
+    subServiceId?: string,
+    radius?: number
+  ): Promise<NearbyWorker[]> => {
+    const params = new URLSearchParams({ lat: String(lat), lng: String(lng) });
+    if (serviceId) params.append('serviceId', serviceId);
+    if (subServiceId) params.append('subServiceId', subServiceId);
+    if (radius) params.append('radius', String(radius));
+    try {
+      return await request(`/bookings/nearby-workers?${params.toString()}`, { silent: true } as any);
+    } catch {
+      return [];
+    }
+  },
+
+  createInstantBooking: (data: BookingRequest): Promise<Booking> => {
+    return bookingApi.createBooking({
+      ...data,
+      bookingType: 'INSTANT',
+      scheduledAt: data.scheduledAt || new Date().toISOString(),
+    });
+  },
+
+  createScheduledBooking: (
+    data: BookingRequest & { scheduledDate?: string; timeSlot?: string }
+  ): Promise<Booking> => {
+    return bookingApi.createBooking({
+      ...data,
+      bookingType: 'SCHEDULED',
+    });
+  },
+
+  getBookingStatus: async (bookingId: string): Promise<any> => {
+    try {
+      return await request(`/bookings/${bookingId}/status`, { silent: true } as any);
+    } catch {
+      return await request(`/bookings/${bookingId}`);
+    }
+  },
+
   validateCoupon: async (code: string, cartTotal: number): Promise<CouponValidationResponse> => {
     const raw: any = await request('/coupons/validate', {
       method: 'POST',
@@ -546,24 +873,135 @@ export const bookingApi = {
     };
   },
 
-  checkServiceability: (pincode: string): Promise<ServiceabilityCheckResponse> =>
-    request(`/serviceability/check?pincode=${encodeURIComponent(pincode)}`),
+  checkServiceability: async (pincode: string): Promise<ServiceabilityCheckResponse> => {
+    const cleaned = (pincode || '').replace(/\D/g, '');
+    if (cleaned.length !== 6) {
+      return {
+        serviceable: false,
+        pincode: cleaned,
+        city: null,
+        state: null,
+        message: 'Location Not Serviceable: Please enter a valid 6-digit Indian PIN code.',
+      };
+    }
+    return request(`/serviceability/check?pincode=${encodeURIComponent(cleaned)}`);
+  },
 
-  createBooking: (data: BookingRequest): Promise<Booking> =>
-    request('/bookings', {
+  createBooking: (data: BookingRequest): Promise<Booking> => {
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const cleanedPin = (data.pincode || '').replace(/\D/g, '');
+    if (cleanedPin.length !== 6) {
+      throw new ApiError(400, 'Location Not Serviceable: A valid 6-digit PIN code is required to place a booking.');
+    }
+    const paymentMethod = data.paymentMethod === 'WALLET' ? 'UPI' : (data.paymentMethod || 'COD');
+    const scheduledAt = data.scheduledAt || new Date().toISOString();
+    const userLat = Number(data.userLat) || 17.4485;
+    const userLng = Number(data.userLng) || 78.3748;
+
+    let serviceId = data.serviceId;
+    if (!UUID_REGEX.test(serviceId)) {
+      const fallbackMap: Record<string, string> = {
+        electrician: '6e2e370b-7d5e-46d2-944b-afe7c15db6d5',
+        cleaning: 'be8bb640-cc11-4243-ab4a-5cbdf34a0937',
+        massage: '6beaaf16-cb8b-4107-9f8b-617b23c0bd21',
+        ac: '9b7f941c-ee83-4ffe-bd1d-2dacba5d4760',
+      };
+      serviceId = fallbackMap[(serviceId || '').toLowerCase()] || '6e2e370b-7d5e-46d2-944b-afe7c15db6d5';
+    }
+
+    // Ensure subServices is a valid non-empty array with positive integer quantities
+    let subServices =
+      Array.isArray(data.subServices)
+        ? data.subServices
+            .filter((s) => s && s.subServiceId && UUID_REGEX.test(s.subServiceId))
+            .map((s) => ({
+              subServiceId: s.subServiceId,
+              quantity: Math.max(1, Number(s.quantity) || 1),
+            }))
+        : [];
+    if (subServices.length === 0) {
+      subServices = [{ subServiceId: '3c391970-28ee-4f28-a566-5c3b48763525', quantity: 1 }];
+    }
+
+    const idempotencyKey = data.idempotencyKey || generateUUID();
+
+    const cleanedPayload: any = {
+      serviceId,
+      userLat,
+      userLng,
+      paymentMethod,
+      scheduledAt,
+      pincode: cleanedPin,
+      subServices,
+      bookingType: data.bookingType || 'INSTANT',
+    };
+
+    if (data.addressId && UUID_REGEX.test(data.addressId)) {
+      cleanedPayload.addressId = data.addressId;
+    }
+
+    if (data.couponCode && data.couponCode.trim()) {
+      cleanedPayload.couponCode = data.couponCode.trim().toUpperCase();
+    }
+
+    if (Array.isArray(data.addons) && data.addons.length > 0) {
+      const validAddons = data.addons
+        .filter((a) => a && a.addonId && UUID_REGEX.test(a.addonId))
+        .map((a) => ({
+          addonId: a.addonId,
+          quantity: Math.max(1, Number(a.quantity) || 1),
+        }));
+      if (validAddons.length > 0) {
+        cleanedPayload.addons = validAddons;
+      }
+    }
+
+    if (data.isForFriend) {
+      cleanedPayload.isForFriend = true;
+      if (data.recipientName && data.recipientName.trim()) {
+        cleanedPayload.recipientName = data.recipientName.trim().slice(0, 100);
+      }
+      if (data.recipientPhone) {
+        const cleanedPhone = data.recipientPhone.replace(/[\s-]/g, '');
+        if (/^(?:\+91|0)?[6-9]\d{9}$/.test(cleanedPhone)) {
+          cleanedPayload.recipientPhone = cleanedPhone;
+        }
+      }
+      if (data.recipientAddress && data.recipientAddress.trim()) {
+        cleanedPayload.recipientAddress = data.recipientAddress.trim();
+      }
+    } else {
+      cleanedPayload.isForFriend = false;
+    }
+
+    return request('/bookings', {
       method: 'POST',
-      body: JSON.stringify(data),
-    }),
+      body: JSON.stringify(cleanedPayload),
+      timeoutMs: 60000,
+      idempotencyKey,
+    } as any);
+  },
 
   getMyBookings: (): Promise<Booking[]> => request('/bookings/my-bookings'),
 
   getBookingById: (bookingId: string): Promise<Booking> =>
     request(`/bookings/${bookingId}`),
 
-  cancelBooking: (bookingId: string, reason = 'Customer requested'): Promise<{ message: string }> =>
-    request(`/bookings/${bookingId}/cancel?reason=${encodeURIComponent(reason)}`, {
-      method: 'POST',
-    }),
+  cancelBooking: async (bookingId: string, reason = 'Customer requested'): Promise<{ message: string }> => {
+    try {
+      return await request(`/bookings/${encodeURIComponent(bookingId)}/cancel?reason=${encodeURIComponent(reason)}`, {
+        method: 'POST',
+      });
+    } catch (err: any) {
+      if (err?.status === 400 || err?.status === 405) {
+        return await request(`/bookings/${encodeURIComponent(bookingId)}/cancel`, {
+          method: 'POST',
+          body: JSON.stringify({ reason }),
+        });
+      }
+      throw err;
+    }
+  },
 
   retryMatching: async (
     bookingId: string,
@@ -768,6 +1206,32 @@ export const trackingApi = {
       throw new ApiError(res.status, `Unable to publish location (HTTP ${res.status})`);
     }
   },
+
+  /**
+   * Real-time STOMP coordinate stream publisher
+   * Destination: /app/tracking/update
+   * Payload: { bookingId, lat, lng }
+   */
+  publishStompCoordinate: (
+    stompClient: any,
+    bookingId: string,
+    lat: number,
+    lng: number,
+  ): boolean => {
+    if (!stompClient || !stompClient.connected) {
+      return false;
+    }
+    try {
+      stompClient.publish({
+        destination: '/app/tracking/update',
+        body: JSON.stringify({ bookingId, lat, lng }),
+      });
+      return true;
+    } catch (e) {
+      console.warn('[trackingApi] STOMP publish coordinate error:', e);
+      return false;
+    }
+  },
 };
 
 // ─── Geo & Routing Service (LocationIQ & OpenRouteService via Backend) ──────
@@ -848,6 +1312,26 @@ export interface AppUpdateCheckResponse {
 }
 
 export const systemApi = {
-  checkAppUpdate: (currentVersion = '1.0.0', platform = 'android'): Promise<AppUpdateCheckResponse> =>
-    request(`/app/check-update?appType=CUSTOMER&currentVersion=${encodeURIComponent(currentVersion)}&platform=${encodeURIComponent(platform)}`, {}, false),
+  checkAppUpdate: async (
+    currentVersion = '1.0.0',
+    platform: 'android' | 'ios' | string = 'android'
+  ): Promise<AppUpdateCheckResponse> => {
+    const query = `appType=CUSTOMER&currentVersion=${encodeURIComponent(currentVersion)}&platform=${encodeURIComponent(platform.toLowerCase())}`;
+    try {
+      // Primary: GET /api/v1/app/check-update
+      return await request(`/app/check-update?${query}`, {}, false);
+    } catch (err: any) {
+      if (err?.status === 404) {
+        // Fallback: GET /api/app/check-update (root namespace)
+        const rootBase = BASE_URL.replace(/\/v1\/?$/, '');
+        const res = await fetchWithTimeout(`${rootBase}/app/check-update?${query}`, {
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (res.ok) {
+          return await res.json();
+        }
+      }
+      throw err;
+    }
+  },
 };

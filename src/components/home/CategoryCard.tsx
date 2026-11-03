@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { HomeColors } from './types';
 import { Typography } from '../../constants/theme';
+import { getCategoryFallbackImage } from '../../hooks/useCategories';
 
 interface CategoryCardProps {
   id: string;
@@ -13,8 +14,15 @@ interface CategoryCardProps {
 }
 
 export function CategoryCard({ id, name, image, width, onPress }: CategoryCardProps) {
-  const imageHeight = Math.round(width * 0.72);
-  const textHeight = Math.max(Math.round(width * 0.44), 34);
+  const [imageError, setImageError] = useState(false);
+
+  const fallbackUri = getCategoryFallbackImage(name);
+  const imageSource = !imageError && image
+    ? (typeof image === 'string' ? { uri: image } : image)
+    : { uri: fallbackUri };
+
+  const imageHeight = Math.round(width * 0.74);
+  const textHeight = 42;
   const totalHeight = imageHeight + textHeight;
 
   return (
@@ -31,23 +39,26 @@ export function CategoryCard({ id, name, image, width, onPress }: CategoryCardPr
       accessibilityRole="button"
       accessibilityLabel={`Service Category: ${name}`}
     >
-      {/* Upper Card: Sharp Image */}
+      {/* Upper Card: Category Image with Fallback */}
       <View style={[styles.imageContainer, { height: imageHeight }]}>
         <Image
-          source={typeof image === 'string' ? { uri: image } : image}
+          source={imageSource}
           style={styles.image}
           contentFit="cover"
           transition={150}
+          onError={() => setImageError(true)}
         />
       </View>
 
-      {/* Lower Card: Full Service Name */}
+      {/* Lower Card: Category Name without truncation/overflow */}
       <View style={[styles.textContainer, { height: textHeight }]}>
         <Text
-          style={styles.nameText}
+          style={[
+            styles.nameText,
+            width < 80 && styles.nameTextSmall,
+          ]}
           numberOfLines={2}
-          adjustsFontSizeToFit
-          minimumFontScale={0.8}
+          ellipsizeMode="tail"
         >
           {name}
         </Text>
@@ -97,16 +108,20 @@ const styles = StyleSheet.create({
   textContainer: {
     width: '100%',
     paddingHorizontal: 4,
-    paddingVertical: 3,
+    paddingVertical: 2,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: HomeColors.white,
   },
   nameText: {
     fontFamily: Typography.fontFamily.semiBold,
-    fontSize: 10.5,
+    fontSize: 11,
     color: HomeColors.darkNavy,
     textAlign: 'center',
+    lineHeight: 14,
+  },
+  nameTextSmall: {
+    fontSize: 10,
     lineHeight: 13,
   },
 });

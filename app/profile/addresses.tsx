@@ -36,7 +36,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCart } from '../../src/context/CartContext';
 import { useUserLocation } from '../../src/hooks/useUserLocation';
 import { Colors, Typography, BorderRadius, Shadows } from '../../src/constants/theme';
-import { userApi, Address } from '../../src/api/client';
+import { userApi, bookingApi, Address } from '../../src/api/client';
 import { useAddresses } from '../../src/hooks/useAddresses';
 import { useAuth } from '../../src/context/AuthContext';
 import { queryClient } from '../../src/query/queryClient';
@@ -65,6 +65,13 @@ export default function AddressesScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Live PIN Code serviceability status state
+  const [pinServiceStatus, setPinServiceStatus] = useState<{
+    checking: boolean;
+    serviceable: boolean | null;
+    message?: string;
+  }>({ checking: false, serviceable: null });
 
   // Address Form State
   const [titleType, setTitleType] = useState<AddressType>('Home');
@@ -100,8 +107,34 @@ export default function AddressesScreen() {
   const invalidateAddresses = () =>
     queryClient.invalidateQueries({ queryKey: queryKeys.addresses(userId ?? '') });
 
-  // Select address for booking flow
-  const handleSelectAddress = (addr: Address) => {
+  // Select address for booking flow — strictly enforces backend PIN code serviceability
+  const handleSelectAddress = async (addr: Address) => {
+    const cleanPin = (addr.pincode || '').replace(/\D/g, '');
+    if (cleanPin.length !== 6) {
+      Alert.alert(
+        'Location Not Serviceable',
+        'This address is missing a verified 6-digit PIN code. Please edit it with an active PIN code to allow booking.'
+      );
+      return;
+    }
+
+    try {
+      const check = await bookingApi.checkServiceability(cleanPin);
+      if (!check.serviceable) {
+        Alert.alert(
+          'Location Not Serviceable',
+          check.message || 'This address is outside our supported service areas. Bookings outside supported areas are not permitted.'
+        );
+        return;
+      }
+    } catch {
+      Alert.alert(
+        'Location Not Serviceable',
+        'Unable to verify serviceability for this address. Bookings outside supported areas are not permitted.'
+      );
+      return;
+    }
+
     setAddress(addr);
     selectLocation({
       coordinates: { latitude: addr.lat, longitude: addr.lng },
@@ -110,6 +143,7 @@ export default function AddressesScreen() {
         shortAddress: addr.title || addr.city,
         area: addr.addressLine,
         city: addr.city,
+        pincode: cleanPin,
         addressLine: addr.addressLine,
         fullAddress: `${addr.title ? addr.title + ': ' : ''}${addr.addressLine}, ${addr.city}`,
       },
@@ -242,7 +276,9 @@ export default function AddressesScreen() {
       if (geo.area) setArea(geo.area);
       if (geo.city) setCity(geo.city);
       if (geo.state) setStateName(geo.state);
-      if (geo.pincode) setPincode(geo.pincode);
+      if (geo.pincode) {
+        void handlePincodeChange(geo.pincode);
+      }
     } catch (err: any) {
       console.log('[AddressesScreen] detectCurrentLocationAuto notice:', err);
       if (forceAlert) {
@@ -262,7 +298,9 @@ export default function AddressesScreen() {
       if (geo.area) setArea(geo.area);
       if (geo.city) setCity(geo.city);
       if (geo.state) setStateName(geo.state);
-      if (geo.pincode && !pincode) setPincode(geo.pincode);
+      if (geo.pincode && !pincode) {
+        void handlePincodeChange(geo.pincode);
+      }
     } catch {}
   };
 
@@ -300,11 +338,40 @@ export default function AddressesScreen() {
     if (item.address.area) setArea(item.address.area);
     if (item.address.city) setCity(item.address.city);
     if (item.address.state) setStateName(item.address.state);
-    if (item.address.pincode) setPincode(item.address.pincode);
+    if (item.address.pincode) {
+      void handlePincodeChange(item.address.pincode);
+    }
 
     setSearchQuery('');
     setSearchResults([]);
     setShowSearchList(false);
+  };
+
+  // Handle PIN code input and live backend check
+  const handlePincodeChange = async (val: string) => {
+    const cleaned = val.replace(/\D/g, '').slice(0, 6);
+    setPincode(cleaned);
+    setErrors((prev) => ({ ...prev, pincode: '' }));
+
+    if (cleaned.length === 6) {
+      setPinServiceStatus({ checking: true, serviceable: null });
+      try {
+        const check = await bookingApi.checkServiceability(cleaned);
+        setPinServiceStatus({
+          checking: false,
+          serviceable: check.serviceable,
+          message: check.serviceable ? 'Serviceable' : 'Location Not Serviceable',
+        });
+      } catch {
+        setPinServiceStatus({
+          checking: false,
+          serviceable: false,
+          message: 'Location Not Serviceable',
+        });
+      }
+    } else {
+      setPinServiceStatus({ checking: false, serviceable: null });
+    }
   };
 
   // 5. Validate & Save address
@@ -316,9 +383,19 @@ export default function AddressesScreen() {
     if (!area.trim()) newErrors.area = 'Area or locality is required';
     if (!city.trim()) newErrors.city = 'City is required';
 
+    const cleanedPin = pincode.replace(/\D/g, '');
+    if (cleanedPin.length !== 6) {
+      newErrors.pincode = 'A valid 6-digit Indian PIN code is required';
+    }
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-      Alert.alert('Incomplete Address', 'Please fill in the required fields marked with *');
+      Alert.alert(
+        newErrors.pincode ? 'Location Not Serviceable' : 'Incomplete Address',
+        newErrors.pincode
+          ? 'Please provide a valid 6-digit PIN code for this address.'
+          : 'Please fill in the required fields marked with *'
+      );
       return;
     }
 
@@ -335,6 +412,26 @@ export default function AddressesScreen() {
     setSaving(true);
     setErrors({});
 
+    // Verify backend serviceability before saving
+    try {
+      const check = await bookingApi.checkServiceability(cleanedPin);
+      if (!check.serviceable) {
+        setSaving(false);
+        Alert.alert(
+          'Location Not Serviceable',
+          check.message || `FirstDoor is not currently active in PIN code ${cleanedPin}. Bookings outside supported areas are not permitted.`
+        );
+        return;
+      }
+    } catch {
+      setSaving(false);
+      Alert.alert(
+        'Location Not Serviceable',
+        `Unable to verify service availability in PIN code ${cleanedPin}. Bookings outside supported areas are not permitted.`
+      );
+      return;
+    }
+
     // Construct full formatted address line
     const addressParts = [
       houseNumber.trim(),
@@ -350,7 +447,8 @@ export default function AddressesScreen() {
     const payload = {
       title,
       addressLine: fullLine,
-      city: `${city.trim()}${pincode.trim() ? ' - ' + pincode.trim() : ''}`,
+      city: `${city.trim()}${cleanedPin ? ' - ' + cleanedPin : ''}`,
+      pincode: cleanedPin,
       lat: selectedCoordinates.latitude,
       lng: selectedCoordinates.longitude,
       isDefault: isDefault || addresses.length === 0,
@@ -786,16 +884,28 @@ export default function AddressesScreen() {
 
               {/* PIN Code */}
               <View style={styles.fieldRow}>
-                <Text style={styles.fieldLabel}>PIN Code</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={styles.fieldLabel}>
+                    PIN Code (6 digits) <Text style={styles.requiredStar}>*</Text>
+                  </Text>
+                  {pinServiceStatus.checking ? (
+                    <Text style={{ fontSize: 11, color: '#6B7280' }}>Checking...</Text>
+                  ) : pinServiceStatus.serviceable === true ? (
+                    <Text style={{ fontSize: 11, color: '#059669', fontWeight: 'bold' }}>✓ Serviceable Area</Text>
+                  ) : pinServiceStatus.serviceable === false ? (
+                    <Text style={{ fontSize: 11, color: '#DC2626', fontWeight: 'bold' }}>⚠️ Location Not Serviceable</Text>
+                  ) : null}
+                </View>
                 <TextInput
-                  style={styles.input}
-                  placeholder="e.g. 500081"
+                  style={[styles.input, errors.pincode && styles.inputError]}
+                  placeholder="e.g. 500072"
                   placeholderTextColor="#9CA3AF"
                   value={pincode}
-                  onChangeText={setPincode}
+                  onChangeText={handlePincodeChange}
                   keyboardType="number-pad"
                   maxLength={6}
                 />
+                {errors.pincode ? <Text style={styles.errorText}>{errors.pincode}</Text> : null}
               </View>
 
               {/* Set as Default Switch */}

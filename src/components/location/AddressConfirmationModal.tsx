@@ -117,10 +117,10 @@ export const AddressConfirmationModal: React.FC<AddressConfirmationModalProps> =
               <View style={[styles.statusBanner, styles.statusBannerWarning]}>
                 <AlertTriangle size={18} color="#DC2626" />
                 <View style={styles.statusTextCol}>
-                  <Text style={styles.statusWarningTitle}>Service not available here yet</Text>
+                  <Text style={styles.statusWarningTitle}>Location Not Serviceable</Text>
                   <Text style={styles.statusWarningSub}>
                     {serviceability?.message ||
-                      'We currently operate across Hyderabad. Please select a supported locality or address.'}
+                      'We do not currently operate in this PIN code. Bookings outside supported areas are not allowed.'}
                   </Text>
                 </View>
               </View>

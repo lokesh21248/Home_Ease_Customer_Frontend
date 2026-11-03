@@ -1,7 +1,8 @@
 import * as Location from 'expo-location';
+import { Client } from '@stomp/stompjs';
 import { calculateBearing, calculateHaversineDistance } from './routing';
 import { isValidCoordinate } from './coordinates';
-import { trackingApi } from '../api/client';
+import { trackingApi, TRACKING_WS_URL, getAuthHeaders } from '../api/client';
 import { isLocationServicesEnabled } from './locationService';
 
 export interface ServicePersonLocation {
@@ -22,6 +23,7 @@ export interface BroadcastCallbacks {
 
 class ServicePersonTrackingManager {
   private subscription: Location.LocationSubscription | null = null;
+  private stompClient: Client | null = null;
   private isBroadcasting = false;
   private activeBookingId: string | null = null;
   private lastPosition: { latitude: number; longitude: number } | null = null;
@@ -62,6 +64,22 @@ class ServicePersonTrackingManager {
 
       if (currentGeneration !== this.generation) {
         return { success: false, message: 'Tracking start was cancelled.' };
+      }
+
+      // Connect STOMP for live coordinate stream: WebSocket STOMP /app/tracking/update
+      try {
+        const authHeaders = await getAuthHeaders();
+        if (authHeaders.Authorization) {
+          const client = new Client({
+            brokerURL: TRACKING_WS_URL,
+            connectHeaders: authHeaders,
+            reconnectDelay: 2000,
+          });
+          client.activate();
+          this.stompClient = client;
+        }
+      } catch (stompErr) {
+        console.warn('[ServicePersonTracking] STOMP activation notice:', stompErr);
       }
 
       const initial = await Location.getCurrentPositionAsync({
@@ -162,6 +180,16 @@ class ServicePersonTrackingManager {
     this.lastPosition = { latitude: location.latitude, longitude: location.longitude };
     this.callbacks.onLocationUpdate?.(location);
 
+    // Stream coordinates over STOMP: WebSocket STOMP /app/tracking/update
+    if (this.stompClient?.connected && this.activeBookingId) {
+      trackingApi.publishStompCoordinate(
+        this.stompClient,
+        this.activeBookingId,
+        location.latitude,
+        location.longitude,
+      );
+    }
+
     const now = Date.now();
     if (this.broadcastInFlight || now - this.lastBroadcastTime < 4500) return;
 
@@ -204,6 +232,10 @@ class ServicePersonTrackingManager {
     this.generation += 1;
     this.subscription?.remove();
     this.subscription = null;
+    if (this.stompClient) {
+      void this.stompClient.deactivate();
+      this.stompClient = null;
+    }
     this.requestController?.abort();
     this.requestController = null;
     this.isBroadcasting = false;

@@ -59,7 +59,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           pincode: cleaned,
           city: null,
           state: null,
-          message: 'Please provide a valid 6-digit Indian pincode.',
+          message: 'Location Not Serviceable: Please provide a valid 6-digit Indian PIN code.',
         };
         setServiceability(unserviceable);
         return unserviceable;
@@ -68,8 +68,14 @@ export function LocationProvider({ children }: { children: ReactNode }) {
       setCheckingServiceability(true);
       try {
         const res = await bookingApi.checkServiceability(cleaned);
-        setServiceability(res);
-        return res;
+        const standardizedRes: ServiceabilityCheckResponse = {
+          ...res,
+          message: res.serviceable
+            ? res.message || 'Great! FirstDoor services are available in your area.'
+            : res.message || 'Location Not Serviceable: We do not currently operate in this PIN code.',
+        };
+        setServiceability(standardizedRes);
+        return standardizedRes;
       } catch (err: any) {
         console.log('[LocationContext] Serviceability check notice:', err?.message || err);
         const fallback: ServiceabilityCheckResponse = {
@@ -77,7 +83,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           pincode: cleaned,
           city: null,
           state: null,
-          message: 'Unable to verify serviceability. Please retry or enter another address.',
+          message: 'Location Not Serviceable: Unable to verify service availability in this area.',
         };
         setServiceability(fallback);
         return fallback;
@@ -128,7 +134,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         pincode: '',
         city: formatted.city || null,
         state: formatted.state || null,
-        message: 'Doorstep pincode could not be resolved automatically. Please confirm or enter manually.',
+        message: 'Location Not Serviceable: Doorstep PIN code is missing or could not be resolved automatically.',
       });
     }
 
@@ -193,7 +199,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           pincode: '',
           city: locationData.address.city || null,
           state: locationData.address.state || null,
-          message: 'Pincode required to verify serviceability.',
+          message: 'Location Not Serviceable: A 6-digit PIN code is required to verify serviceability.',
         });
       }
     },

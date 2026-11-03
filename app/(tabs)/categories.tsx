@@ -2,23 +2,22 @@ import React, { useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
-  StatusBar as RNStatusBar,
   StyleSheet,
   Text,
   TextInput,
   View,
   ActivityIndicator,
   RefreshControl,
-  Platform,
   useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Typography, Shadows } from '../../src/constants/theme';
 import { LayoutConstants, getScrollBottomPadding, getHeaderTopPadding } from '../../src/constants/layout';
-import { useCategories } from '../../src/hooks/useCategories';
+import { useCategories, getCategoryFallbackImage } from '../../src/hooks/useCategories';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type CategoryItem = {
@@ -30,7 +29,6 @@ type CategoryItem = {
 };
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
-const COLUMNS = 3;
 const CARD_GAP = 10;
 const PRIMARY_BLUE = LayoutConstants.BRAND_BLUE;
 
@@ -45,13 +43,18 @@ function CategoryCard({
   onPress: (item: CategoryItem) => void;
 }) {
   const [imageError, setImageError] = useState(false);
-  const imageHeight = Math.round(cardWidth * 0.75);
+  const imageHeight = Math.round(cardWidth * 0.74);
+  const cardFooterHeight = 46;
+  const totalCardHeight = imageHeight + cardFooterHeight;
+
+  const fallbackUri = getCategoryFallbackImage(item.name);
+  const imageUri = !imageError && item.image ? item.image : fallbackUri;
 
   return (
     <Pressable
       style={({ pressed }) => [
         styles.card,
-        { width: cardWidth },
+        { width: cardWidth, height: totalCardHeight },
         pressed && styles.cardPressed,
       ]}
       onPress={() => onPress(item)}
@@ -60,12 +63,12 @@ function CategoryCard({
     >
       {/* Image or Icon Placeholder */}
       <View style={[styles.cardImageWrap, { height: imageHeight }]}>
-        {item.image && !imageError ? (
+        {imageUri ? (
           <Image
-            source={{ uri: item.image }}
+            source={{ uri: imageUri }}
             style={styles.cardImage}
             contentFit="cover"
-            transition={200}
+            transition={150}
             onError={() => setImageError(true)}
           />
         ) : (
@@ -76,8 +79,8 @@ function CategoryCard({
       </View>
 
       {/* Name + chevron */}
-      <View style={styles.cardFooter}>
-        <Text style={styles.cardName} numberOfLines={2}>
+      <View style={[styles.cardFooter, { height: cardFooterHeight }]}>
+        <Text style={styles.cardName} numberOfLines={2} ellipsizeMode="tail">
           {item.name}
         </Text>
         <Ionicons name="chevron-forward" size={13} color="#9CA3AF" />
@@ -92,8 +95,10 @@ export default function CategoriesScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const [search, setSearch] = useState('');
 
+  // Responsive columns: 2 on compact (< 340), 4 on tablets (> 600), 3 on standard phones
+  const numColumns = screenWidth < 340 ? 2 : screenWidth > 600 ? 4 : 3;
   const cardWidth = Math.floor(
-    (screenWidth - LayoutConstants.HORIZONTAL_PADDING * 2 - CARD_GAP * (COLUMNS - 1)) / COLUMNS
+    (screenWidth - LayoutConstants.HORIZONTAL_PADDING * 2 - CARD_GAP * (numColumns - 1)) / numColumns
   );
 
   const {
@@ -106,15 +111,13 @@ export default function CategoriesScreen() {
   } = useCategories();
 
   const categoryList: CategoryItem[] = useMemo(() => {
-    return rawCategories
-      .filter((d) => d.isActive !== false)
-      .map((d, index) => ({
-        key: `cat-live-${d.serviceId}-${index}`,
-        id: d.serviceId,
-        name: d.name,
-        image: d.imageUrl || '',
-        description: d.description || '',
-      }));
+    return rawCategories.map((d, index) => ({
+      key: `cat-live-${d.serviceId}-${index}`,
+      id: d.serviceId,
+      name: d.name,
+      image: d.imageUrl || '',
+      description: d.description || '',
+    }));
   }, [rawCategories]);
 
   const filteredCategories = useMemo(() => {
@@ -139,11 +142,7 @@ export default function CategoriesScreen() {
 
   return (
     <View style={styles.container}>
-      <RNStatusBar
-        barStyle="light-content"
-        backgroundColor={PRIMARY_BLUE}
-        translucent={Platform.OS === 'android'}
-      />
+      <StatusBar style="light" />
 
       {/* Blue Top StatusBar filler for bounce/stretch */}
       <View style={[styles.topBarFill, { height: insets.top, backgroundColor: PRIMARY_BLUE }]} />
@@ -200,7 +199,9 @@ export default function CategoriesScreen() {
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
-              onRefresh={refetch}
+              onRefresh={async () => {
+                await refetch();
+              }}
               tintColor={PRIMARY_BLUE}
               colors={[PRIMARY_BLUE]}
             />
@@ -340,15 +341,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
-    paddingVertical: 8,
-    minHeight: 40,
+    paddingVertical: 4,
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
   },
   cardName: {
     flex: 1,
     fontFamily: Typography.fontFamily.semiBold,
-    fontSize: 11,
+    fontSize: 11.5,
     color: '#1E293B',
-    lineHeight: 14,
+    lineHeight: 15,
+    paddingRight: 2,
   },
 
   // Loading / Empty

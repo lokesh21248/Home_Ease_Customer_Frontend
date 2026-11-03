@@ -1,9 +1,11 @@
 /**
- * Select Date & Time Screen — Pronto-style date pills, time slot grid, selected service card.
+ * Select Date & Time Screen — Urban Company style Dual Booking System:
+ * 1. ⚡ Instant Booking: Immediate dispatch, nearby partner discovery, live ETA
+ * 2. 📅 Scheduled Booking: Interactive calendar, dynamic slot calculation from actual worker availability
  * Route: /booking/date-time
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,105 +15,206 @@ import {
   TouchableOpacity,
   Dimensions,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { bookingApi, TimeSlot } from '../../src/api/client';
+import {
+  bookingApi,
+  TimeSlot,
+  AvailableDate,
+  AvailableSlot,
+  NearbyWorker,
+} from '../../src/api/client';
 import { useCart } from '../../src/context/CartContext';
+import { useUserLocation } from '../../src/hooks/useUserLocation';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../src/constants/theme';
+import { Zap, Calendar, MapPin, Clock, Star, Users, CheckCircle, AlertCircle } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 
-function getNext7Days(): { date: Date; label: string; dayName: string; monthName: string; dateStr: string }[] {
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    const dateStr = d.toISOString().split('T')[0];
-    const dayName = i === 0 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short' });
-    const monthName = d.toLocaleDateString('en-US', { month: 'short' });
-    return {
-      date: d,
-      label: String(d.getDate()),
-      dayName,
-      monthName,
-      dateStr,
-    };
-  });
-}
-
 export default function DateTimeScreen() {
   const insets = useSafeAreaInsets();
-  const { cart, setSlot } = useCart();
+  const { cart, setSlot, setBookingType } = useCart();
+  const userLoc = useUserLocation();
 
-  const days = getNext7Days();
-  const [selectedDay, setSelectedDay] = useState(days[0]);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  // Mode state: 'INSTANT' or 'SCHEDULED'
+  const [mode, setMode] = useState<'INSTANT' | 'SCHEDULED'>(cart.bookingType || 'INSTANT');
 
-  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
+  // --- Instant Booking State ---
+  const [nearbyWorkers, setNearbyWorkers] = useState<NearbyWorker[]>([]);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [nearbyError, setNearbyError] = useState('');
+  const [instantEtaMinutes, setInstantEtaMinutes] = useState<number>(18);
+
+  // --- Scheduled Booking State ---
+  const [availableDates, setAvailableDates] = useState<AvailableDate[]>([]);
+  const [datesLoading, setDatesLoading] = useState(false);
+  const [selectedDateStr, setSelectedDateStr] = useState<string>('');
+  const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsError, setSlotsError] = useState('');
-
-  useEffect(() => {
-    let mounted = true;
-    const fetchSlots = async () => {
-      setSlotsLoading(true);
-      setSlotsError('');
-      try {
-        const slots = await bookingApi.getTimeSlots(selectedDay.dateStr);
-        if (mounted) {
-          setTimeSlots(slots);
-          const firstAvailable = slots.find((s) => s.available);
-          setSelectedTime(firstAvailable ? firstAvailable.time : null);
-        }
-      } catch (err: any) {
-        if (mounted) {
-          setSlotsError(err?.message || 'Failed to load time slots');
-          setTimeSlots([]);
-          setSelectedTime(null);
-        }
-      } finally {
-        if (mounted) setSlotsLoading(false);
-      }
-    };
-    fetchSlots();
-    return () => { mounted = false; };
-  }, [selectedDay]);
+  const [selectedSlotTime, setSelectedSlotTime] = useState<string | null>(null);
 
   const firstItem = cart.items[0];
+  const serviceId = cart.category?.serviceId;
+  const subServiceId = firstItem?.subService.subServiceId;
   const selectedItemName = firstItem?.subService.name || cart.category?.name || 'Selected Service';
-  const selectedItemPrice = cart.subtotal > 0 ? cart.subtotal : firstItem?.subService.basePrice || 0;
+  const selectedItemPrice = cart.total > 0 ? cart.total : firstItem?.subService.basePrice || 0;
   const durationText = firstItem?.subService.estimatedMins
     ? `${firstItem.subService.estimatedMins} Mins`
     : 'Standard';
   const imageUrl = firstItem?.subService.imageUrl || cart.category?.imageUrl;
 
-  const handleContinue = () => {
-    if (!selectedTime) {
-      alert('Please select a time slot.');
-      return;
-    }
-    const slotObj: TimeSlot = {
-      time: selectedTime,
-      available: true,
-      date: selectedDay.dateStr,
+  const userLat = userLoc.location?.latitude || 17.4485;
+  const userLng = userLoc.location?.longitude || 78.3748;
+
+  // 1. Fetch Nearby Workers for Instant Booking
+  useEffect(() => {
+    let mounted = true;
+    const fetchNearby = async () => {
+      setNearbyLoading(true);
+      setNearbyError('');
+      try {
+        const workers = await bookingApi.getNearbyWorkers(userLat, userLng, serviceId, subServiceId);
+        if (mounted) {
+          setNearbyWorkers(workers);
+          if (workers.length > 0) {
+            const minEta = Math.min(...workers.map((w) => w.estimatedArrivalMinutes || 20));
+            setInstantEtaMinutes(minEta);
+          } else {
+            setInstantEtaMinutes(25);
+          }
+        }
+      } catch (err: any) {
+        if (mounted) {
+          setNearbyError('Live partner check unavailable. Standard dispatch will be applied.');
+          setInstantEtaMinutes(20);
+        }
+      } finally {
+        if (mounted) setNearbyLoading(false);
+      }
     };
-    setSlot(slotObj, selectedDay.dateStr);
-    router.push('/booking/summary');
+
+    fetchNearby();
+    return () => {
+      mounted = false;
+    };
+  }, [userLat, userLng, serviceId, subServiceId]);
+
+  // 2. Fetch Available Dates for Scheduled Booking
+  useEffect(() => {
+    let mounted = true;
+    const fetchDates = async () => {
+      setDatesLoading(true);
+      try {
+        const dates = await bookingApi.getAvailableDates(serviceId, subServiceId, 14);
+        if (mounted && dates.length > 0) {
+          setAvailableDates(dates);
+          const firstAvailable = dates.find((d) => d.available) || dates[0];
+          setSelectedDateStr(firstAvailable.date);
+        }
+      } catch (err) {
+        // Fallback next 7 days if network error
+        if (mounted) {
+          const fallback = Array.from({ length: 7 }, (_, i) => {
+            const d = new Date();
+            d.setDate(d.getDate() + i);
+            return {
+              date: d.toISOString().split('T')[0],
+              dayName: i === 0 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short' }),
+              monthName: d.toLocaleDateString('en-US', { month: 'short' }),
+              dayOfMonth: d.getDate(),
+              available: true,
+              availableSlotsCount: 8,
+            };
+          });
+          setAvailableDates(fallback);
+          setSelectedDateStr(fallback[0].date);
+        }
+      } finally {
+        if (mounted) setDatesLoading(false);
+      }
+    };
+
+    fetchDates();
+    return () => {
+      mounted = false;
+    };
+  }, [serviceId, subServiceId]);
+
+  // 3. Fetch Dynamic Available Slots for the selected date
+  useEffect(() => {
+    if (!selectedDateStr) return;
+    let mounted = true;
+    const fetchSlots = async () => {
+      setSlotsLoading(true);
+      setSlotsError('');
+      try {
+        const slots = await bookingApi.getAvailableSlots(selectedDateStr, serviceId, subServiceId);
+        if (mounted) {
+          setAvailableSlots(slots);
+          const firstOpen = slots.find((s) => s.available);
+          setSelectedSlotTime(firstOpen ? firstOpen.time : null);
+        }
+      } catch (err: any) {
+        if (mounted) {
+          setSlotsError('Could not load slots for this date.');
+          setAvailableSlots([]);
+          setSelectedSlotTime(null);
+        }
+      } finally {
+        if (mounted) setSlotsLoading(false);
+      }
+    };
+
+    fetchSlots();
+    return () => {
+      mounted = false;
+    };
+  }, [selectedDateStr, serviceId, subServiceId]);
+
+  const handleContinue = () => {
+    if (mode === 'INSTANT') {
+      setBookingType('INSTANT', instantEtaMinutes);
+      // Set slot as current time for instant booking
+      const now = new Date();
+      const slotObj: TimeSlot = {
+        time: 'Immediate Dispatch',
+        available: true,
+        date: now.toISOString().split('T')[0],
+      };
+      setSlot(slotObj, now.toISOString().split('T')[0]);
+      router.push('/booking/summary');
+    } else {
+      if (!selectedSlotTime) {
+        alert('Please select an available time slot.');
+        return;
+      }
+      setBookingType('SCHEDULED');
+      const slotObj: TimeSlot = {
+        time: selectedSlotTime,
+        available: true,
+        date: selectedDateStr,
+      };
+      setSlot(slotObj, selectedDateStr);
+      router.push('/booking/summary');
+    }
   };
 
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
 
-      {/* Header with White Status Bar Fill */}
+      {/* Header */}
       <View style={[styles.headerContainer, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <Pressable style={styles.backBtn} onPress={() => router.back()}>
             <Text style={styles.backArrow}>‹</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>Select Date & Time</Text>
+          <Text style={styles.headerTitle}>Select Booking Type</Text>
           <View style={styles.headerRightPlaceholder} />
         </View>
       </View>
@@ -120,109 +223,350 @@ export default function DateTimeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scroll,
-          { paddingBottom: 80 + Math.max(insets.bottom, 16) },
+          { paddingBottom: 100 + Math.max(insets.bottom, 16) },
         ]}
       >
-        {/* Date Selector Row */}
-        <View style={styles.section}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.daysScroll}
-          >
-            {days.map((d) => {
-              const isSelected = d.dateStr === selectedDay.dateStr;
-              return (
-                <Pressable
-                  key={d.dateStr}
-                  style={[styles.datePill, isSelected && styles.datePillSelected]}
-                  onPress={() => setSelectedDay(d)}
+        {/* Dual Booking Mode Toggle Cards */}
+        <View style={styles.modeToggleSection}>
+          <Text style={styles.sectionSubtitle}>HOW WOULD YOU LIKE TO BOOK?</Text>
+
+          <View style={styles.toggleRow}>
+            {/* Instant Booking Tab */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={[
+                styles.modeCard,
+                mode === 'INSTANT' && styles.modeCardActive,
+                mode === 'INSTANT' && { borderColor: '#10B981' },
+              ]}
+              onPress={() => setMode('INSTANT')}
+            >
+              <View style={styles.modeCardHeader}>
+                <View
+                  style={[
+                    styles.modeIconCircle,
+                    { backgroundColor: mode === 'INSTANT' ? '#D1FAE5' : '#F3F4F6' },
+                  ]}
                 >
-                  <Text style={[styles.dateDayName, isSelected && styles.dateDayNameSelected]}>
-                    {d.dayName}
-                  </Text>
-                  <Text style={[styles.dateNumber, isSelected && styles.dateNumberSelected]}>
-                    {d.monthName} {d.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+                  <Zap size={20} color={mode === 'INSTANT' ? '#059669' : '#6B7280'} />
+                </View>
+                {mode === 'INSTANT' && (
+                  <View style={styles.popularBadge}>
+                    <Text style={styles.popularBadgeText}>FASTEST</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.modeTitle, mode === 'INSTANT' && styles.modeTitleActive]}>
+                Instant Booking
+              </Text>
+              <Text style={styles.modeDesc}>Arrives in ~{instantEtaMinutes} mins</Text>
+              <View style={styles.modeFooter}>
+                <Text style={styles.modeFooterText}>Doorstep service now</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Scheduled Booking Tab */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={[
+                styles.modeCard,
+                mode === 'SCHEDULED' && styles.modeCardActive,
+                mode === 'SCHEDULED' && { borderColor: Colors.primary },
+              ]}
+              onPress={() => setMode('SCHEDULED')}
+            >
+              <View style={styles.modeCardHeader}>
+                <View
+                  style={[
+                    styles.modeIconCircle,
+                    { backgroundColor: mode === 'SCHEDULED' ? '#EFF6FF' : '#F3F4F6' },
+                  ]}
+                >
+                  <Calendar size={20} color={mode === 'SCHEDULED' ? Colors.primary : '#6B7280'} />
+                </View>
+              </View>
+              <Text style={[styles.modeTitle, mode === 'SCHEDULED' && styles.modeTitleActive]}>
+                Schedule Later
+              </Text>
+              <Text style={styles.modeDesc}>Pick date & slot</Text>
+              <View style={styles.modeFooter}>
+                <Text style={styles.modeFooterText}>Up to 14 days ahead</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Time Slot Selection */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select Time Slot</Text>
-          {slotsLoading ? (
-            <ActivityIndicator color={Colors.primary} style={{ marginTop: 20 }} />
-          ) : slotsError ? (
-            <Text style={{ color: Colors.error, marginTop: 10 }}>{slotsError}</Text>
-          ) : timeSlots.length === 0 ? (
-            <Text style={{ color: Colors.textSecondary, marginTop: 10 }}>No slots available for this date.</Text>
-          ) : (
-            <View style={styles.slotsGrid}>
-              {timeSlots.map((slot) => {
-                const isSelected = selectedTime === slot.time;
-                const isAvailable = slot.available;
-                return (
-                  <Pressable
-                    key={slot.time}
-                    style={[
-                      styles.slotCard,
-                      isSelected && styles.slotCardSelected,
-                      !isAvailable && { opacity: 0.5, backgroundColor: '#F3F4F6' },
-                    ]}
-                    onPress={() => {
-                      if (isAvailable) setSelectedTime(slot.time);
-                    }}
-                    disabled={!isAvailable}
-                  >
-                    <Text
-                      style={[
-                        styles.slotTimeText,
-                        isSelected && styles.slotTimeTextSelected,
-                        !isAvailable && { color: Colors.textMuted },
-                      ]}
-                    >
-                      {slot.time}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+        {/* ─── 1. INSTANT BOOKING VIEW ────────────────────────────────────── */}
+        {mode === 'INSTANT' && (
+          <View style={styles.instantSection}>
+            {/* Live Location Pill */}
+            <View style={styles.locationPillCard}>
+              <View style={styles.locationPillIcon}>
+                <MapPin size={18} color="#059669" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.locationLabel}>SERVICE LOCATION</Text>
+                <Text style={styles.locationAddress} numberOfLines={1}>
+                  {userLoc.address?.addressLine || 'Hitech City, Hyderabad'}
+                </Text>
+              </View>
+              <View style={styles.livePulseBadge}>
+                <View style={styles.liveDot} />
+                <Text style={styles.liveText}>GPS Active</Text>
+              </View>
             </View>
-          )}
-        </View>
 
-        {/* Selected Service Card */}
-        <View style={styles.section}>
+            {/* ETA Banner */}
+            <View style={styles.etaBanner}>
+              <View style={styles.etaLeft}>
+                <Text style={styles.etaSub}>ESTIMATED ARRIVAL</Text>
+                <Text style={styles.etaValue}>~{instantEtaMinutes} Minutes</Text>
+                <Text style={styles.etaNote}>
+                  {nearbyWorkers.length > 0
+                    ? `${nearbyWorkers.length} verified partner${nearbyWorkers.length > 1 ? 's' : ''} active nearby`
+                    : 'Dispatching closest available partner'}
+                </Text>
+              </View>
+              <View style={styles.etaIconWrapper}>
+                <Clock size={32} color="#059669" />
+              </View>
+            </View>
+
+            {/* Nearby Partners Preview */}
+            <View style={styles.nearbySection}>
+              <Text style={styles.sectionTitle}>Nearby Service Partners</Text>
+              {nearbyLoading ? (
+                <View style={styles.loaderBox}>
+                  <ActivityIndicator size="small" color="#059669" />
+                  <Text style={styles.loadingText}>Scanning nearby partners...</Text>
+                </View>
+              ) : nearbyWorkers.length === 0 ? (
+                <View style={styles.infoCard}>
+                  <Users size={20} color="#6B7280" />
+                  <Text style={styles.infoText}>
+                    Partners are active in your area. Upon booking, we will match and dispatch the nearest partner immediately.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.workersList}>
+                  {nearbyWorkers.slice(0, 3).map((w) => (
+                    <View key={w.workerId} style={styles.workerRow}>
+                      <View style={styles.workerAvatarPlaceholder}>
+                        <Text style={styles.workerInitial}>
+                          {w.fullName ? w.fullName.charAt(0) : 'P'}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={styles.workerName}>{w.fullName}</Text>
+                        <View style={styles.workerMetaRow}>
+                          <Star size={12} color="#F59E0B" fill="#F59E0B" />
+                          <Text style={styles.workerRating}>{w.rating || '4.9'}</Text>
+                          <Text style={styles.workerDot}>•</Text>
+                          <Text style={styles.workerDistance}>
+                            {w.distanceMeters ? `${(w.distanceMeters / 1000).toFixed(1)} km away` : 'Nearby'}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.etaPill}>
+                        <Text style={styles.etaPillText}>~{w.estimatedArrivalMinutes || 18}m</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* How Instant Works Card */}
+            <View style={styles.howItWorksCard}>
+              <Text style={styles.howTitle}>How Instant Booking Works</Text>
+              <View style={styles.stepRow}>
+                <CheckCircle size={16} color="#059669" />
+                <Text style={styles.stepText}>Confirm booking and get a 4-digit verification PIN.</Text>
+              </View>
+              <View style={styles.stepRow}>
+                <CheckCircle size={16} color="#059669" />
+                <Text style={styles.stepText}>Nearest partner accepts within 60 seconds.</Text>
+              </View>
+              <View style={styles.stepRow}>
+                <CheckCircle size={16} color="#059669" />
+                <Text style={styles.stepText}>Track partner's live GPS route to your doorstep.</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* ─── 2. SCHEDULED BOOKING VIEW ──────────────────────────────────── */}
+        {mode === 'SCHEDULED' && (
+          <View style={styles.scheduledSection}>
+            {/* Interactive Calendar Strip */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Select Date</Text>
+              {datesLoading ? (
+                <ActivityIndicator color={Colors.primary} style={{ marginTop: 15 }} />
+              ) : (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.daysScroll}
+                >
+                  {availableDates.map((d) => {
+                    const isSelected = d.date === selectedDateStr;
+                    return (
+                      <Pressable
+                        key={d.date}
+                        style={[
+                          styles.datePill,
+                          isSelected && styles.datePillSelected,
+                          !d.available && styles.datePillDisabled,
+                        ]}
+                        onPress={() => {
+                          if (d.available) setSelectedDateStr(d.date);
+                        }}
+                        disabled={!d.available}
+                      >
+                        <Text
+                          style={[
+                            styles.dateDayName,
+                            isSelected && styles.dateDayNameSelected,
+                            !d.available && { color: '#9CA3AF' },
+                          ]}
+                        >
+                          {d.dayName}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.dateNumber,
+                            isSelected && styles.dateNumberSelected,
+                            !d.available && { color: '#9CA3AF' },
+                          ]}
+                        >
+                          {d.dayOfMonth} {d.monthName}
+                        </Text>
+                        {d.available ? (
+                          <View
+                            style={[
+                              styles.availDot,
+                              { backgroundColor: isSelected ? '#FFFFFF' : '#10B981' },
+                            ]}
+                          />
+                        ) : (
+                          <Text style={styles.bookedText}>Full</Text>
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </View>
+
+            {/* Dynamic Time Slot Grid */}
+            <View style={styles.section}>
+              <View style={styles.slotHeaderRow}>
+                <Text style={styles.sectionTitle}>Select Available Time Slot</Text>
+                <Text style={styles.slotSubtext}>Calculated from partner availability</Text>
+              </View>
+
+              {slotsLoading ? (
+                <View style={styles.loaderBox}>
+                  <ActivityIndicator color={Colors.primary} />
+                  <Text style={styles.loadingText}>Checking real-time partner schedules...</Text>
+                </View>
+              ) : slotsError ? (
+                <View style={styles.errorBox}>
+                  <AlertCircle size={18} color="#EF4444" />
+                  <Text style={styles.errorText}>{slotsError}</Text>
+                </View>
+              ) : availableSlots.length === 0 ? (
+                <View style={styles.noSlotsBox}>
+                  <Text style={styles.noSlotsText}>No slots open on this date. Please select another date.</Text>
+                </View>
+              ) : (
+                <View style={styles.slotsGrid}>
+                  {availableSlots
+                    .filter((s) => s.available) // Requirement: "Hide unavailable slots"
+                    .map((slot) => {
+                      const isSelected = selectedSlotTime === slot.time;
+                      return (
+                        <Pressable
+                          key={slot.time}
+                          style={[
+                            styles.slotCard,
+                            isSelected && styles.slotCardSelected,
+                          ]}
+                          onPress={() => setSelectedSlotTime(slot.time)}
+                        >
+                          <Text
+                            style={[
+                              styles.slotTimeText,
+                              isSelected && styles.slotTimeTextSelected,
+                            ]}
+                          >
+                            {slot.time}
+                          </Text>
+                          {slot.availableWorkersCount > 0 && (
+                            <Text
+                              style={[
+                                styles.slotPartnerCount,
+                                isSelected && { color: 'rgba(255,255,255,0.85)' },
+                              ]}
+                            >
+                              {slot.availableWorkersCount} partner{slot.availableWorkersCount > 1 ? 's' : ''} free
+                            </Text>
+                          )}
+                        </Pressable>
+                      );
+                    })}
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Selected Service Summary Card */}
+        <View style={styles.serviceSection}>
           <Text style={styles.sectionTitle}>Selected Service</Text>
           <View style={styles.serviceCard}>
             {imageUrl ? (
-              <Image
-                source={{ uri: imageUrl }}
-                style={styles.serviceThumb}
-                contentFit="cover"
-              />
+              <Image source={{ uri: imageUrl }} style={styles.serviceThumb} contentFit="cover" />
             ) : (
-              <View style={[styles.serviceThumb, { backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' }]}>
-                <Text style={{ fontSize: 24 }}>🏠</Text>
-              </View>
+              <View style={[styles.serviceThumb, { backgroundColor: '#E0E7FF' }]} />
             )}
             <View style={styles.serviceInfo}>
-              <Text style={styles.serviceName} numberOfLines={1}>
-                {selectedItemName}
-              </Text>
-              <Text style={styles.serviceDuration}>⏱ {durationText}</Text>
+              <Text style={styles.serviceName}>{selectedItemName}</Text>
+              <View style={styles.serviceMetaRow}>
+                <Clock size={12} color="#6B7280" />
+                <Text style={styles.serviceDuration}>{durationText}</Text>
+              </View>
+              <Text style={styles.servicePrice}>₹{selectedItemPrice}</Text>
             </View>
-            <Text style={styles.servicePrice}>₹{selectedItemPrice}</Text>
           </View>
         </View>
       </ScrollView>
 
-      {/* Bottom Continue Button */}
+      {/* Bottom Sticky Action Bar */}
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-        <TouchableOpacity style={styles.continueBtn} onPress={handleContinue} activeOpacity={0.85}>
-          <Text style={styles.continueBtnText}>Continue</Text>
+        <View style={styles.bottomBarInfo}>
+          <Text style={styles.bottomBarTypeLabel}>
+            {mode === 'INSTANT' ? '⚡ INSTANT ARRIVAL' : '📅 SCHEDULED APPOINTMENT'}
+          </Text>
+          <Text style={styles.bottomBarSlotText}>
+            {mode === 'INSTANT' ? `ETA ~${instantEtaMinutes} mins` : selectedSlotTime || 'Select a slot'}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          style={[
+            styles.continueBtn,
+            mode === 'INSTANT' && { backgroundColor: '#059669' },
+            mode === 'SCHEDULED' && !selectedSlotTime && { backgroundColor: '#9CA3AF' },
+          ]}
+          onPress={handleContinue}
+          disabled={mode === 'SCHEDULED' && !selectedSlotTime}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.continueBtnText}>
+            {mode === 'INSTANT' ? 'Book Now ⚡' : 'Review & Confirm ›'}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -232,185 +576,557 @@ export default function DateTimeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FC',
+    backgroundColor: '#F9FAFB',
   },
   headerContainer: {
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F2F5',
+    borderBottomColor: '#F3F4F6',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.base,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: 16,
+    height: 52,
   },
   backBtn: {
     width: 36,
     height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
     borderRadius: 18,
     backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   backArrow: {
     fontSize: 26,
-    color: Colors.textPrimary,
-    lineHeight: 28,
+    color: '#111827',
+    marginTop: -2,
   },
   headerTitle: {
-    fontFamily: Typography.fontFamily.bold,
-    fontSize: Typography.fontSize.lg,
-    color: Colors.textPrimary,
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
   },
   headerRightPlaceholder: {
     width: 36,
   },
-
   scroll: {
-    paddingVertical: Spacing.base,
+    padding: 16,
   },
-  section: {
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.base,
+
+  // Mode Toggle
+  modeToggleSection: {
+    marginBottom: 20,
+  },
+  sectionSubtitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#6B7280',
+    marginBottom: 10,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modeCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    ...Shadows.sm,
+  },
+  modeCardActive: {
+    backgroundColor: '#FFFFFF',
+    ...Shadows.md,
+  },
+  modeCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  modeIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  popularBadge: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  popularBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  modeTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 2,
+  },
+  modeTitleActive: {
+    color: '#111827',
+  },
+  modeDesc: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  modeFooter: {
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: 6,
+  },
+  modeFooterText: {
+    fontSize: 11,
+    color: '#9CA3AF',
+  },
+
+  // Instant Section
+  instantSection: {
+    marginBottom: 20,
+  },
+  locationPillCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  locationPillIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#D1FAE5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  locationLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#6B7280',
+    letterSpacing: 0.5,
+  },
+  locationAddress: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  livePulseBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 5,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  liveText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#059669',
+  },
+
+  etaBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ECFDF5',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    marginBottom: 16,
+  },
+  etaLeft: {
+    flex: 1,
+  },
+  etaSub: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#047857',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  etaValue: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#065F46',
+    marginBottom: 4,
+  },
+  etaNote: {
+    fontSize: 12,
+    color: '#047857',
+  },
+  etaIconWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.sm,
+  },
+
+  nearbySection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   sectionTitle: {
-    fontFamily: Typography.fontFamily.bold,
-    fontSize: Typography.fontSize.base,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.md,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  loaderBox: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 8,
+  },
+  infoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    padding: 12,
+    borderRadius: 10,
+    gap: 10,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#4B5563',
+    lineHeight: 18,
+  },
+  workersList: {
+    gap: 10,
+  },
+  workerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  workerAvatarPlaceholder: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#10B981',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  workerInitial: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  workerName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  workerMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  workerRating: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4B5563',
+  },
+  workerDot: {
+    fontSize: 12,
+    color: '#9CA3AF',
+  },
+  workerDistance: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  etaPill: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  etaPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#059669',
   },
 
-  // Date Pills
+  howItWorksCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 8,
+  },
+  howTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#4B5563',
+  },
+
+  // Scheduled Section
+  scheduledSection: {
+    marginBottom: 20,
+  },
+  section: {
+    marginBottom: 20,
+  },
   daysScroll: {
+    paddingRight: 16,
     gap: 10,
-    paddingRight: Spacing.base,
   },
   datePill: {
+    width: 72,
+    height: 84,
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
-    borderRadius: BorderRadius.lg,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#ECEFF3',
-    minWidth: 78,
-    ...Shadows.xs,
+    borderColor: '#E5E7EB',
+    ...Shadows.sm,
   },
   datePillSelected: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
+  datePillDisabled: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#E5E7EB',
+    opacity: 0.6,
+  },
   dateDayName: {
-    fontFamily: Typography.fontFamily.medium,
-    fontSize: Typography.fontSize.xs,
-    color: Colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
     marginBottom: 4,
   },
   dateDayNameSelected: {
-    color: 'rgba(255,255,255,0.85)',
+    color: '#FFFFFF',
   },
   dateNumber: {
-    fontFamily: Typography.fontFamily.bold,
-    fontSize: Typography.fontSize.sm,
-    color: Colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
   },
   dateNumberSelected: {
     color: '#FFFFFF',
   },
+  availDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 6,
+  },
+  bookedText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#EF4444',
+    marginTop: 4,
+  },
 
-  // Time Slots
+  slotHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 12,
+  },
+  slotSubtext: {
+    fontSize: 11,
+    color: '#6B7280',
+  },
   slotsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
   },
   slotCard: {
-    width: (width - Spacing.base * 2 - 10) / 2,
+    width: (width - 42) / 2,
     backgroundColor: '#FFFFFF',
-    borderRadius: BorderRadius.md,
-    borderWidth: 1.5,
-    borderColor: '#ECEFF3',
+    borderRadius: 12,
     paddingVertical: 14,
+    paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    ...Shadows.xs,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    ...Shadows.sm,
   },
   slotCardSelected: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
   slotTimeText: {
-    fontFamily: Typography.fontFamily.semiBold,
-    fontSize: Typography.fontSize.base,
-    color: Colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1F2937',
   },
   slotTimeTextSelected: {
     color: '#FFFFFF',
   },
-
-  // Selected Service
-  serviceCard: {
+  slotPartnerCount: {
+    fontSize: 10,
+    color: '#059669',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
+    gap: 8,
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 12,
+  },
+  noSlotsBox: {
+    padding: 20,
     backgroundColor: '#FFFFFF',
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  noSlotsText: {
+    color: '#6B7280',
+    fontSize: 13,
+  },
+
+  // Service Card
+  serviceSection: {
+    marginBottom: 20,
+  },
+  serviceCard: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 12,
     borderWidth: 1,
-    borderColor: '#ECEFF3',
-    gap: 12,
-    ...Shadows.sm,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
   },
   serviceThumb: {
-    width: 52,
-    height: 52,
-    borderRadius: BorderRadius.md,
-    backgroundColor: '#E5E7EB',
+    width: 60,
+    height: 60,
+    borderRadius: 10,
   },
   serviceInfo: {
     flex: 1,
+    marginLeft: 12,
   },
   serviceName: {
-    fontFamily: Typography.fontFamily.bold,
-    fontSize: Typography.fontSize.sm,
-    color: Colors.textPrimary,
-    marginBottom: 3,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  serviceMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 3,
   },
   serviceDuration: {
-    fontFamily: Typography.fontFamily.regular,
-    fontSize: Typography.fontSize.xs,
-    color: Colors.textSecondary,
+    fontSize: 12,
+    color: '#6B7280',
   },
   servicePrice: {
-    fontFamily: Typography.fontFamily.bold,
-    fontSize: Typography.fontSize.base,
+    fontSize: 15,
+    fontWeight: '800',
     color: Colors.primary,
+    marginTop: 4,
   },
 
+  // Sticky Bottom Bar
   bottomBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: Spacing.base,
-    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#F0F2F5',
-    ...Shadows.md,
+    borderTopColor: '#E5E7EB',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    ...Shadows.lg,
+  },
+  bottomBarInfo: {
+    flex: 1,
+  },
+  bottomBarTypeLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#6B7280',
+    letterSpacing: 0.5,
+  },
+  bottomBarSlotText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginTop: 2,
   },
   continueBtn: {
-    height: 52,
     backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Shadows.blue,
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+    borderRadius: 12,
+    ...Shadows.sm,
   },
   continueBtnText: {
-    fontFamily: Typography.fontFamily.bold,
-    fontSize: Typography.fontSize.md,
     color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

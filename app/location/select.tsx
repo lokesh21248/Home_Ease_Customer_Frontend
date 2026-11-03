@@ -22,6 +22,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import type { TextInputInstance } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -37,6 +38,8 @@ import {
   Check,
   CheckCircle2,
   AlertTriangle,
+  Hash,
+  ArrowRight,
 } from 'lucide-react-native';
 import { useUserLocation } from '../../src/hooks/useUserLocation';
 import {
@@ -62,6 +65,19 @@ export default function LocationSelectScreen() {
   const [searching, setSearching] = useState(false);
   const [detectingGps, setDetectingGps] = useState(false);
   const [verifyingServiceability, setVerifyingServiceability] = useState(false);
+
+  // Dedicated 6-Digit PIN Code State
+  const [pinInput, setPinInput] = useState('');
+  const [checkingPin, setCheckingPin] = useState(false);
+  const [pinResult, setPinResult] = useState<{
+    pincode: string;
+    serviceable: boolean;
+    city?: string | null;
+    state?: string | null;
+    areaName?: string | null;
+    message: string;
+  } | null>(null);
+  const pinInputRef = useRef<TextInputInstance | null>(null);
 
   // Saved addresses
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
@@ -94,6 +110,102 @@ export default function LocationSelectScreen() {
       isMounted = false;
     };
   }, []);
+
+  // Handle 6-digit PIN input change
+  const handlePinInputChange = (text: string) => {
+    const cleaned = text.replace(/\D/g, '').slice(0, 6);
+    setPinInput(cleaned);
+    if (pinResult) setPinResult(null);
+
+    if (cleaned.length === 6) {
+      void verifyPincode(cleaned);
+    }
+  };
+
+  // Verify PIN Code with Backend
+  const verifyPincode = async (codeToVerify?: string) => {
+    const code = (codeToVerify || pinInput).replace(/\D/g, '');
+    if (code.length !== 6) {
+      Alert.alert(
+        'Invalid PIN Code',
+        'Please enter a complete 6-digit Indian PIN code to check service availability.'
+      );
+      return;
+    }
+
+    setCheckingPin(true);
+    try {
+      const res = await bookingApi.checkServiceability(code);
+      setPinResult({
+        pincode: code,
+        serviceable: res.serviceable,
+        city: res.city,
+        state: res.state,
+        areaName: res.areaName,
+        message: res.serviceable
+          ? res.message || 'Great! FirstDoor services are available in your area.'
+          : res.message || 'Location Not Serviceable: We do not currently operate in this PIN code.',
+      });
+    } catch {
+      setPinResult({
+        pincode: code,
+        serviceable: false,
+        city: null,
+        state: null,
+        message: 'Location Not Serviceable: Unable to verify service availability in this PIN code.',
+      });
+    } finally {
+      setCheckingPin(false);
+    }
+  };
+
+  // Apply verified active PIN code
+  const handleApplyPincode = async (pincode: string) => {
+    if (!pinResult || !pinResult.serviceable) {
+      Alert.alert(
+        'Location Not Serviceable',
+        'Bookings are not allowed outside supported service areas. Please enter an active PIN code.'
+      );
+      return;
+    }
+
+    const matchedPreset = PRESET_LOCALITIES.find((p) => p.pincode === pincode);
+    const lat = 17.4947;
+    const lng = 78.3996;
+    const area = pinResult.areaName || matchedPreset?.name || `PIN ${pincode}`;
+    const city = pinResult.city || 'Hyderabad';
+    const state = pinResult.state || 'Telangana';
+
+    const locationData: UserLocationData = {
+      coordinates: { latitude: lat, longitude: lng },
+      address: {
+        formattedAddress: `${area}, ${city} - ${pincode}`,
+        shortAddress: area,
+        area,
+        city,
+        state,
+        pincode,
+        addressLine: area,
+        fullAddress: `${area}, ${city}, ${state} - ${pincode}`,
+      },
+      isCustomSelected: true,
+    };
+
+    await selectLocation(locationData);
+    setCartAddress({
+      id: `pin-${pincode}`,
+      userId: '',
+      title: area,
+      addressLine: `${area}, ${city}`,
+      city,
+      state,
+      pincode,
+      lat,
+      lng,
+      isDefault: false,
+    });
+    router.back();
+  };
 
   // Handle Search input change with 300ms debounce
   const handleQueryChange = useCallback((text: string) => {
@@ -161,28 +273,13 @@ export default function LocationSelectScreen() {
             Alert.alert(
               'Location Not Serviceable',
               serviceMsg ||
-                `We do not currently operate in ${rev.area || rev.city || 'your area'} (PIN: ${rev.pincode || 'unknown'}). FirstDoor currently serves Hyderabad.`,
+                `We do not currently operate in ${rev.area || rev.city || 'your area'} (PIN: ${rev.pincode || 'unknown'}). Bookings outside supported areas are not permitted.`,
               [
-                { text: 'Choose Supported Locality', style: 'default' },
                 {
-                  text: 'Select Anyway',
-                  style: 'destructive',
-                  onPress: () => {
-                    setCartAddress({
-                      id: 'current-gps',
-                      userId: '',
-                      title: rev.shortAddress || 'Current Location',
-                      addressLine: rev.addressLine || rev.area || 'Current Location',
-                      city: rev.city || 'Hyderabad',
-                      state: rev.state || 'Telangana',
-                      pincode: rev.pincode,
-                      lat: coords.latitude,
-                      lng: coords.longitude,
-                      isDefault: true,
-                    });
-                    router.back();
-                  },
+                  text: 'Enter PIN Code',
+                  onPress: () => pinInputRef.current?.focus?.(),
                 },
+                { text: 'Choose Supported Locality', style: 'cancel' },
               ]
             );
             return;
@@ -225,27 +322,38 @@ export default function LocationSelectScreen() {
       setVerifyingServiceability(true);
       const rev = await reverseGeocodeLocation(item.coordinates);
       setVerifyingServiceability(false);
-      if (rev.pincode) {
+      if (rev.pincode && /^\d{6}$/.test(rev.pincode)) {
         pincode = rev.pincode;
         item.address.pincode = rev.pincode;
       }
     }
 
-    if (pincode && /^\d{6}$/.test(pincode)) {
-      setVerifyingServiceability(true);
-      try {
-        const check = await bookingApi.checkServiceability(pincode);
-        setVerifyingServiceability(false);
-        if (!check.serviceable) {
-          Alert.alert(
-            'Area Not Serviceable',
-            check.message || `FirstDoor is not currently available in pincode ${pincode}.`
-          );
-          return;
-        }
-      } catch (e) {
-        setVerifyingServiceability(false);
+    if (!pincode || !/^\d{6}$/.test(pincode)) {
+      Alert.alert(
+        'Location Not Serviceable',
+        'Selected location does not have a verified 6-digit PIN code. Please enter your PIN code to check coverage.'
+      );
+      return;
+    }
+
+    setVerifyingServiceability(true);
+    try {
+      const check = await bookingApi.checkServiceability(pincode);
+      setVerifyingServiceability(false);
+      if (!check.serviceable) {
+        Alert.alert(
+          'Location Not Serviceable',
+          check.message || `FirstDoor is not currently available in PIN code ${pincode}. Bookings outside supported areas are not allowed.`
+        );
+        return;
       }
+    } catch {
+      setVerifyingServiceability(false);
+      Alert.alert(
+        'Location Not Serviceable',
+        'Unable to verify service availability in this PIN code. Bookings outside supported areas are not allowed.'
+      );
+      return;
     }
 
     await selectLocation(item);
@@ -266,18 +374,33 @@ export default function LocationSelectScreen() {
 
   // Option 3: Select a saved address
   const handleSelectSavedAddress = async (addr: Address) => {
-    if (addr.pincode && /^\d{6}$/.test(addr.pincode)) {
-      setVerifyingServiceability(true);
-      try {
-        const check = await bookingApi.checkServiceability(addr.pincode);
-        setVerifyingServiceability(false);
-        if (!check.serviceable) {
-          Alert.alert('Area Not Serviceable', check.message || 'This saved address is outside our service area.');
-          return;
-        }
-      } catch {
-        setVerifyingServiceability(false);
+    const cleanPin = (addr.pincode || '').replace(/\D/g, '');
+    if (cleanPin.length !== 6) {
+      Alert.alert(
+        'Location Not Serviceable',
+        'This saved address is missing a verified 6-digit PIN code. Please update it with an active PIN code to allow booking.'
+      );
+      return;
+    }
+
+    setVerifyingServiceability(true);
+    try {
+      const check = await bookingApi.checkServiceability(cleanPin);
+      setVerifyingServiceability(false);
+      if (!check.serviceable) {
+        Alert.alert(
+          'Location Not Serviceable',
+          check.message || 'This saved address is outside our supported service areas. Bookings outside supported areas are not allowed.'
+        );
+        return;
       }
+    } catch {
+      setVerifyingServiceability(false);
+      Alert.alert(
+        'Location Not Serviceable',
+        'Unable to verify serviceability for this address. Bookings outside supported areas are not allowed.'
+      );
+      return;
     }
 
     const locationData: UserLocationData = {
@@ -378,6 +501,108 @@ export default function LocationSelectScreen() {
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <>
+            {/* DEDICATED 6-DIGIT PIN CODE ENTRY CARD */}
+            <View style={styles.pinEntryCard}>
+              <View style={styles.pinCardHeader}>
+                <View style={styles.pinIconCircle}>
+                  <Hash size={18} color={Colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pinCardTitle}>Enter 6-Digit PIN Code</Text>
+                  <Text style={styles.pinCardSub}>Verify doorstep service availability instantly</Text>
+                </View>
+              </View>
+
+              <View style={styles.pinInputRow}>
+                <TextInput
+                  ref={pinInputRef}
+                  style={styles.pinTextInput}
+                  placeholder="e.g. 500072"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="numeric"
+                  maxLength={6}
+                  value={pinInput}
+                  onChangeText={handlePinInputChange}
+                  returnKeyType="done"
+                  onSubmitEditing={() => verifyPincode()}
+                />
+                <Pressable
+                  style={[
+                    styles.pinVerifyBtn,
+                    (pinInput.length !== 6 || checkingPin) && styles.pinVerifyBtnDisabled,
+                  ]}
+                  onPress={() => verifyPincode()}
+                  disabled={pinInput.length !== 6 || checkingPin}
+                  accessibilityRole="button"
+                  accessibilityLabel="Check PIN serviceability"
+                >
+                  {checkingPin ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.pinVerifyBtnText}>Check</Text>
+                  )}
+                </Pressable>
+              </View>
+
+              {/* Live Serviceability Feedback Banner */}
+              {pinResult && (
+                <View
+                  style={[
+                    styles.pinResultBanner,
+                    pinResult.serviceable
+                      ? styles.pinResultBannerSuccess
+                      : styles.pinResultBannerError,
+                  ]}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                    {pinResult.serviceable ? (
+                      <CheckCircle2 size={20} color="#059669" style={{ marginTop: 2 }} />
+                    ) : (
+                      <AlertTriangle size={20} color="#DC2626" style={{ marginTop: 2 }} />
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.pinResultTitle,
+                          pinResult.serviceable
+                            ? styles.pinResultTitleSuccess
+                            : styles.pinResultTitleError,
+                        ]}
+                      >
+                        {pinResult.serviceable
+                          ? 'Active Service Area'
+                          : 'Location Not Serviceable'}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.pinResultMsg,
+                          pinResult.serviceable
+                            ? styles.pinResultMsgSuccess
+                            : styles.pinResultMsgError,
+                        ]}
+                      >
+                        {pinResult.message}
+                      </Text>
+
+                      {pinResult.serviceable && (
+                        <Pressable
+                          style={styles.pinApplyBtn}
+                          onPress={() => handleApplyPincode(pinResult.pincode)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Deliver to PIN ${pinResult.pincode}`}
+                        >
+                          <Text style={styles.pinApplyBtnText}>
+                            Deliver to PIN {pinResult.pincode}
+                          </Text>
+                          <ArrowRight size={15} color="#FFFFFF" />
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+                </View>
+              )}
+            </View>
+
             {/* OPTION 1: Use my current location */}
             <Pressable
               style={styles.currentLocationCard}
@@ -552,7 +777,7 @@ export default function LocationSelectScreen() {
                 Try searching for a locality like "Kukatpally", "Jubilee Hills", "Gachibowli", or a 6-digit PIN.
               </Text>
             </View>
-          ) : null
+          ) : undefined
         }
       />
     </KeyboardAvoidingView>
@@ -627,6 +852,131 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 40,
+  },
+  pinEntryCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  pinCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  pinIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(37, 99, 235, 0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  pinCardTitle: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 15,
+    color: '#111827',
+  },
+  pinCardSub: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 1,
+  },
+  pinInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  pinTextInput: {
+    flex: 1,
+    height: 46,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    paddingHorizontal: 14,
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 16,
+    color: '#111827',
+    letterSpacing: 2,
+  },
+  pinVerifyBtn: {
+    height: 46,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pinVerifyBtnDisabled: {
+    backgroundColor: '#9CA3AF',
+    opacity: 0.7,
+  },
+  pinVerifyBtnText: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+  pinResultBanner: {
+    marginTop: 12,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+  },
+  pinResultBannerSuccess: {
+    backgroundColor: '#ECFDF5',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  pinResultBannerError: {
+    backgroundColor: '#FEF2F2',
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  pinResultTitle: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 13,
+    marginBottom: 2,
+  },
+  pinResultTitleSuccess: {
+    color: '#065F46',
+  },
+  pinResultTitleError: {
+    color: '#991B1B',
+  },
+  pinResultMsg: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  pinResultMsgSuccess: {
+    color: '#047857',
+  },
+  pinResultMsgError: {
+    color: '#B91C1C',
+  },
+  pinApplyBtn: {
+    marginTop: 10,
+    backgroundColor: '#059669',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+  },
+  pinApplyBtnText: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 12,
+    color: '#FFFFFF',
   },
   currentLocationCard: {
     flexDirection: 'row',

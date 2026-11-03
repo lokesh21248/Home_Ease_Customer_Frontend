@@ -17,6 +17,7 @@ import { GoogleMapView, GoogleMapHandle, MapPoint } from '../components/map/Goog
 import { useCustomerLocation } from '../hooks/useCustomerLocation';
 import { searchAddresses, reverseGeocode, GeoSearchResult } from '../api/geoApi';
 import { saveAddress, AddressLabel } from '../api/addressApi';
+import { bookingApi } from '../api/client';
 import { promptEnableLocationServices } from '../services/locationService';
 import { Colors, Typography, Shadows } from '../constants/theme';
 
@@ -44,6 +45,12 @@ export default function AddDeliveryAddress({
   const [houseNumber, setHouseNumber] = useState('');
   const [landmark, setLandmark] = useState('');
   const [label, setLabel] = useState<AddressLabel>('HOME');
+  const [pincode, setPincode] = useState('');
+  const [pinServiceStatus, setPinServiceStatus] = useState<{
+    checking: boolean;
+    serviceable: boolean | null;
+    message?: string;
+  }>({ checking: false, serviceable: null });
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<GeoSearchResult[]>([]);
@@ -79,6 +86,35 @@ export default function AddDeliveryAddress({
     }, 400);
   };
 
+  const checkPinServiceability = async (pin: string) => {
+    const clean = pin.replace(/\D/g, '').slice(0, 6);
+    if (clean.length !== 6) {
+      setPinServiceStatus({ checking: false, serviceable: null });
+      return;
+    }
+    setPinServiceStatus({ checking: true, serviceable: null });
+    try {
+      const res = await bookingApi.checkServiceability(clean);
+      setPinServiceStatus({
+        checking: false,
+        serviceable: res.serviceable,
+        message: res.serviceable ? 'Serviceable' : 'Location Not Serviceable',
+      });
+    } catch {
+      setPinServiceStatus({
+        checking: false,
+        serviceable: false,
+        message: 'Location Not Serviceable',
+      });
+    }
+  };
+
+  const handlePincodeChange = (text: string) => {
+    const cleaned = text.replace(/\D/g, '').slice(0, 6);
+    setPincode(cleaned);
+    void checkPinServiceability(cleaned);
+  };
+
   const handleSelectSearchResult = (result: GeoSearchResult) => {
     const pt: MapPoint = { latitude: result.latitude, longitude: result.longitude };
     setSelectedPoint(pt);
@@ -86,6 +122,12 @@ export default function AddDeliveryAddress({
     setShowSearchResults(false);
     setSearchQuery('');
     mapRef.current?.animateToCoordinate?.(pt, 500);
+
+    const pinMatch = result.formattedAddress.match(/\b\d{6}\b/);
+    if (pinMatch) {
+      setPincode(pinMatch[0]);
+      void checkPinServiceability(pinMatch[0]);
+    }
   };
 
   // Reverse geocode whenever map moves
@@ -97,6 +139,11 @@ export default function AddDeliveryAddress({
         const geo = await reverseGeocode(point, customerToken);
         if (geo?.formattedAddress) {
           setFormattedAddress(geo.formattedAddress);
+          const pinMatch = geo.formattedAddress.match(/\b\d{6}\b/);
+          if (pinMatch) {
+            setPincode(pinMatch[0]);
+            void checkPinServiceability(pinMatch[0]);
+          }
         }
       } catch (e) {
         console.warn('[AddDeliveryAddress] reverse geocode error:', e);
@@ -135,8 +182,28 @@ export default function AddDeliveryAddress({
       return;
     }
 
+    const cleanPin = pincode.replace(/\D/g, '');
+    if (cleanPin.length !== 6) {
+      Alert.alert(
+        'Location Not Serviceable',
+        'A valid 6-digit PIN code is required. Bookings outside supported areas are not permitted.'
+      );
+      return;
+    }
+
     setIsSaving(true);
     try {
+      // Backend check whether PIN code is active
+      const check = await bookingApi.checkServiceability(cleanPin);
+      if (!check.serviceable) {
+        setIsSaving(false);
+        Alert.alert(
+          'Location Not Serviceable',
+          check.message || `PIN code ${cleanPin} is outside our supported service areas. Bookings outside supported areas are not permitted.`
+        );
+        return;
+      }
+
       const saved = await saveAddress(
         {
           formattedAddress: formattedAddress.trim(),
@@ -145,6 +212,7 @@ export default function AddDeliveryAddress({
           houseNumber: houseNumber.trim() || undefined,
           landmark: landmark.trim() || undefined,
           label,
+          pincode: cleanPin,
         },
         customerToken
       );
@@ -300,6 +368,35 @@ export default function AddDeliveryAddress({
             placeholderTextColor="#94A3B8"
             value={landmark}
             onChangeText={setLandmark}
+          />
+
+          {/* 6-Digit PIN Code */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={styles.inputLabel}>PIN CODE (6 DIGITS) *</Text>
+            {pinServiceStatus.checking ? (
+              <ActivityIndicator size="small" color={Colors.primary} />
+            ) : pinServiceStatus.serviceable === true ? (
+              <Text style={{ fontSize: 11, fontFamily: Typography.fontFamily.semiBold, color: '#16A34A' }}>
+                ✓ Serviceable Area
+              </Text>
+            ) : pinServiceStatus.serviceable === false ? (
+              <Text style={{ fontSize: 11, fontFamily: Typography.fontFamily.semiBold, color: '#DC2626' }}>
+                ⚠️ Location Not Serviceable
+              </Text>
+            ) : null}
+          </View>
+          <TextInput
+            style={[
+              styles.input,
+              pinServiceStatus.serviceable === false && { borderColor: '#DC2626', backgroundColor: '#FEF2F2' },
+              pinServiceStatus.serviceable === true && { borderColor: '#16A34A', backgroundColor: '#F0FDF4' },
+            ]}
+            placeholder="Enter 6-digit PIN code (e.g. 500072)"
+            placeholderTextColor="#94A3B8"
+            value={pincode}
+            onChangeText={handlePincodeChange}
+            keyboardType="number-pad"
+            maxLength={6}
           />
 
           {/* Save Button */}

@@ -39,6 +39,6 @@ export default ({ config }: ConfigContext) => {
         googleMapsApiKey: googleMapsApiKey,
       },
     },
-    plugins: [...plugins, mapsPlugin],
+    plugins: [...plugins, 'expo-status-bar', mapsPlugin],
   };
 };

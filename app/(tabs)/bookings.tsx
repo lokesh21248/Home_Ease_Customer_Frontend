@@ -13,13 +13,14 @@ import {
   Pressable,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { Booking } from '../../src/api/client';
+import { Booking, bookingApi } from '../../src/api/client';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../src/constants/theme';
 import { LayoutConstants, getScrollBottomPadding, getHeaderTopPadding } from '../../src/constants/layout';
 import { useMyBookings } from '../../src/hooks/useMyBookings';
@@ -32,21 +33,36 @@ type Tab = 'All' | 'Upcoming' | 'Ongoing' | 'Completed';
 const PRIMARY_BLUE = LayoutConstants.BRAND_BLUE;
 
 const STATUS_BADGE: Record<string, { label: string; color: string; bg: string }> = {
-  SEARCHING:        { label: 'Upcoming', color: '#10B981', bg: '#D1FAE5' },
-  WORKER_NOT_FOUND: { label: 'Searching', color: '#F59E0B', bg: '#FEF3C7' },
-  ACCEPTED:         { label: 'Upcoming', color: '#10B981', bg: '#D1FAE5' },
+  PENDING:          { label: 'Pending', color: '#F59E0B', bg: '#FEF3C7' },
+  REQUESTED:        { label: 'Dispatching', color: '#10B981', bg: '#D1FAE5' },
+  SEARCHING:        { label: 'Matching', color: '#10B981', bg: '#D1FAE5' },
+  ACCEPTED:         { label: 'Assigned', color: '#059669', bg: '#D1FAE5' },
+  CONFIRMED:        { label: 'Confirmed', color: '#2563EB', bg: '#DBEAFE' },
+  ON_THE_WAY:       { label: 'On The Way', color: '#8B5CF6', bg: '#EDE9FE' },
+  ARRIVED:          { label: 'Arrived', color: '#7C3AED', bg: '#EDE9FE' },
   IN_PROGRESS:      { label: 'Ongoing', color: '#3B82F6', bg: '#DBEAFE' },
   COMPLETED:        { label: 'Completed', color: '#059669', bg: '#A7F3D0' },
   CANCELLED:        { label: 'Cancelled', color: '#4B5563', bg: '#E5E7EB' },
+  REJECTED:         { label: 'Re-matching', color: '#EF4444', bg: '#FEE2E2' },
+  EXPIRED:          { label: 'Expired', color: '#6B7280', bg: '#F3F4F6' },
+  WORKER_NOT_FOUND: { label: 'No Partner', color: '#EF4444', bg: '#FEE2E2' },
 };
 
 function getTab(status: string): Tab {
-  if (status === 'COMPLETED' || status === 'CANCELLED') return 'Completed';
-  if (status === 'IN_PROGRESS') return 'Ongoing';
+  if (status === 'COMPLETED' || status === 'CANCELLED' || status === 'EXPIRED') return 'Completed';
+  if (status === 'IN_PROGRESS' || status === 'ON_THE_WAY' || status === 'ARRIVED') return 'Ongoing';
   return 'Upcoming';
 }
 
-function BookingCard({ booking, onPress }: { booking: Booking; onPress: () => void }) {
+function BookingCard({
+  booking,
+  onPress,
+  onCancel,
+}: {
+  booking: Booking;
+  onPress: () => void;
+  onCancel?: () => void;
+}) {
   const badge = STATUS_BADGE[booking.status] || STATUS_BADGE.SEARCHING;
   const date = new Date(booking.scheduledAt);
   const dateStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -61,7 +77,27 @@ function BookingCard({ booking, onPress }: { booking: Booking; onPress: () => vo
         />
         <View style={styles.cardHeaderInfo}>
           <Text style={styles.bookingService} numberOfLines={1}>{booking.serviceName}</Text>
-          <Text style={styles.bookingId}>Booking ID: #{booking.bookingId.substring(0, 6).toUpperCase()}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginVertical: 3 }}>
+            <View
+              style={{
+                backgroundColor: booking.bookingType === 'INSTANT' ? '#D1FAE5' : '#EFF6FF',
+                paddingHorizontal: 6,
+                paddingVertical: 2,
+                borderRadius: 4,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 10,
+                  fontWeight: '700',
+                  color: booking.bookingType === 'INSTANT' ? '#059669' : '#2563EB',
+                }}
+              >
+                {booking.bookingType === 'INSTANT' ? '⚡ Instant' : '📅 Scheduled'}
+              </Text>
+            </View>
+            <Text style={styles.bookingId}>#{booking.bookingId.substring(0, 6).toUpperCase()}</Text>
+          </View>
           
           <View style={styles.iconRow}>
             <Ionicons name="calendar-outline" size={14} color={Colors.textSecondary} />
@@ -104,8 +140,24 @@ function BookingCard({ booking, onPress }: { booking: Booking; onPress: () => vo
       <View style={styles.actionButtons}>
         {getTab(booking.status) === 'Upcoming' && (
           <>
-            <Pressable style={styles.actionBtnOutline}><Text style={styles.actionBtnOutlineText}>Reschedule</Text></Pressable>
-            <Pressable style={styles.actionBtnOutline}><Text style={styles.actionBtnOutlineText}>Cancel Booking</Text></Pressable>
+            <Pressable
+              style={styles.actionBtnOutline}
+              onPress={(e) => {
+                e.stopPropagation();
+                router.push(`/booking/track/${booking.bookingId}`);
+              }}
+            >
+              <Text style={styles.actionBtnOutlineText}>Reschedule</Text>
+            </Pressable>
+            <Pressable
+              style={styles.actionBtnOutline}
+              onPress={(e) => {
+                e.stopPropagation();
+                onCancel?.();
+              }}
+            >
+              <Text style={[styles.actionBtnOutlineText, { color: Colors.cancelled }]}>Cancel Booking</Text>
+            </Pressable>
           </>
         )}
         {getTab(booking.status) === 'Ongoing' && (
@@ -165,6 +217,29 @@ export default function BookingsScreen() {
   const headerTopPadding = getHeaderTopPadding(insets.top, 10);
   const bottomScrollPadding = getScrollBottomPadding(insets.bottom);
 
+  const handleCancelBooking = useCallback((bookingId: string) => {
+    Alert.alert(
+      'Cancel Booking',
+      'Are you sure you want to cancel this booking request?',
+      [
+        { text: 'Keep Booking', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await bookingApi.cancelBooking(bookingId, 'Customer requested');
+              await queryClient.invalidateQueries({ queryKey: queryKeys.myBookings(userId ?? '') });
+              Alert.alert('Booking Cancelled', 'Your booking has been cancelled successfully.');
+            } catch (err: any) {
+              Alert.alert('Cancellation Error', err?.message || 'Could not cancel booking.');
+            }
+          },
+        },
+      ]
+    );
+  }, [userId]);
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -218,6 +293,7 @@ export default function BookingsScreen() {
               <BookingCard
                 booking={item}
                 onPress={() => router.push(`/booking/track/${item.bookingId}`)}
+                onCancel={() => handleCancelBooking(item.bookingId)}
               />
             )}
             ListEmptyComponent={

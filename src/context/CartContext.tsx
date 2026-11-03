@@ -30,6 +30,8 @@ interface CartState {
   selectedAddress: Address | null;
   selectedSlot: TimeSlot | null;
   selectedDate: string | null;
+  bookingType: 'INSTANT' | 'SCHEDULED';
+  estimatedArrivalMinutes: number | null;
   coupon: CouponValidationResponse | null;
   paymentMethod: PaymentMethod;
   subtotal: number;
@@ -43,6 +45,8 @@ const initialState: CartState = {
   selectedAddress: null,
   selectedSlot: null,
   selectedDate: null,
+  bookingType: 'INSTANT',
+  estimatedArrivalMinutes: 18,
   coupon: null,
   paymentMethod: 'COD',
   subtotal: 0,
@@ -59,6 +63,7 @@ type CartAction =
   | { type: 'TOGGLE_ADDON'; payload: { subServiceId: string; addon: Addon } }
   | { type: 'SET_ADDRESS'; payload: Address }
   | { type: 'SET_SLOT'; payload: { slot: TimeSlot; date: string } }
+  | { type: 'SET_BOOKING_TYPE'; payload: { bookingType: 'INSTANT' | 'SCHEDULED'; eta?: number } }
   | { type: 'SET_COUPON'; payload: CouponValidationResponse | null }
   | { type: 'SET_PAYMENT_METHOD'; payload: PaymentMethod }
   | { type: 'CLEAR_CART' };
@@ -139,6 +144,13 @@ function cartReducer(state: CartState, action: CartAction): CartState {
     case 'SET_SLOT':
       return { ...state, selectedSlot: action.payload.slot, selectedDate: action.payload.date };
 
+    case 'SET_BOOKING_TYPE':
+      return {
+        ...state,
+        bookingType: action.payload.bookingType,
+        estimatedArrivalMinutes: action.payload.eta !== undefined ? action.payload.eta : state.estimatedArrivalMinutes,
+      };
+
     case 'SET_COUPON': {
       const coupon = action.payload;
       return { ...state, coupon, ...computeTotals(state.items, coupon) };
@@ -165,6 +177,7 @@ interface CartContextValue {
   toggleAddon: (subServiceId: string, addon: Addon) => void;
   setAddress: (a: Address) => void;
   setSlot: (slot: TimeSlot, date: string) => void;
+  setBookingType: (type: 'INSTANT' | 'SCHEDULED', eta?: number) => void;
   setCoupon: (c: CouponValidationResponse | null) => void;
   setPaymentMethod: (m: PaymentMethod) => void;
   clearCart: () => void;
@@ -188,6 +201,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const setAddress = useCallback((a: Address) => dispatch({ type: 'SET_ADDRESS', payload: a }), []);
   const setSlot = useCallback((slot: TimeSlot, date: string) =>
     dispatch({ type: 'SET_SLOT', payload: { slot, date } }), []);
+  const setBookingType = useCallback((bookingType: 'INSTANT' | 'SCHEDULED', eta?: number) =>
+    dispatch({ type: 'SET_BOOKING_TYPE', payload: { bookingType, eta } }), []);
   const setCoupon = useCallback((c: CouponValidationResponse | null) =>
     dispatch({ type: 'SET_COUPON', payload: c }), []);
   const setPaymentMethod = useCallback((m: PaymentMethod) =>
@@ -219,6 +234,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       toggleAddon,
       setAddress,
       setSlot,
+      setBookingType,
       setCoupon,
       setPaymentMethod,
       clearCart,
@@ -235,6 +251,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       toggleAddon,
       setAddress,
       setSlot,
+      setBookingType,
       setCoupon,
       setPaymentMethod,
       clearCart,

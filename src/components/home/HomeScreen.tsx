@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,9 @@ import {
   ScrollView,
   StyleSheet,
   RefreshControl,
-  StatusBar as RNStatusBar,
   Platform,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Wallet, Settings } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,19 +41,26 @@ export function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
   // ── Cached queries ───────────────────────────────────────────────────────
-  const { data: rawCategories = [] } = useCategories();
+  const {
+    data: rawCategories = [],
+    isLoading: categoriesLoading,
+    isError: categoriesError,
+    refetch: refetchCategories,
+  } = useCategories();
   const { data: rawBanners = [] } = useBanners();
 
   // Fallback initial from user if available, default to 'E' as in reference
   const userInitial = user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'E';
 
   // Map live categories to the local CategoryItem shape (only API categories)
-  const categories: CategoryItem[] = rawCategories.map((cat, index) => ({
-    key: `cat-live-${cat.serviceId}-${index}`,
-    id: cat.serviceId,
-    name: cat.name,
-    image: cat.imageUrl || '',
-  }));
+  const categories: CategoryItem[] = useMemo(() => {
+    return rawCategories.map((cat, index) => ({
+      key: `cat-live-${cat.serviceId}-${index}`,
+      id: cat.serviceId,
+      name: cat.name,
+      image: cat.imageUrl || '',
+    }));
+  }, [rawCategories]);
 
   // Extract popular sub-services directly from categories API response
   const popularServices: PopularServiceItem[] = (() => {
@@ -169,11 +176,7 @@ export function HomeScreen() {
   return (
     <View style={styles.container}>
       {/* 1. Android Status Bar: light icons, blue background */}
-      <RNStatusBar
-        barStyle="light-content"
-        backgroundColor={HomeColors.primaryBlue}
-        translucent={Platform.OS === 'android'}
-      />
+      <StatusBar style="light" />
 
       <ScrollView
         style={styles.scroll}
@@ -238,6 +241,9 @@ export function HomeScreen() {
         />
         <CategoryGrid
           categories={filteredCategories}
+          isLoading={categoriesLoading}
+          isError={categoriesError}
+          onRetry={refetchCategories}
           onSelectCategory={handleSelectCategory}
         />
 

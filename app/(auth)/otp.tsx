@@ -15,6 +15,7 @@ import {
   Pressable,
   Animated,
 } from 'react-native';
+import type { TextInputInstance } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
@@ -43,7 +44,7 @@ export default function OtpScreen() {
   const [resendTimer, setResendTimer] = useState(RESEND_SECONDS);
   const [resending, setResending] = useState(false);
 
-  const inputRefs = useRef<(TextInput | null)[]>([]);
+  const inputRefs = useRef<(TextInputInstance | null)[]>([]);
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {

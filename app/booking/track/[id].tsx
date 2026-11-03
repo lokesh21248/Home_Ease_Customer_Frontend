@@ -162,7 +162,12 @@ export default function TrackingScreen() {
 
   // 3. Live Partner Tracking
   const trackingEnabled =
-    !!booking?.workerId && (booking.status === 'ACCEPTED' || booking.status === 'IN_PROGRESS');
+    !!booking?.workerId &&
+    (booking.status === 'ACCEPTED' ||
+      booking.status === 'CONFIRMED' ||
+      booking.status === 'ON_THE_WAY' ||
+      booking.status === 'ARRIVED' ||
+      booking.status === 'IN_PROGRESS');
 
   const {
     partnerPos,
@@ -288,10 +293,15 @@ export default function TrackingScreen() {
 
   const getActiveStepIndex = (status?: string) => {
     switch (status) {
+      case 'PENDING':
+      case 'REQUESTED':
       case 'SEARCHING':
       case 'WORKER_NOT_FOUND':
         return 0;
       case 'ACCEPTED':
+      case 'CONFIRMED':
+      case 'ON_THE_WAY':
+      case 'ARRIVED':
         return 1;
       case 'IN_PROGRESS':
         return 2;
@@ -310,6 +320,8 @@ export default function TrackingScreen() {
     if (!booking) return { title: 'Connecting...', desc: 'Verifying booking credentials', badgeColor: '#6B7280' };
 
     switch (booking.status) {
+      case 'PENDING':
+      case 'REQUESTED':
       case 'SEARCHING':
         return {
           title: 'Matching Nearby Partner',
@@ -322,7 +334,10 @@ export default function TrackingScreen() {
           desc: 'All verified partners within 5 km are currently engaged with active jobs.',
           badgeColor: '#EF4444',
         };
+      case 'CONFIRMED':
       case 'ACCEPTED':
+      case 'ON_THE_WAY':
+      case 'ARRIVED':
         if (!hasPartnerLocation) {
           return {
             title: 'Partner Assigned',
