@@ -2,9 +2,6 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, LayoutGrid, Calendar, Heart, User } from 'lucide-react-native';
-import { HomeColors } from './types';
-import { Typography } from '../../constants/theme';
-import { LayoutConstants } from '../../constants/layout';
 import { router } from 'expo-router';
 
 export type TabKey = 'index' | 'categories' | 'bookings' | 'wishlist' | 'profile';
@@ -44,31 +41,38 @@ export function BottomNavigation({
       key: 'index',
       label: 'Home',
       route: '/(tabs)',
-      icon: (color) => <Home size={22} color={color} strokeWidth={currentTab === 'index' ? 2.4 : 2} />,
+      icon: (color) => (
+        <Home
+          size={24}
+          color={color}
+          fill={currentTab === 'index' ? color : 'transparent'}
+          strokeWidth={currentTab === 'index' ? 1.8 : 2}
+        />
+      ),
     },
     {
       key: 'categories',
-      label: 'Categories',
+      label: 'Services',
       route: '/(tabs)/categories',
-      icon: (color) => <LayoutGrid size={22} color={color} strokeWidth={currentTab === 'categories' ? 2.4 : 2} />,
+      icon: (color) => <LayoutGrid size={24} color={color} strokeWidth={currentTab === 'categories' ? 2.4 : 1.9} />,
     },
     {
       key: 'bookings',
       label: 'Bookings',
       route: '/(tabs)/bookings',
-      icon: (color) => <Calendar size={22} color={color} strokeWidth={currentTab === 'bookings' ? 2.4 : 2} />,
+      icon: (color) => <Calendar size={24} color={color} strokeWidth={currentTab === 'bookings' ? 2.4 : 1.9} />,
     },
     {
       key: 'wishlist',
       label: 'Wishlist',
       route: '/(tabs)/wishlist',
-      icon: (color) => <Heart size={22} color={color} strokeWidth={currentTab === 'wishlist' ? 2.4 : 2} />,
+      icon: (color) => <Heart size={24} color={color} strokeWidth={currentTab === 'wishlist' ? 2.4 : 1.9} />,
     },
     {
       key: 'profile',
       label: 'Profile',
       route: '/(tabs)/profile',
-      icon: (color) => <User size={22} color={color} strokeWidth={currentTab === 'profile' ? 2.4 : 2} />,
+      icon: (color) => <User size={24} color={color} strokeWidth={currentTab === 'profile' ? 2.4 : 1.9} />,
     },
   ];
 
@@ -95,7 +99,7 @@ export function BottomNavigation({
       <View style={styles.navRow}>
         {NAV_ITEMS.map((item) => {
           const isActive = currentTab === item.key;
-          const color = isActive ? HomeColors.activeBlue : HomeColors.secondaryGray;
+          const color = isActive ? '#0052FF' : '#1E293B';
 
           return (
             <Pressable
@@ -119,13 +123,6 @@ export function BottomNavigation({
               >
                 {item.label}
               </Text>
-
-              {/* Small blue active indicator below */}
-              {isActive ? (
-                <View style={styles.activeIndicator} />
-              ) : (
-                <View style={styles.indicatorPlaceholder} />
-              )}
             </Pressable>
           );
         })}
@@ -137,26 +134,24 @@ export function BottomNavigation({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: LayoutConstants.TAB_BAR_TOP_PADDING,
+    paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.04)',
+    borderTopColor: '#F1F5F9',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
+        shadowOffset: { width: 0, height: -3 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
       },
       android: {
-        elevation: 8,
+        elevation: 6,
       },
       default: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
+        shadowOffset: { width: 0, height: -3 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
       },
     }),
   },
@@ -164,13 +159,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    height: LayoutConstants.TAB_BAR_BASE_HEIGHT,
+    height: 54,
   },
   navItem: {
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
-    height: '100%',
+    paddingVertical: 4,
   },
   iconContainer: {
     width: 28,
@@ -180,27 +175,15 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 11,
-    marginTop: 2,
+    marginTop: 3,
     textAlign: 'center',
   },
   labelActive: {
-    fontFamily: Typography.fontFamily.bold,
-    color: HomeColors.activeBlue,
+    fontWeight: '700',
+    color: '#0052FF',
   },
   labelInactive: {
-    fontFamily: Typography.fontFamily.medium,
-    color: HomeColors.secondaryGray,
-  },
-  activeIndicator: {
-    marginTop: 4,
-    width: 18,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: HomeColors.activeBlue,
-  },
-  indicatorPlaceholder: {
-    marginTop: 4,
-    width: 18,
-    height: 3,
+    fontWeight: '500',
+    color: '#1E293B',
   },
 });

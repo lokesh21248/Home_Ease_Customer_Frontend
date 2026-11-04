@@ -89,6 +89,23 @@ export interface Banner {
   isActive: boolean;
 }
 
+export interface ExploreServiceItem {
+  id: string;
+  name: string;
+  slug?: string;
+  description?: string;
+  categoryId?: string;
+  categoryName?: string;
+  imageUrl: string;
+  price: number;
+  originalPrice?: number | null;
+  rating?: number;
+  reviewCount?: number;
+  displayOrder?: number;
+  isActive?: boolean;
+  isFeatured?: boolean;
+}
+
 export interface ServiceCategory {
   serviceId: string;
   name: string;
@@ -209,19 +226,19 @@ export interface Booking {
   serviceName: string;
   bookingType?: 'INSTANT' | 'SCHEDULED';
   status:
-    | 'PENDING'
-    | 'REQUESTED'
-    | 'ACCEPTED'
-    | 'CONFIRMED'
-    | 'ON_THE_WAY'
-    | 'ARRIVED'
-    | 'IN_PROGRESS'
-    | 'COMPLETED'
-    | 'CANCELLED'
-    | 'REJECTED'
-    | 'EXPIRED'
-    | 'SEARCHING'
-    | 'WORKER_NOT_FOUND';
+  | 'PENDING'
+  | 'REQUESTED'
+  | 'ACCEPTED'
+  | 'CONFIRMED'
+  | 'ON_THE_WAY'
+  | 'ARRIVED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'REJECTED'
+  | 'EXPIRED'
+  | 'SEARCHING'
+  | 'WORKER_NOT_FOUND';
   pinCode: string;
   scheduledAt: string;
   scheduledEndAt?: string | null;
@@ -461,9 +478,9 @@ export async function apiRequest<T>(
   if (!response.ok) {
     const message =
       typeof data === 'object' &&
-      data !== null &&
-      'message' in data &&
-      typeof (data as any).message === 'string'
+        data !== null &&
+        'message' in data &&
+        typeof (data as any).message === 'string'
         ? (data as any).message
         : `Request failed (${response.status})`;
 
@@ -685,7 +702,7 @@ export const userApi = {
       if (res.ok) {
         return await res.json();
       }
-    } catch {}
+    } catch { }
 
     // 2. Try POST /api/v1/users/me/addresses
     try {
@@ -693,7 +710,7 @@ export const userApi = {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-    } catch {}
+    } catch { }
 
     // 3. Fallback to POST /api/v1/user/addresses
     return await request('/user/addresses', {
@@ -704,8 +721,90 @@ export const userApi = {
 };
 
 // ─── Catalog APIs ─────────────────────────────────────────────────────────────
+const DEFAULT_EXPLORE_SERVICES: ExploreServiceItem[] = [
+  {
+    id: 'a1b2c3d4-0001-4000-8000-000000000001',
+    name: 'Full Home Deep Cleaning',
+    slug: 'full-home-deep-cleaning',
+    description: 'Complete top-to-bottom sanitization with mechanized scrubbers and eco-safe disinfectants.',
+    categoryId: 'be8bb640-cc11-4243-ab4a-5cbdf34a0937',
+    categoryName: 'Cleaning',
+    imageUrl: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800&q=80',
+    price: 1499.00,
+    originalPrice: 1999.00,
+    rating: 4.9,
+    reviewCount: 142,
+    displayOrder: 1,
+    isActive: true,
+    isFeatured: true,
+  },
+  {
+    id: 'a1b2c3d4-0002-4000-8000-000000000002',
+    name: 'Kitchen Intensive Degreasing & Sanitization',
+    slug: 'kitchen-intensive-degreasing',
+    description: 'Deep chimney, stovetop, slab and tile oil stain removal using hot foam and industrial degreasers.',
+    categoryId: 'be8bb640-cc11-4243-ab4a-5cbdf34a0937',
+    categoryName: 'Cleaning',
+    imageUrl: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=800&q=80',
+    price: 799.00,
+    originalPrice: 999.00,
+    rating: 4.8,
+    reviewCount: 89,
+    displayOrder: 2,
+    isActive: true,
+    isFeatured: true,
+  },
+  {
+    id: 'a1b2c3d4-0003-4000-8000-000000000003',
+    name: 'Switchboard Repair & Socket Replacement',
+    slug: 'switchboard-repair-socket-replacement',
+    description: 'Safe diagnostics, burnt wire insulation rewiring, and modular switch replacements.',
+    categoryId: '6e2e370b-7d5e-46d2-944b-afe7c15db6d5',
+    categoryName: 'Electrician Services',
+    imageUrl: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&q=80',
+    price: 149.00,
+    originalPrice: 249.00,
+    rating: 4.7,
+    reviewCount: 64,
+    displayOrder: 3,
+    isActive: true,
+    isFeatured: false,
+  },
+  {
+    id: 'a1b2c3d4-0004-4000-8000-000000000004',
+    name: 'Bathroom Deep Descale & Sanitization',
+    slug: 'bathroom-deep-descale-sanitization',
+    description: 'Hard-water stain scrubbing, tap acid wash, mirror polish and drain unclog treatment.',
+    categoryId: 'be8bb640-cc11-4243-ab4a-5cbdf34a0937',
+    categoryName: 'Cleaning',
+    imageUrl: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=800&q=80',
+    price: 499.00,
+    originalPrice: 699.00,
+    rating: 4.9,
+    reviewCount: 115,
+    displayOrder: 4,
+    isActive: true,
+    isFeatured: false,
+  }
+];
+
 export const catalogApi = {
   getBanners: (): Promise<Banner[]> => request('/banners', {}, false),
+
+  getExploreServices: async (categoryId?: string): Promise<ExploreServiceItem[]> => {
+    try {
+      const endpoint = categoryId
+        ? `/explore-services?categoryId=${encodeURIComponent(categoryId)}`
+        : '/explore-services';
+      const res = await request(endpoint, {}, false);
+      if (Array.isArray(res) && res.length > 0) return res;
+    } catch {
+      // Backend endpoint not yet deployed to EC2 - return default explore items
+    }
+    return categoryId
+      ? DEFAULT_EXPLORE_SERVICES.filter(s => s.categoryId === categoryId)
+      : DEFAULT_EXPLORE_SERVICES;
+  },
 
   getCategories: async (): Promise<ServiceCategory[]> => {
     try {
@@ -769,8 +868,8 @@ export const bookingApi = {
           const period: 'MORNING' | 'AFTERNOON' | 'EVENING' = isMorning
             ? 'MORNING'
             : isAfternoon
-            ? 'AFTERNOON'
-            : 'EVENING';
+              ? 'AFTERNOON'
+              : 'EVENING';
           return {
             time: ts.time,
             startTime: parts[0] || ts.time,
@@ -913,11 +1012,11 @@ export const bookingApi = {
     let subServices =
       Array.isArray(data.subServices)
         ? data.subServices
-            .filter((s) => s && s.subServiceId && UUID_REGEX.test(s.subServiceId))
-            .map((s) => ({
-              subServiceId: s.subServiceId,
-              quantity: Math.max(1, Number(s.quantity) || 1),
-            }))
+          .filter((s) => s && s.subServiceId && UUID_REGEX.test(s.subServiceId))
+          .map((s) => ({
+            subServiceId: s.subServiceId,
+            quantity: Math.max(1, Number(s.quantity) || 1),
+          }))
         : [];
     if (subServices.length === 0) {
       subServices = [{ subServiceId: '3c391970-28ee-4f28-a566-5c3b48763525', quantity: 1 }];

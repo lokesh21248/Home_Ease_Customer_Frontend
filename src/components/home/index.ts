@@ -1,4 +1,7 @@
 export { HomeScreen } from './HomeScreen';
+export { HomeHeroSection } from './HomeHeroSection';
+export { HomeEasePassBanner } from './HomeEasePassBanner';
+export { ExploreServicesGrid } from './ExploreServicesGrid';
 export { Header } from './Header';
 export { LocationHeader } from './LocationHeader';
 export { SearchBar } from './SearchBar';

@@ -13,6 +13,8 @@ export const queryKeys = {
   // ── Public catalog data ──────────────────────────────────────────────────
   banners: () => ['banners'] as const,
 
+  exploreServices: (categoryId?: string) => ['exploreServices', categoryId ?? 'all'] as const,
+
   categories: () => ['categories'] as const,
 
   subServices: (serviceId: string) => ['subServices', serviceId] as const,
