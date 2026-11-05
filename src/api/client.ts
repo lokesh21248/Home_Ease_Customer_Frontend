@@ -1434,3 +1434,246 @@ export const systemApi = {
     }
   },
 };
+
+// ─── Dynamic Service Detail & Server Cart APIs ───────────────────────────────
+
+export interface ServiceDurationItem {
+  durationId: string;
+  minutes: number;
+  label: string;
+  price: number;
+  originalPrice?: number | null;
+  isPopular?: boolean;
+  active: boolean;
+  displayOrder: number;
+}
+
+export interface ServicePackageItem {
+  packageId: string;
+  name: string;
+  description?: string;
+  price: number;
+  originalPrice?: number | null;
+  durationMins: number;
+  inclusions: string[];
+  active: boolean;
+  displayOrder: number;
+}
+
+export interface ServiceFeatureItem {
+  featureId: string;
+  title: string;
+  description?: string;
+  iconUrl?: string;
+  isIncluded: boolean;
+  displayOrder: number;
+}
+
+export interface ServiceHowItWorksItem {
+  stepId: string;
+  stepNumber: number;
+  title: string;
+  description?: string;
+  iconUrl?: string;
+}
+
+export interface ServiceInstructionItem {
+  instructionId: string;
+  title: string;
+  description?: string;
+  displayOrder: number;
+}
+
+export interface ServiceImageItem {
+  imageId: string;
+  imageUrl: string;
+  caption?: string;
+  isBanner?: boolean;
+  displayOrder: number;
+}
+
+export interface ServiceAvailabilityInfo {
+  isAvailableNow: boolean;
+  nextAvailableSlot: string;
+  instantEtaMinutes: number;
+}
+
+export interface DynamicServiceDetail {
+  serviceId: string;
+  serviceName: string;
+  subtitle?: string;
+  description: string;
+  bannerImage: string;
+  rating: number;
+  totalReviews: number;
+  startingPrice: number;
+  bookingTypes: string[];
+  cancellationPolicy: string;
+  serviceAvailability: ServiceAvailabilityInfo;
+  durations: ServiceDurationItem[];
+  packages: ServicePackageItem[];
+  features: ServiceFeatureItem[];
+  howItWorks: ServiceHowItWorksItem[];
+  instructions: ServiceInstructionItem[];
+  galleryImages: ServiceImageItem[];
+  subServices: SubService[];
+}
+
+export interface ServerCartItem {
+  cartItemId: string;
+  serviceId: string;
+  serviceName: string;
+  durationId?: string;
+  durationLabel?: string;
+  durationMinutes?: number;
+  packageId?: string;
+  packageName?: string;
+  subServiceId?: string;
+  subServiceName?: string;
+  quantity: number;
+  unitPrice: number;
+  originalPrice?: number | null;
+  itemTotal: number;
+  imageUrl?: string;
+  notes?: string;
+}
+
+export interface ServerCartResponse {
+  cartId: string;
+  userId: string;
+  items: ServerCartItem[];
+  totalQuantity: number;
+  subtotal: number;
+  additionalCharges: number;
+  taxAmount: number;
+  discountAmount: number;
+  finalPayableAmount: number;
+  couponCode?: string | null;
+}
+
+export interface ServerCartSummaryResponse {
+  itemCount: number;
+  subtotal: number;
+  taxAmount: number;
+  discountAmount: number;
+  finalPayableAmount: number;
+}
+
+export interface AddToServerCartRequest {
+  serviceId: string;
+  durationId?: string;
+  packageId?: string;
+  subServiceId?: string;
+  quantity?: number;
+  notes?: string;
+}
+
+export interface CheckoutFromCartPayload {
+  bookingType: 'INSTANT' | 'SCHEDULED';
+  userLat: number;
+  userLng: number;
+  address: string;
+  pincode: string;
+  paymentMethod: 'COD' | 'UPI' | 'CARD' | 'NET_BANKING' | 'WALLET';
+  scheduledDate?: string;
+  timeSlot?: string;
+  couponCode?: string;
+  isForFriend?: boolean;
+  recipientName?: string;
+  recipientPhone?: string;
+  idempotencyKey?: string;
+}
+
+export const serviceDetailApi = {
+  /**
+   * GET /api/v1/services/{serviceId}
+   * Fetches complete dynamic service detail (durations, packages, how it works, features)
+   */
+  getServiceDetail: async (serviceId: string): Promise<DynamicServiceDetail> => {
+    return await request<DynamicServiceDetail>(`/services/${serviceId}`, {}, false);
+  },
+};
+
+export const cartApi = {
+  /**
+   * GET /api/v1/cart
+   */
+  getCart: async (couponCode?: string): Promise<ServerCartResponse> => {
+    const query = couponCode ? `?coupon=${encodeURIComponent(couponCode)}` : '';
+    return await request<ServerCartResponse>(`/cart${query}`, {}, true);
+  },
+
+  /**
+   * POST /api/v1/cart/items
+   */
+  addToCart: async (payload: AddToServerCartRequest): Promise<ServerCartResponse> => {
+    return await request<ServerCartResponse>(
+      '/cart/items',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+      true
+    );
+  },
+
+  /**
+   * PUT /api/v1/cart/items/{itemId}
+   */
+  updateCartItem: async (itemId: string, quantity: number, notes?: string): Promise<ServerCartResponse> => {
+    return await request<ServerCartResponse>(
+      `/cart/items/${itemId}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ quantity, notes }),
+      },
+      true
+    );
+  },
+
+  /**
+   * DELETE /api/v1/cart/items/{itemId}
+   */
+  removeCartItem: async (itemId: string): Promise<ServerCartResponse> => {
+    return await request<ServerCartResponse>(
+      `/cart/items/${itemId}`,
+      { method: 'DELETE' },
+      true
+    );
+  },
+
+  /**
+   * DELETE /api/v1/cart
+   */
+  clearCart: async (): Promise<{ message: string }> => {
+    return await request<{ message: string }>(
+      '/cart',
+      { method: 'DELETE' },
+      true
+    );
+  },
+
+  /**
+   * GET /api/v1/cart/summary
+   */
+  getSummary: async (couponCode?: string): Promise<ServerCartSummaryResponse> => {
+    const query = couponCode ? `?coupon=${encodeURIComponent(couponCode)}` : '';
+    return await request<ServerCartSummaryResponse>(`/cart/summary${query}`, {}, true);
+  },
+
+  /**
+   * POST /api/v1/cart/checkout
+   */
+  checkout: async (payload: CheckoutFromCartPayload): Promise<Booking> => {
+    return await request<Booking>(
+      '/cart/checkout',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        idempotencyKey: payload.idempotencyKey,
+      },
+      true
+    );
+  },
+};
+

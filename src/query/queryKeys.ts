@@ -17,6 +17,10 @@ export const queryKeys = {
 
   categories: () => ['categories'] as const,
 
+  serviceDetail: (serviceId: string) => ['serviceDetail', serviceId] as const,
+
+  cart: () => ['cart'] as const,
+
   subServices: (serviceId: string) => ['subServices', serviceId] as const,
 
   // ── User-scoped private data ─────────────────────────────────────────────
