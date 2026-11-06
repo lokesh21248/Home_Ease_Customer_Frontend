@@ -10,7 +10,9 @@ interface PromoBannerProps {
   onPress?: (targetId: string, title: string) => void;
 }
 
-const DEFAULT_BANNER_IMAGE = require('../../../assets/images/banners/home-cleaning-fest.png');
+const DEFAULT_BANNER_IMAGE = {
+  uri: 'https://gheiuyygjssqatziviix.supabase.co/storage/v1/object/public/homeease-banners/banner-images/1af45e3e-7662-4f1d-9dd0-a8acf19c57e5.png',
+};
 // Banner image aspect ratio from native asset (434 x 189)
 const BANNER_ASPECT_RATIO = 434 / 189;
 
