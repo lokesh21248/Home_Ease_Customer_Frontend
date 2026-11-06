@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, LayoutGrid, Calendar, Heart, User } from 'lucide-react-native';
+import { LayoutGrid, Calendar, Heart, User } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 export type TabKey = 'index' | 'categories' | 'bookings' | 'wishlist' | 'profile';
@@ -42,11 +43,10 @@ export function BottomNavigation({
       label: 'Home',
       route: '/(tabs)',
       icon: (color) => (
-        <Home
+        <Ionicons
+          name={currentTab === 'index' ? 'home' : 'home-outline'}
           size={24}
           color={color}
-          fill={currentTab === 'index' ? color : 'transparent'}
-          strokeWidth={currentTab === 'index' ? 1.8 : 2}
         />
       ),
     },
