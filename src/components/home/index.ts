@@ -2,6 +2,8 @@ export { HomeScreen } from './HomeScreen';
 export { HomeHeroSection } from './HomeHeroSection';
 export { HomeEasePassBanner } from './HomeEasePassBanner';
 export { ExploreServicesGrid } from './ExploreServicesGrid';
+export { HomeRecentBookings } from './HomeRecentBookings';
+export { HomeOffersSection } from './HomeOffersSection';
 export { Header } from './Header';
 export { LocationHeader } from './LocationHeader';
 export { SearchBar } from './SearchBar';

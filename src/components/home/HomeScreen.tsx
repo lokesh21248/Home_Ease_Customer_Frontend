@@ -11,6 +11,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HomeHeroSection } from './HomeHeroSection';
 import { HomeEasePassBanner } from './HomeEasePassBanner';
 import { ExploreServicesGrid, ExploreGridItem } from './ExploreServicesGrid';
+import { HomeRecentBookings } from './HomeRecentBookings';
+import { HomeOffersSection } from './HomeOffersSection';
 import { useCategories } from '../../hooks/useCategories';
 import { queryClient } from '../../query/queryClient';
 import { queryKeys } from '../../query/queryKeys';
@@ -120,6 +122,12 @@ export function HomeScreen() {
           onSelectService={handleSelectService}
           onViewAllPress={handleViewAllPress}
         />
+
+        {/* 5. Recently Booked Services (if user has active/previous bookings) */}
+        <HomeRecentBookings />
+
+        {/* 6. Exclusive Offers & Discounts */}
+        <HomeOffersSection />
       </ScrollView>
     </View>
   );

@@ -24,6 +24,7 @@ import { SubService, Addon } from '../../src/api/client';
 import { useCart } from '../../src/context/CartContext';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../src/constants/theme';
 import { useSubServices } from '../../src/hooks/useSubServices';
+import { DurationSelector, DEFAULT_DURATION_PLANS, DurationPlan } from '../../src/components/common/DurationSelector';
 
 function AddonChip({
   addon,
@@ -390,6 +391,7 @@ export default function ServiceDetailsScreen() {
 
   const [activeTab, setActiveTab] = useState<'overview' | 'included' | 'reviews'>('overview');
   const [isSaved, setIsSaved] = useState(false);
+  const [selectedDuration, setSelectedDuration] = useState<number>(60);
 
   // Determine exact category profile
   const categoryType = useMemo(
@@ -458,7 +460,10 @@ export default function ServiceDetailsScreen() {
     if (subServices.length > 0 && itemCount === 0) {
       addSubService(subServices[0]);
     }
-    router.push('/booking/date-time');
+    router.push({
+      pathname: '/booking/date-time',
+      params: { duration: String(selectedDuration) },
+    });
   };
 
   const startingPrice =
@@ -626,6 +631,12 @@ export default function ServiceDetailsScreen() {
               ))}
             </View>
           )}
+
+          {/* Hourly Duration Selector (30m, 60m, 90m, 120m) */}
+          <DurationSelector
+            selectedMinutes={selectedDuration}
+            onSelect={(plan) => setSelectedDuration(plan.minutes)}
+          />
 
           {/* Sub-services / Customization */}
           {loading ? (

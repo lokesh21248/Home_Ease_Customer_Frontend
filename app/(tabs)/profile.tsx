@@ -291,14 +291,26 @@ export default function ProfileScreen() {
               iconName="document-text-outline"
               label="Terms & Privacy"
               desc="Read terms of service and privacy policy"
-              onPress={() => {}}
+              onPress={() => {
+                Alert.alert(
+                  'Terms & Privacy',
+                  'HomeEase is committed to your security and privacy. All customer data and location broadcasts are encrypted end-to-end. Service guarantees protect every confirmed booking with a 30-day warranty.',
+                  [{ text: 'Understood', style: 'default' }]
+                );
+              }}
             />
             <MenuItem
               IconComponent={Ionicons}
               iconName="information-circle-outline"
               label="About HomeEase"
-              desc="Version 1.0.0"
-              onPress={() => {}}
+              desc="Version 1.0.0 • On-demand Home Services"
+              onPress={() => {
+                Alert.alert(
+                  'About HomeEase',
+                  "HomeEase v1.0.0\n\nIndia's leading on-demand home services marketplace. Built with verified professionals, instant 10-minute dispatch, live GPS tracking, and satisfaction guarantee.\n\n© 2026 HomeEase Technologies Inc.",
+                  [{ text: 'Close', style: 'default' }]
+                );
+              }}
             />
           </View>
 

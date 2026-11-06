@@ -14,6 +14,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Modal,
+  TouchableOpacity,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
@@ -202,6 +204,19 @@ export default function BookingsScreen() {
   const { userId } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('All');
   const [refreshing, setRefreshing] = useState(false);
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [selectedBookingForCancel, setSelectedBookingForCancel] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState<string>('Need to reschedule to a different time');
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  const CANCELLATION_REASONS = [
+    'Need to reschedule to a different time',
+    'Found an alternate service provider',
+    'Booked by mistake / duplicate order',
+    'Price or service terms not suitable',
+    'Partner delayed or unreachable',
+    'Other reason',
+  ];
 
   const { data: bookings = [], isLoading: loading } = useMyBookings();
 
@@ -218,27 +233,25 @@ export default function BookingsScreen() {
   const bottomScrollPadding = getScrollBottomPadding(insets.bottom);
 
   const handleCancelBooking = useCallback((bookingId: string) => {
-    Alert.alert(
-      'Cancel Booking',
-      'Are you sure you want to cancel this booking request?',
-      [
-        { text: 'Keep Booking', style: 'cancel' },
-        {
-          text: 'Yes, Cancel',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await bookingApi.cancelBooking(bookingId, 'Customer requested');
-              await queryClient.invalidateQueries({ queryKey: queryKeys.myBookings(userId ?? '') });
-              Alert.alert('Booking Cancelled', 'Your booking has been cancelled successfully.');
-            } catch (err: any) {
-              Alert.alert('Cancellation Error', err?.message || 'Could not cancel booking.');
-            }
-          },
-        },
-      ]
-    );
-  }, [userId]);
+    setSelectedBookingForCancel(bookingId);
+    setCancelModalVisible(true);
+  }, []);
+
+  const handleConfirmCancel = async () => {
+    if (!selectedBookingForCancel) return;
+    try {
+      setIsCancelling(true);
+      await bookingApi.cancelBooking(selectedBookingForCancel, cancelReason);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.myBookings(userId ?? '') });
+      setCancelModalVisible(false);
+      setSelectedBookingForCancel(null);
+      Alert.alert('Booking Cancelled', 'Your booking has been cancelled successfully.');
+    } catch (err: any) {
+      Alert.alert('Cancellation Error', err?.message || 'Could not cancel booking.');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -317,6 +330,71 @@ export default function BookingsScreen() {
             }
           />
         )}
+        {/* Cancellation Reason Modal */}
+        <Modal
+          visible={cancelModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setCancelModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Cancel Booking</Text>
+                <Pressable onPress={() => setCancelModalVisible(false)} hitSlop={8}>
+                  <Ionicons name="close" size={22} color={Colors.textSecondary} />
+                </Pressable>
+              </View>
+
+              <Text style={styles.modalSub}>
+                Please choose a reason for cancellation. This helps us improve our service.
+              </Text>
+
+              <View style={styles.reasonsList}>
+                {CANCELLATION_REASONS.map((reason) => {
+                  const isSelected = cancelReason === reason;
+                  return (
+                    <TouchableOpacity
+                      key={reason}
+                      style={[styles.reasonOption, isSelected && styles.reasonOptionSelected]}
+                      onPress={() => setCancelReason(reason)}
+                    >
+                      <View style={[styles.radioCircle, isSelected && styles.radioCircleSelected]}>
+                        {isSelected && <View style={styles.radioDot} />}
+                      </View>
+                      <Text
+                        style={[styles.reasonText, isSelected && styles.reasonTextSelected]}
+                      >
+                        {reason}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <View style={styles.modalActions}>
+                <Pressable
+                  style={styles.modalCancelBtn}
+                  onPress={() => setCancelModalVisible(false)}
+                >
+                  <Text style={styles.modalCancelText}>Keep Booking</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.modalConfirmBtn, isCancelling && { opacity: 0.7 }]}
+                  onPress={handleConfirmCancel}
+                  disabled={isCancelling}
+                >
+                  {isCancelling ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.modalConfirmText}>Cancel Booking</Text>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </View>
   );
@@ -593,6 +671,121 @@ const styles = StyleSheet.create({
   bookNowText: {
     fontFamily: Typography.fontFamily.bold,
     fontSize: Typography.fontSize.sm,
+    color: '#FFFFFF',
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 18,
+    color: Colors.textPrimary,
+  },
+  modalSub: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  reasonsList: {
+    gap: 8,
+    marginBottom: 20,
+  },
+  reasonOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  reasonOptionSelected: {
+    borderColor: PRIMARY_BLUE,
+    backgroundColor: 'rgba(20, 121, 248, 0.05)',
+  },
+  radioCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: '#9CA3AF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  radioCircleSelected: {
+    borderColor: PRIMARY_BLUE,
+  },
+  radioDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: PRIMARY_BLUE,
+  },
+  reasonText: {
+    fontFamily: Typography.fontFamily.medium,
+    fontSize: 13,
+    color: Colors.textPrimary,
+    flex: 1,
+  },
+  reasonTextSelected: {
+    color: PRIMARY_BLUE,
+    fontFamily: Typography.fontFamily.bold,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  modalCancelText: {
+    fontFamily: Typography.fontFamily.semiBold,
+    fontSize: 13,
+    color: Colors.textPrimary,
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    backgroundColor: Colors.error,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+  },
+  modalConfirmText: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 13,
     color: '#FFFFFF',
   },
 });
