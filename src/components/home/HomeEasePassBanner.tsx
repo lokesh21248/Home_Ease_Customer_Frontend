@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
+import { Crown } from 'lucide-react-native';
 import { router } from 'expo-router';
 
 interface HomeEasePassBannerProps {
@@ -40,7 +40,7 @@ export function HomeEasePassBanner({ onPress }: HomeEasePassBannerProps) {
           <View style={styles.leftCol}>
             {/* White Pill Badge with Crown Emblem */}
             <View style={styles.pillBadge}>
-              <Ionicons name="ribbon-outline" size={13} color="#0052FF" style={{ marginRight: 4 }} />
+              <Crown size={13} color="#0052FF" strokeWidth={2.4} style={{ marginRight: 4 }} />
               <Text style={styles.pillText}>HomeEase Pass</Text>
             </View>
 
@@ -152,6 +152,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#CBD5E1',
   },
   activeDot: {
+    width: 18,
+    borderRadius: 3.5,
     backgroundColor: '#0052FF',
   },
 });

@@ -123,15 +123,14 @@ export function HomeHeroSection({
             </View>
           </Pressable>
 
-          {/* Notification Bell Circle */}
+          {/* Notification Bell Button */}
           <Pressable
             style={styles.bellButton}
             onPress={handleNotification}
             accessibilityRole="button"
             accessibilityLabel="Notifications"
           >
-            <Bell size={20} color="#FFFFFF" fill="#FFFFFF" />
-            <View style={styles.unreadDot} />
+            <Bell size={20} color="#FFFFFF" strokeWidth={2.2} />
           </Pressable>
         </View>
       </View>
@@ -329,24 +328,12 @@ const styles = StyleSheet.create({
   bellButton: {
     width: 38,
     height: 38,
-    borderRadius: 19,
+    borderRadius: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.22)',
     borderColor: 'rgba(255, 255, 255, 0.35)',
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
-  },
-  unreadDot: {
-    position: 'absolute',
-    top: 7,
-    right: 8,
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: '#EF4444',
-    borderWidth: 1.5,
-    borderColor: '#0052FF',
   },
   heroContentRow: {
     flexDirection: 'row',

@@ -17,7 +17,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HORIZONTAL_PADDING = 14;
 const COLUMN_GAP = 8;
 const CARD_WIDTH = Math.floor((SCREEN_WIDTH - HORIZONTAL_PADDING * 2 - COLUMN_GAP * 3) / 4);
-const CARD_HEIGHT = Math.round(CARD_WIDTH * (120 / 129));
+const CARD_HEIGHT = Math.round(CARD_WIDTH * (115 / 130));
 
 export interface ExploreGridItem {
   id: string;
