@@ -29,11 +29,13 @@ export function HomeHeroSection({
   const insets = useSafeAreaInsets();
   const { address } = useUserLocation();
 
-  // Dynamic address display with fallback to reference screenshot ("Sector 55, Gurugram...")
+  // Dynamic address with fallback to reference screenshot ("Sector 55, Gurugram, Haryana, India")
   const areaTitle = address?.area || 'Sector 55';
   const fullAddress =
     address?.formattedAddress ||
-    (address?.area && address?.city ? `${address.area}, ${address.city}, India` : 'Sector 55, Gurugram, Haryana, India');
+    (address?.area && address?.city
+      ? `${address.area}, ${address.city}, India`
+      : 'Sector 55, Gurugram, Haryana, India');
 
   const handleLocation = () => {
     if (onLocationPress) onLocationPress();
@@ -48,7 +50,6 @@ export function HomeHeroSection({
   const handleInstant = () => {
     if (onInstantBookPress) onInstantBookPress();
     else {
-      // Direct jump to instant category or booking flow
       router.push({
         pathname: '/booking/date-time',
         params: { bookingType: 'INSTANT' },
@@ -68,10 +69,10 @@ export function HomeHeroSection({
 
   return (
     <LinearGradient
-      colors={['#0047FF', '#0055F6', '#0062FF']}
+      colors={['#074BD4', '#004ECC', '#005CE6', '#0172F5']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
-      style={[styles.container, { paddingTop: Math.max(insets.top + 6, 40) }]}
+      style={[styles.container, { paddingTop: Math.max(insets.top + 6, 38) }]}
     >
       {/* 1. Top Location & Action Bar */}
       <View style={styles.topBar}>
@@ -83,7 +84,7 @@ export function HomeHeroSection({
           accessibilityLabel={`Selected location: ${areaTitle}`}
         >
           <View style={styles.locationPinCircle}>
-            <MapPin size={22} color="#FFFFFF" />
+            <MapPin size={22} color="#FFFFFF" fill="#FFFFFF" />
           </View>
           <View style={styles.locationTextCol}>
             <View style={styles.locationTitleRow}>
@@ -107,7 +108,7 @@ export function HomeHeroSection({
             accessibilityRole="button"
             accessibilityLabel="Earn ₹200 wallet referral"
           >
-            {/* 3D Shiny Gold Coins Icon */}
+            {/* 3D Gold Coins Graphic */}
             <View style={styles.coinGraphic}>
               <View style={styles.coinBack}>
                 <Text style={styles.coinBackText}>₹</Text>
@@ -129,19 +130,18 @@ export function HomeHeroSection({
             accessibilityRole="button"
             accessibilityLabel="Notifications"
           >
-            <Bell size={20} color="#FFFFFF" />
-            {/* Unread Alert Dot */}
+            <Bell size={20} color="#FFFFFF" fill="#FFFFFF" />
             <View style={styles.unreadDot} />
           </Pressable>
         </View>
       </View>
 
-      {/* 2. Hero Headline & Cleaning Character Image */}
+      {/* 2. Hero Headline & Cleaning Character */}
       <View style={styles.heroContentRow}>
         <View style={styles.heroTextCol}>
           {/* HomeEase Brand Row */}
           <View style={styles.brandRow}>
-            <Ionicons name="home" size={17} color="#FFFFFF" style={{ marginRight: 5 }} />
+            <Ionicons name="home" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
             <Text style={styles.brandName}>HomeEase</Text>
           </View>
 
@@ -151,15 +151,13 @@ export function HomeHeroSection({
           </Text>
         </View>
 
-        {/* Professional Cleaner Illustration / Photo */}
+        {/* Hero Cleaning Character Illustration */}
         <View style={styles.heroImageWrapper}>
           <Image
-            source={{
-              uri: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=600&auto=format&fit=crop&q=80',
-            }}
+            source={require('../../../assets/images/hero_cleaner.png')}
             style={styles.heroImage}
-            contentFit="cover"
-            transition={200}
+            contentFit="contain"
+            transition={150}
           />
         </View>
       </View>
@@ -222,7 +220,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   locationContainer: {
     flexDirection: 'row',
@@ -241,7 +239,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   locationTitle: {
-    fontSize: 16,
+    fontSize: 16.5,
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: -0.2,
@@ -255,11 +253,11 @@ const styles = StyleSheet.create({
   rightActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   earnButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderColor: 'rgba(255, 255, 255, 0.35)',
     borderWidth: 1,
     borderRadius: 22,
     flexDirection: 'row',
@@ -323,7 +321,7 @@ const styles = StyleSheet.create({
     lineHeight: 11,
   },
   earnAmount: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '800',
     color: '#FFFFFF',
     lineHeight: 14,
@@ -332,8 +330,8 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderColor: 'rgba(255, 255, 255, 0.35)',
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -343,9 +341,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 7,
     right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
     backgroundColor: '#EF4444',
     borderWidth: 1.5,
     borderColor: '#0052FF',
@@ -356,13 +354,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 16,
+    paddingBottom: 8,
     position: 'relative',
-    minHeight: 135,
+    minHeight: 142,
   },
   heroTextCol: {
     flex: 1,
-    paddingRight: 115,
+    paddingRight: 140,
+    zIndex: 2,
   },
   brandRow: {
     flexDirection: 'row',
@@ -370,7 +369,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   brandName: {
-    fontSize: 15,
+    fontSize: 15.5,
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: -0.2,
@@ -384,12 +383,11 @@ const styles = StyleSheet.create({
   },
   heroImageWrapper: {
     position: 'absolute',
-    right: 12,
-    bottom: -6,
-    width: 125,
-    height: 140,
-    borderRadius: 16,
-    overflow: 'hidden',
+    right: 6,
+    top: -12,
+    width: 175,
+    height: 155,
+    zIndex: 1,
   },
   heroImage: {
     width: '100%',

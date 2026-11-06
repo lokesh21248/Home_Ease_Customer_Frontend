@@ -13,34 +13,50 @@ import { ServiceCategory } from '../../api/client';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// 4-column calculation
+// 4-column calculation to fit perfectly on any mobile screen
 const HORIZONTAL_PADDING = 14;
 const COLUMN_GAP = 8;
 const CARD_WIDTH = Math.floor((SCREEN_WIDTH - HORIZONTAL_PADDING * 2 - COLUMN_GAP * 3) / 4);
+const CARD_HEIGHT = Math.round(CARD_WIDTH * (120 / 129));
 
 export interface ExploreGridItem {
   id: string;
   title: string;
   rating: string;
-  image: string;
+  cardImage: any;
   price?: string;
   originalPrice?: string;
   categoryMatch?: string;
 }
+
+const CARD_IMAGES: Record<string, any> = {
+  'daily-home-cleaning': require('../../../assets/images/services/daily_cleaning_card.png'),
+  'homeease-verified': require('../../../assets/images/services/verified_worker_card.png'),
+  'cooking': require('../../../assets/images/services/cooking_card.png'),
+  'sofa-carpet-cleaning': require('../../../assets/images/services/sofa_carpet_card.png'),
+  'ac-service-repair': require('../../../assets/images/services/ac_repair_card.png'),
+  'appliance-repair': require('../../../assets/images/services/appliance_repair_card.png'),
+  'bathroom-cleaning': require('../../../assets/images/services/bathroom_cleaning_card.png'),
+  'pest-control': require('../../../assets/images/services/pest_control_card.png'),
+  'painting-home-office': require('../../../assets/images/services/painting_card.png'),
+  'electrician-service': require('../../../assets/images/services/electrician_card.png'),
+  'plumbing-service': require('../../../assets/images/services/plumbing_card.png'),
+  'carpentry-service': require('../../../assets/images/services/carpentry_card.png'),
+};
 
 export const EXPLORE_SERVICES_12: ExploreGridItem[] = [
   {
     id: 'daily-home-cleaning',
     title: 'Daily Home\nCleaning',
     rating: '4.9 (48.3K)',
-    image: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=300&auto=format&fit=crop&q=80',
+    cardImage: CARD_IMAGES['daily-home-cleaning'],
     categoryMatch: 'Cleaning',
   },
   {
     id: 'homeease-verified',
     title: 'HomeEase\nVerified',
     rating: '4.9 (79.0K)',
-    image: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=300&auto=format&fit=crop&q=80',
+    cardImage: CARD_IMAGES['homeease-verified'],
     categoryMatch: 'Cleaning',
   },
   {
@@ -49,70 +65,70 @@ export const EXPLORE_SERVICES_12: ExploreGridItem[] = [
     rating: '4.9 (79.0K)',
     price: '₹49',
     originalPrice: '₹99',
-    image: 'https://images.unsplash.com/photo-1556910103-1c02745aae4d?w=300&auto=format&fit=crop&q=80',
+    cardImage: CARD_IMAGES['cooking'],
     categoryMatch: 'Cooking',
   },
   {
     id: 'sofa-carpet-cleaning',
     title: 'Sofa & Carpet\nCleaning',
     rating: '4.8 (32.1K)',
-    image: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=300&auto=format&fit=crop&q=80',
+    cardImage: CARD_IMAGES['sofa-carpet-cleaning'],
     categoryMatch: 'Cleaning',
   },
   {
     id: 'ac-service-repair',
     title: 'AC Service\n& Repair',
     rating: '4.9 (52.4K)',
-    image: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=300&auto=format&fit=crop&q=80',
+    cardImage: CARD_IMAGES['ac-service-repair'],
     categoryMatch: 'AC Service & Repair',
   },
   {
     id: 'appliance-repair',
     title: 'Appliance\nRepair',
     rating: '4.8 (40.0K)',
-    image: 'https://images.unsplash.com/photo-1626806787461-102c1bfaaea1?w=300&auto=format&fit=crop&q=80',
+    cardImage: CARD_IMAGES['appliance-repair'],
     categoryMatch: 'Appliance Repair',
   },
   {
     id: 'bathroom-cleaning',
     title: 'Bathroom\nCleaning',
     rating: '4.9 (28.6K)',
-    image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=300&auto=format&fit=crop&q=80',
+    cardImage: CARD_IMAGES['bathroom-cleaning'],
     categoryMatch: 'Cleaning',
   },
   {
     id: 'pest-control',
     title: 'Pest\nControl',
     rating: '4.9 (17.9K)',
-    image: 'https://images.unsplash.com/photo-1584744982491-665216d95f8b?w=300&auto=format&fit=crop&q=80',
+    cardImage: CARD_IMAGES['pest-control'],
     categoryMatch: 'Pest Control',
   },
   {
     id: 'painting-home-office',
     title: 'Painting\n(Home/Office)',
     rating: '4.9 (21.7K)',
-    image: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=300&auto=format&fit=crop&q=80',
+    cardImage: CARD_IMAGES['painting-home-office'],
     categoryMatch: 'Painting',
   },
   {
     id: 'electrician-service',
     title: 'Electrician\nService',
     rating: '4.8 (15.6K)',
-    image: 'https://images.unsplash.com/photo-1621905251918-48416bd8575a?w=300&auto=format&fit=crop&q=80',
+    cardImage: CARD_IMAGES['electrician-service'],
     categoryMatch: 'Electrician Services',
   },
   {
     id: 'plumbing-service',
     title: 'Plumbing\nService',
     rating: '4.9 (12.3K)',
-    image: 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?w=300&auto=format&fit=crop&q=80',
+    cardImage: CARD_IMAGES['plumbing-service'],
     categoryMatch: 'Plumbing',
   },
   {
     id: 'carpentry-service',
     title: 'Carpentry\nService',
     rating: '4.8 (11.9K)',
-    image: 'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=300&auto=format&fit=crop&q=80',
+    cardImage: CARD_IMAGES['carpentry-service'],
     categoryMatch: 'Carpentry',
   },
 ];
@@ -184,49 +200,20 @@ export function ExploreServicesGrid({
           <Pressable
             key={item.id}
             style={({ pressed }) => [
-              styles.card,
-              { width: CARD_WIDTH },
+              styles.cardPressable,
+              { width: CARD_WIDTH, height: CARD_HEIGHT },
               pressed && styles.cardPressed,
             ]}
             onPress={() => handleItemPress(item)}
             accessibilityRole="button"
             accessibilityLabel={`${item.title.replace('\n', ' ')}, rating ${item.rating}`}
           >
-            {/* 1. Rating Badge */}
-            <View style={styles.ratingRow}>
-              <Ionicons name="star" size={10} color="#F59E0B" style={{ marginRight: 2 }} />
-              <Text style={styles.ratingText} numberOfLines={1}>
-                {item.rating}
-              </Text>
-            </View>
-
-            {/* 2. Image Area + Blue '+' Overlay */}
-            <View style={styles.imageWrapper}>
-              <Image
-                source={{ uri: item.image }}
-                style={styles.cardImage}
-                contentFit="cover"
-                transition={200}
-              />
-              <View style={styles.plusCircle}>
-                <Ionicons name="add" size={13} color="#0052FF" />
-              </View>
-            </View>
-
-            {/* 3. Price row (if available, e.g. Cooking ₹49 ₹99) */}
-            {item.price && (
-              <View style={styles.priceRow}>
-                <Text style={styles.priceCurrent}>{item.price}</Text>
-                {item.originalPrice && (
-                  <Text style={styles.priceOriginal}>{item.originalPrice}</Text>
-                )}
-              </View>
-            )}
-
-            {/* 4. Title (2-line centered label) */}
-            <Text style={styles.cardTitle} numberOfLines={2}>
-              {item.title}
-            </Text>
+            <Image
+              source={item.cardImage}
+              style={styles.cardImage}
+              contentFit="contain"
+              transition={150}
+            />
           </Pressable>
         ))}
       </View>
@@ -270,93 +257,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     columnGap: COLUMN_GAP,
-    rowGap: 12,
+    rowGap: 10,
   },
-  card: {
-    backgroundColor: '#FFFFFF',
+  cardPressable: {
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 6,
-    paddingBottom: 8,
-    alignItems: 'center',
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1.5 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 3,
-    elevation: 1.5,
   },
   cardPressed: {
-    opacity: 0.88,
+    opacity: 0.9,
     transform: [{ scale: 0.97 }],
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    marginBottom: 5,
-    paddingHorizontal: 1,
-  },
-  ratingText: {
-    fontSize: 8.5,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  imageWrapper: {
-    width: '100%',
-    height: 52,
-    position: 'relative',
-    borderRadius: 8,
-    overflow: 'visible',
-    marginBottom: 4,
   },
   cardImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 8,
-  },
-  plusCircle: {
-    position: 'absolute',
-    right: -4,
-    bottom: -4,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#0052FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#0052FF',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-    marginBottom: 1,
-  },
-  priceCurrent: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  priceOriginal: {
-    fontSize: 9,
-    fontWeight: '500',
-    color: '#94A3B8',
-    textDecorationLine: 'line-through',
-  },
-  cardTitle: {
-    fontSize: 10.5,
-    fontWeight: '600',
-    color: '#1E293B',
-    textAlign: 'center',
-    lineHeight: 13.5,
-    marginTop: 2,
   },
 });

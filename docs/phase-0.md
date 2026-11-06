@@ -64,3 +64,4 @@
 - **Phase 2**: `AssignmentScorer` unit tests and T-120 `BatchAssigner` scheduler.
 - **Phase 3**: Multi-ring instant dispatch (3 km $\rightarrow$ 5 km $\rightarrow$ 8 km) worker push/WebSocket rounds.
 - **Phase 5**: Ops dispute console, ledger-based payout scheduler, and k6/JMeter load tests.
+

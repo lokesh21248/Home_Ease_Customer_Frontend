@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
@@ -30,16 +31,16 @@ export function HomeEasePassBanner({ onPress }: HomeEasePassBannerProps) {
         accessibilityLabel="HomeEase Pass: Buy One Pass Three Visits FREE"
       >
         <LinearGradient
-          colors={['#0046E8', '#0066FF', '#0D72FF']}
+          colors={['#004BE4', '#0066FF', '#0870FF']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0.9 }}
           style={styles.bannerGradient}
         >
           {/* Left Text Column */}
           <View style={styles.leftCol}>
-            {/* White Pill Badge */}
+            {/* White Pill Badge with Crown Emblem */}
             <View style={styles.pillBadge}>
-              <Ionicons name="ribbon-outline" size={13} color="#0052FF" style={{ marginRight: 3 }} />
+              <Ionicons name="ribbon-outline" size={13} color="#0052FF" style={{ marginRight: 4 }} />
               <Text style={styles.pillText}>HomeEase Pass</Text>
             </View>
 
@@ -51,31 +52,21 @@ export function HomeEasePassBanner({ onPress }: HomeEasePassBannerProps) {
 
           {/* Right Graphical Overlapping Passes */}
           <View style={styles.rightGraphicsCol}>
-            {/* Background Cyan Ticket */}
-            <View style={styles.backPassTicket}>
-              <Text style={styles.ticketBrand}>HomeEase</Text>
-              <Text style={styles.ticketVisits}>3 VISITS</Text>
-              <Text style={styles.ticketPrice}>₹99</Text>
-            </View>
-
-            {/* Foreground Royal Blue Pass */}
-            <View style={styles.frontPassTicket}>
-              <View style={styles.frontPassHeader}>
-                <Ionicons name="home" size={11} color="#FFFFFF" />
-              </View>
-              <Text style={styles.frontPassBrand}>HomeEase</Text>
-              <Text style={styles.frontPassTitle}>PASS</Text>
-              <Text style={styles.frontPassSub}>Buy Once & Save</Text>
-            </View>
+            <Image
+              source={require('../../../assets/images/pass_graphic.png')}
+              style={styles.passImage}
+              contentFit="contain"
+              transition={150}
+            />
           </View>
         </LinearGradient>
       </Pressable>
 
-      {/* 2. Three Pagination Dots */}
+      {/* 2. Three Circular Pagination Dots */}
       <View style={styles.paginationRow}>
-        <View style={[styles.dot, activeDot === 0 && styles.activePill]} />
-        <View style={[styles.dot, activeDot === 1 && styles.activePill]} />
-        <View style={[styles.dot, activeDot === 2 && styles.activePill]} />
+        <View style={[styles.dot, activeDot === 0 && styles.activeDot]} />
+        <View style={[styles.dot, activeDot === 1 && styles.activeDot]} />
+        <View style={[styles.dot, activeDot === 2 && styles.activeDot]} />
       </View>
     </View>
   );
@@ -87,7 +78,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   bannerPressable: {
-    borderRadius: 18,
+    borderRadius: 20,
     overflow: 'hidden',
     elevation: 3,
     shadowColor: '#0047FF',
@@ -103,13 +94,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingLeft: 16,
+    paddingRight: 8,
+    paddingVertical: 12,
     minHeight: 114,
   },
   leftCol: {
     flex: 1,
-    paddingRight: 6,
+    paddingRight: 4,
+    justifyContent: 'center',
   },
   pillBadge: {
     backgroundColor: '#FFFFFF',
@@ -135,104 +128,30 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   rightGraphicsCol: {
-    width: 140,
-    height: 94,
-    position: 'relative',
+    width: 148,
+    height: 98,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backPassTicket: {
-    position: 'absolute',
-    left: 4,
-    top: 6,
-    width: 82,
-    height: 80,
-    borderRadius: 12,
-    backgroundColor: '#38BDF8',
-    padding: 7,
-    justifyContent: 'space-between',
-    transform: [{ rotate: '-8deg' }],
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-  },
-  ticketBrand: {
-    fontSize: 8,
-    fontWeight: '700',
-    color: '#0369A1',
-  },
-  ticketVisits: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: '#0C4A6E',
-    marginTop: 2,
-    lineHeight: 13,
-  },
-  ticketPrice: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#FFFFFF',
-  },
-  frontPassTicket: {
-    position: 'absolute',
-    right: 2,
-    top: 0,
-    width: 86,
-    height: 88,
-    borderRadius: 14,
-    backgroundColor: '#1D4ED8',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    padding: 7,
-    justifyContent: 'space-between',
-    transform: [{ rotate: '6deg' }],
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-  },
-  frontPassHeader: {
-    alignItems: 'center',
-  },
-  frontPassBrand: {
-    fontSize: 8.5,
-    fontWeight: '700',
-    color: '#BFDBFE',
-    textAlign: 'center',
-  },
-  frontPassTitle: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    textAlign: 'center',
-    letterSpacing: 0.5,
-  },
-  frontPassSub: {
-    fontSize: 7.5,
-    fontWeight: '700',
-    color: '#DBEAFE',
-    textAlign: 'center',
+  passImage: {
+    width: '100%',
+    height: '100%',
   },
   paginationRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
+    gap: 7,
     marginTop: 10,
     marginBottom: 6,
   },
   dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
     backgroundColor: '#CBD5E1',
   },
-  activePill: {
-    width: 16,
-    height: 6,
-    borderRadius: 3,
+  activeDot: {
     backgroundColor: '#0052FF',
   },
 });

@@ -11,8 +11,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HomeHeroSection } from './HomeHeroSection';
 import { HomeEasePassBanner } from './HomeEasePassBanner';
 import { ExploreServicesGrid, ExploreGridItem } from './ExploreServicesGrid';
-import { HomeRecentBookings } from './HomeRecentBookings';
-import { HomeOffersSection } from './HomeOffersSection';
 import { useCategories } from '../../hooks/useCategories';
 import { queryClient } from '../../query/queryClient';
 import { queryKeys } from '../../query/queryKeys';
@@ -89,7 +87,7 @@ export function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 1. Android & iOS Status Bar: light icons over dark blue top bar */}
+      {/* 1. Light Status Bar on royal blue top bar */}
       <StatusBar style="light" />
 
       <ScrollView
@@ -105,7 +103,7 @@ export function HomeScreen() {
           />
         }
       >
-        {/* 2. Top Bar & Hero Section (Location, Earn ₹200, Bell, Hero Title, Cleaner & 2 Quick Action Cards) */}
+        {/* 2. Top Bar & Hero Section (Location, Earn ₹200, Bell, Hero Title, Cleaning Character & 2 Quick Action Cards) */}
         <HomeHeroSection
           onLocationPress={handleLocationPress}
           onNotificationPress={handleNotificationPress}
@@ -122,12 +120,6 @@ export function HomeScreen() {
           onSelectService={handleSelectService}
           onViewAllPress={handleViewAllPress}
         />
-
-        {/* 5. Recently Booked Services (if user has active/previous bookings) */}
-        <HomeRecentBookings />
-
-        {/* 6. Exclusive Offers & Discounts */}
-        <HomeOffersSection />
       </ScrollView>
     </View>
   );
