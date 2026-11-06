@@ -210,6 +210,32 @@ export interface BookingRequest {
   recipientPhone?: string;
   recipientAddress?: string;
   idempotencyKey?: string;
+  holdId?: string;
+  lockToken?: string;
+  timeSlot?: string;
+}
+
+export interface SlotWindow {
+  windowKey: string;
+  timeSlot: string;
+  startTime: string;
+  endTime: string;
+  maxCapacity: number;
+  availableCapacity: number;
+  available: boolean;
+}
+
+export interface HoldResponse {
+  holdId: string;
+  lockToken: string;
+  windowKey: string;
+  serviceId: string;
+  slotDate: string;
+  startTime: string;
+  endTime: string;
+  expiresAt: string;
+  remainingCapacity: number;
+  message?: string;
 }
 
 export interface Booking {
@@ -949,6 +975,53 @@ export const bookingApi = {
     }
   },
 
+  getCapacitySlots: async (
+    serviceId: string,
+    pincode: string = '500072',
+    date?: string
+  ): Promise<SlotWindow[]> => {
+    const params = new URLSearchParams({ serviceId, pincode });
+    if (date) params.append('date', date);
+    return await request(`/slots?${params.toString()}`);
+  },
+
+  holdSlot: async (
+    serviceId: string,
+    date: string,
+    slotTime: string,
+    pincode: string = '500072',
+    userId?: string
+  ): Promise<HoldResponse> => {
+    return await request('/slot-holds', {
+      method: 'POST',
+      body: JSON.stringify({
+        serviceId,
+        date,
+        slotTime,
+        pincode,
+        userId,
+      }),
+    });
+  },
+
+  releaseHold: async (holdId: string, lockToken: string): Promise<void> => {
+    return await request(`/slot-holds/${holdId}?lockToken=${encodeURIComponent(lockToken)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  rateBooking: async (
+    bookingId: string,
+    rating: number,
+    comment?: string,
+    tags?: string[]
+  ): Promise<any> => {
+    return await request(`/bookings/${bookingId}/rating`, {
+      method: 'POST',
+      body: JSON.stringify({ rating, comment, tags }),
+    });
+  },
+
   validateCoupon: async (code: string, cartTotal: number): Promise<CouponValidationResponse> => {
     const raw: any = await request('/coupons/validate', {
       method: 'POST',
@@ -1054,6 +1127,10 @@ export const bookingApi = {
         cleanedPayload.addons = validAddons;
       }
     }
+
+    if (data.holdId) cleanedPayload.holdId = data.holdId;
+    if (data.lockToken) cleanedPayload.lockToken = data.lockToken;
+    if (data.timeSlot) cleanedPayload.timeSlot = data.timeSlot;
 
     if (data.isForFriend) {
       cleanedPayload.isForFriend = true;

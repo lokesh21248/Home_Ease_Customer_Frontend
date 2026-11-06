@@ -466,6 +466,8 @@ export default function SummaryScreen() {
           bookingType: 'SCHEDULED',
           scheduledDate,
           timeSlot: slotText,
+          holdId: cart.activeHold?.holdId,
+          lockToken: cart.activeHold?.lockToken,
         });
       }
 

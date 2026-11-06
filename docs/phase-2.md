@@ -90,3 +90,4 @@ Phase 2 establishes the unified assignment engine for HomeEase, powering both In
 | Reassignment Triggers Table | **Built** | Audited in `reassignment_trigger_log` (Section 7) |
 | Automated T-30 & GPS Watchdogs | **Built** | `@Scheduled` background detectors |
 | Real-time WebSocket Geo Waves | *Deferred to Phase 3* | Scheduled for Phase 3 (Instant Dispatch & Geo Sets) |
+

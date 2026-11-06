@@ -38,6 +38,7 @@ import { useLiveTracking } from '../../../src/hooks/useLiveTracking';
 import { useCustomerLocation } from '../../../src/hooks/useCustomerLocation';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../../src/constants/theme';
 import { isValidCoordinate } from '../../../src/services/coordinates';
+import { RatingModal, RadarSearchingView } from '../../../src/components/common';
 
 const { width } = Dimensions.get('window');
 
@@ -57,6 +58,15 @@ export default function TrackingScreen() {
   const [pinCopied, setPinCopied] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [isRetryingSearch, setIsRetryingSearch] = useState(false);
+  const [isRatingModalVisible, setIsRatingModalVisible] = useState(false);
+  const [hasShownRating, setHasShownRating] = useState(false);
+
+  useEffect(() => {
+    if (booking?.status === 'COMPLETED' && !hasShownRating) {
+      setIsRatingModalVisible(true);
+      setHasShownRating(true);
+    }
+  }, [booking?.status, hasShownRating]);
 
   const mapRef = useRef<GoogleMapHandle>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -622,41 +632,14 @@ export default function TrackingScreen() {
             </View>
           ) : (
             <>
-              <View style={styles.unassignedCard}>
-                <View style={styles.unassignedIconWrap}>
-                  {booking?.status === 'SEARCHING' ? (
-                    <ActivityIndicator size="small" color="#2563EB" />
-                  ) : (
-                    <Ionicons
-                      name={booking?.status === 'WORKER_NOT_FOUND' ? 'alert-circle' : 'search'}
-                      size={20}
-                      color={booking?.status === 'WORKER_NOT_FOUND' ? '#EF4444' : '#2563EB'}
-                    />
-                  )}
-                </View>
-                <View style={styles.unassignedTextWrap}>
-                  <Text style={styles.unassignedTitle}>
-                    {booking?.status === 'WORKER_NOT_FOUND'
-                      ? 'No Nearby Partner Assigned'
-                      : 'Dispatching Nearby Partner'}
-                  </Text>
-                  <Text style={styles.unassignedDesc}>
-                    {booking?.status === 'WORKER_NOT_FOUND'
-                      ? 'Tap retry above or reschedule your service.'
-                      : 'Matching verified professionals near your address...'}
-                  </Text>
-                </View>
-                {booking?.status === 'SEARCHING' && (
-                  <Pressable
-                    style={styles.refreshSearchBtn}
-                    onPress={fetchBooking}
-                    hitSlop={8}
-                    accessibilityLabel="Refresh status"
-                  >
-                    <Ionicons name="refresh" size={16} color="#2563EB" />
-                  </Pressable>
-                )}
-              </View>
+              <RadarSearchingView
+                serviceName={booking?.serviceName || 'Home Service'}
+                isNotFound={booking?.status === 'WORKER_NOT_FOUND'}
+                onRetry={handleRetrySearch}
+                onSchedule={() => router.push('/booking/date-time')}
+                onCancel={handleCancelBooking}
+                isRetrying={isRetryingSearch}
+              />
 
               {__DEV__ && (booking?.status === 'SEARCHING' || booking?.status === 'WORKER_NOT_FOUND') && (
                 <Pressable
@@ -713,6 +696,18 @@ export default function TrackingScreen() {
           </View>
         </ScrollView>
       </View>
+
+      {/* Completion Rating Modal (Phase 4) */}
+      <RatingModal
+        visible={isRatingModalVisible}
+        bookingId={id || ''}
+        workerName={booking?.workerName}
+        serviceName={booking?.serviceName}
+        onClose={() => setIsRatingModalVisible(false)}
+        onSubmitSuccess={() => {
+          Alert.alert('Review Submitted', 'Thank you for rating your service experience!');
+        }}
+      />
     </View>
   );
 }

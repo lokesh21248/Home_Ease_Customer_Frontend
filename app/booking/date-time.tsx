@@ -37,7 +37,7 @@ const { width } = Dimensions.get('window');
 
 export default function DateTimeScreen() {
   const insets = useSafeAreaInsets();
-  const { cart, setSlot, setBookingType } = useCart();
+  const { cart, setSlot, setBookingType, setActiveHold } = useCart();
   const userLoc = useUserLocation();
 
   // Mode state: 'INSTANT' or 'SCHEDULED'
@@ -57,6 +57,8 @@ export default function DateTimeScreen() {
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsError, setSlotsError] = useState('');
   const [selectedSlotTime, setSelectedSlotTime] = useState<string | null>(null);
+  const [holdSecondsRemaining, setHoldSecondsRemaining] = useState<number>(0);
+  const [isHoldingSlot, setIsHoldingSlot] = useState<boolean>(false);
 
   const firstItem = cart.items[0];
   const serviceId = cart.category?.serviceId;
@@ -145,6 +147,43 @@ export default function DateTimeScreen() {
     };
   }, [serviceId, subServiceId]);
 
+  // Active Hold Countdown Timer (Phase 1 / Phase 4)
+  useEffect(() => {
+    if (!cart.activeHold?.expiresAt) {
+      setHoldSecondsRemaining(0);
+      return;
+    }
+    const target = new Date(cart.activeHold.expiresAt).getTime();
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.floor((target - Date.now()) / 1000));
+      setHoldSecondsRemaining(remaining);
+      if (remaining <= 0) {
+        setActiveHold(null);
+      }
+    };
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [cart.activeHold?.expiresAt, setActiveHold]);
+
+  const handleSelectSlot = async (slotTime: string) => {
+    setSelectedSlotTime(slotTime);
+    if (!serviceId || !selectedDateStr) return;
+
+    setIsHoldingSlot(true);
+    try {
+      const pincode = cart.selectedAddress?.pincode || '500072';
+      const hold = await bookingApi.holdSlot(serviceId, selectedDateStr, slotTime, pincode);
+      if (hold && hold.holdId) {
+        setActiveHold(hold);
+      }
+    } catch (err: any) {
+      console.warn('[DateTimeScreen] Slot hold notice:', err?.message || err);
+    } finally {
+      setIsHoldingSlot(false);
+    }
+  };
+
   // 3. Fetch Dynamic Available Slots for the selected date
   useEffect(() => {
     if (!selectedDateStr) return;
@@ -153,11 +192,39 @@ export default function DateTimeScreen() {
       setSlotsLoading(true);
       setSlotsError('');
       try {
+        const pincode = cart.selectedAddress?.pincode || '500072';
+        if (serviceId) {
+          try {
+            const capacitySlots = await bookingApi.getCapacitySlots(serviceId, pincode, selectedDateStr);
+            if (mounted && capacitySlots.length > 0) {
+              const mapped: AvailableSlot[] = capacitySlots.map((cs) => ({
+                time: cs.timeSlot,
+                startTime: cs.startTime,
+                endTime: cs.endTime,
+                available: cs.available,
+                period: cs.startTime.startsWith('0') || cs.startTime.startsWith('10') || cs.startTime.startsWith('11') ? 'MORNING' : 'AFTERNOON',
+                availableWorkersCount: cs.availableCapacity,
+              }));
+              setAvailableSlots(mapped);
+              const firstOpen = mapped.find((s) => s.available);
+              if (firstOpen) {
+                handleSelectSlot(firstOpen.time);
+              }
+              setSlotsLoading(false);
+              return;
+            }
+          } catch {
+            // Fallback to standard dynamic slots if capacity endpoint is in migration
+          }
+        }
+
         const slots = await bookingApi.getAvailableSlots(selectedDateStr, serviceId, subServiceId);
         if (mounted) {
           setAvailableSlots(slots);
           const firstOpen = slots.find((s) => s.available);
-          setSelectedSlotTime(firstOpen ? firstOpen.time : null);
+          if (firstOpen) {
+            handleSelectSlot(firstOpen.time);
+          }
         }
       } catch (err: any) {
         if (mounted) {
@@ -493,7 +560,7 @@ export default function DateTimeScreen() {
                             styles.slotCard,
                             isSelected && styles.slotCardSelected,
                           ]}
-                          onPress={() => setSelectedSlotTime(slot.time)}
+                          onPress={() => handleSelectSlot(slot.time)}
                         >
                           <Text
                             style={[
@@ -542,6 +609,23 @@ export default function DateTimeScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Active Hold Countdown Banner (Phase 1 / Phase 4) */}
+      {mode === 'SCHEDULED' && holdSecondsRemaining > 0 && (
+        <View style={styles.holdBanner}>
+          <View style={styles.holdBannerLeft}>
+            <View style={styles.holdPulseDot} />
+            <Text style={styles.holdBannerText}>
+              Slot Reserved:{' '}
+              <Text style={styles.holdBannerTimer}>
+                {Math.floor(holdSecondsRemaining / 60)}:{(holdSecondsRemaining % 60).toString().padStart(2, '0')}
+              </Text>{' '}
+              remaining
+            </Text>
+          </View>
+          <Text style={styles.holdBannerSub}>Capacity held</Text>
+        </View>
+      )}
 
       {/* Bottom Sticky Action Bar */}
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
@@ -1128,5 +1212,44 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
+  },
+  holdBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#DBEAFE',
+  },
+  holdBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  holdPulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#074BD4',
+  },
+  holdBannerText: {
+    fontSize: 12,
+    fontFamily: Typography.fontFamily.medium,
+    color: '#1E40AF',
+  },
+  holdBannerTimer: {
+    fontFamily: Typography.fontFamily.bold,
+    color: '#074BD4',
+  },
+  holdBannerSub: {
+    fontSize: 11,
+    fontFamily: Typography.fontFamily.bold,
+    color: '#059669',
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
 });

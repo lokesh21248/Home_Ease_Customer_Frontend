@@ -12,6 +12,7 @@ import {
   Address,
   TimeSlot,
   CouponValidationResponse,
+  HoldResponse,
 } from '../api/client';
 
 // ─── Cart Item Types ──────────────────────────────────────────────────────────
@@ -32,6 +33,7 @@ interface CartState {
   selectedDate: string | null;
   bookingType: 'INSTANT' | 'SCHEDULED';
   estimatedArrivalMinutes: number | null;
+  activeHold: HoldResponse | null;
   coupon: CouponValidationResponse | null;
   paymentMethod: PaymentMethod;
   subtotal: number;
@@ -47,6 +49,7 @@ const initialState: CartState = {
   selectedDate: null,
   bookingType: 'INSTANT',
   estimatedArrivalMinutes: 18,
+  activeHold: null,
   coupon: null,
   paymentMethod: 'COD',
   subtotal: 0,
@@ -64,6 +67,7 @@ type CartAction =
   | { type: 'SET_ADDRESS'; payload: Address }
   | { type: 'SET_SLOT'; payload: { slot: TimeSlot; date: string } }
   | { type: 'SET_BOOKING_TYPE'; payload: { bookingType: 'INSTANT' | 'SCHEDULED'; eta?: number } }
+  | { type: 'SET_HOLD'; payload: HoldResponse | null }
   | { type: 'SET_COUPON'; payload: CouponValidationResponse | null }
   | { type: 'SET_PAYMENT_METHOD'; payload: PaymentMethod }
   | { type: 'CLEAR_CART' };
@@ -151,6 +155,9 @@ function cartReducer(state: CartState, action: CartAction): CartState {
         estimatedArrivalMinutes: action.payload.eta !== undefined ? action.payload.eta : state.estimatedArrivalMinutes,
       };
 
+    case 'SET_HOLD':
+      return { ...state, activeHold: action.payload };
+
     case 'SET_COUPON': {
       const coupon = action.payload;
       return { ...state, coupon, ...computeTotals(state.items, coupon) };
@@ -177,6 +184,7 @@ interface CartContextValue {
   toggleAddon: (subServiceId: string, addon: Addon) => void;
   setAddress: (a: Address) => void;
   setSlot: (slot: TimeSlot, date: string) => void;
+  setActiveHold: (hold: HoldResponse | null) => void;
   setBookingType: (type: 'INSTANT' | 'SCHEDULED', eta?: number) => void;
   setCoupon: (c: CouponValidationResponse | null) => void;
   setPaymentMethod: (m: PaymentMethod) => void;
@@ -201,6 +209,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const setAddress = useCallback((a: Address) => dispatch({ type: 'SET_ADDRESS', payload: a }), []);
   const setSlot = useCallback((slot: TimeSlot, date: string) =>
     dispatch({ type: 'SET_SLOT', payload: { slot, date } }), []);
+  const setActiveHold = useCallback((hold: HoldResponse | null) =>
+    dispatch({ type: 'SET_HOLD', payload: hold }), []);
   const setBookingType = useCallback((bookingType: 'INSTANT' | 'SCHEDULED', eta?: number) =>
     dispatch({ type: 'SET_BOOKING_TYPE', payload: { bookingType, eta } }), []);
   const setCoupon = useCallback((c: CouponValidationResponse | null) =>
@@ -234,6 +244,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       toggleAddon,
       setAddress,
       setSlot,
+      setActiveHold,
       setBookingType,
       setCoupon,
       setPaymentMethod,
@@ -251,6 +262,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       toggleAddon,
       setAddress,
       setSlot,
+      setActiveHold,
       setBookingType,
       setCoupon,
       setPaymentMethod,
