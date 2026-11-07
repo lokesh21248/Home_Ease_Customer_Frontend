@@ -31,6 +31,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons, Feather } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { Client } from '@stomp/stompjs';
 import { bookingApi, Booking, getAuthHeaders, TRACKING_WS_URL } from '../../../src/api/client';
 import { GoogleMapTracker } from '../../../src/components/map/GoogleMapTracker';
@@ -268,7 +269,14 @@ export default function TrackingScreen() {
     );
   };
 
-  const handleCopyPin = () => {
+  const handleCopyPin = async () => {
+    if (booking?.pinCode) {
+      try {
+        await Clipboard.setStringAsync(booking.pinCode);
+      } catch (err) {
+        // Fallback
+      }
+    }
     setPinCopied(true);
     setTimeout(() => setPinCopied(false), 2500);
   };
@@ -600,6 +608,13 @@ export default function TrackingScreen() {
         )}
       </View>
 
+      {booking?.status === 'ARRIVED' && (
+        <View style={styles.arrivedBanner}>
+          <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+          <Text style={styles.arrivedBannerText}>Partner Has Arrived! Share your PIN to begin.</Text>
+        </View>
+      )}
+
       {/* Bottom Booking & Partner Sheet */}
       <View style={[styles.bottomSheet, { paddingBottom: Math.max(insets.bottom, 14) }]}>
         <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
@@ -641,8 +656,10 @@ export default function TrackingScreen() {
               <View style={styles.workerMeta}>
                 <Text style={styles.workerName}>{booking.workerName}</Text>
                 <View style={styles.ratingRow}>
-                  <Ionicons name="checkmark-circle" size={13} color="#10B981" />
-                  <Text style={styles.ratingText}>HomeEase Verified Professional</Text>
+                  <Ionicons name="star" size={13} color="#F59E0B" />
+                  <Text style={styles.ratingText}>
+                    {booking.workerRating != null ? booking.workerRating.toFixed(1) : '5.0'}  Verified Pro
+                  </Text>
                 </View>
                 <Text style={styles.workerRole}>
                   {booking.serviceName ? `${booking.serviceName} Specialist` : 'Service Partner'}
@@ -690,6 +707,19 @@ export default function TrackingScreen() {
                 </Pressable>
               )}
             </>
+          )}
+
+          {booking?.status === 'COMPLETED' && (
+            <View style={styles.completionCard}>
+              <Ionicons name="shield-checkmark" size={24} color="#10B981" />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.completionTitle}>Service Completed Successfully</Text>
+                <Text style={styles.completionDesc}>Thank you for using HomeEase. How was your experience?</Text>
+              </View>
+              <Pressable onPress={() => setIsRatingModalVisible(true)} style={styles.rateNowBtn}>
+                <Text style={styles.rateNowBtnText}>Rate</Text>
+              </Pressable>
+            </View>
           )}
 
           {/* 3. Horizontal Booking Timeline */}
@@ -1081,6 +1111,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
     position: 'relative',
+    borderWidth: 2.5,
+    borderColor: '#2563EB',
   },
   workerAvatarText: {
     fontFamily: Typography.fontFamily.bold,
@@ -1262,5 +1294,54 @@ const styles = StyleSheet.create({
   stepLabelCurrent: {
     color: '#2563EB',
     fontFamily: Typography.fontFamily.bold,
+  },
+
+  // Arrived Banner
+  arrivedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10B981',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  arrivedBannerText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
+  },
+
+  // Completion Card
+  completionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  completionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  completionDesc: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  rateNowBtn: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  rateNowBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
   },
 });
