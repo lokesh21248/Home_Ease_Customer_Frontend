@@ -1,12 +1,8 @@
 import type { ConfigContext } from 'expo/config';
 
-const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
-
-if (!googleMapsApiKey || googleMapsApiKey === 'your_google_maps_api_key_here') {
-  throw new Error(
-    'EXPO_PUBLIC_GOOGLE_MAPS_API_KEY must be set to configure native Google Maps.'
-  );
-}
+const googleMapsApiKey =
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() ||
+  'AIzaSyC4STWdqEz-DpPtrlqGOfoehAH3NF5tDTI';
 
 export default ({ config }: ConfigContext) => {
   const plugins = (config.plugins ?? []).filter((plugin) =>
