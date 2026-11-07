@@ -31,7 +31,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons, Feather } from '@expo/vector-icons';
-import { bookingApi, Booking } from '../../../src/api/client';
+import { Client } from '@stomp/stompjs';
+import { bookingApi, Booking, getAuthHeaders, TRACKING_WS_URL } from '../../../src/api/client';
 import { GoogleMapTracker } from '../../../src/components/map/GoogleMapTracker';
 import { GoogleMapHandle } from '../../../src/components/map/GoogleMapView';
 import { useLiveTracking } from '../../../src/hooks/useLiveTracking';
@@ -116,6 +117,42 @@ export default function TrackingScreen() {
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
   }, [fetchBooking, booking?.status]);
+
+  // Instant zero-latency transition to ASSIGNED when tracking frame arrives while SEARCHING
+  useEffect(() => {
+    if (booking?.status !== 'SEARCHING' || !id) return;
+    let client: Client | null = null;
+    let cancelled = false;
+
+    const connectEarlyListener = async () => {
+      try {
+        const headers = await getAuthHeaders();
+        if (cancelled) return;
+        client = new Client({
+          brokerURL: TRACKING_WS_URL,
+          connectHeaders: headers,
+          reconnectDelay: 2000,
+          onConnect: () => {
+            if (cancelled || !client) return;
+            client.subscribe(`/topic/tracking/${id}`, () => {
+              // Partner accepted & published initial GPS! Instantly refresh booking state
+              fetchBooking();
+            });
+          },
+        });
+        client.activate();
+      } catch (err) {
+        // Fallback polling continues seamlessly
+      }
+    };
+
+    void connectEarlyListener();
+
+    return () => {
+      cancelled = true;
+      if (client) void client.deactivate();
+    };
+  }, [booking?.status, id, fetchBooking]);
 
   useEffect(() => {
     setBooking(null);

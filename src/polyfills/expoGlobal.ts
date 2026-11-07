@@ -78,8 +78,8 @@ export class ExpoEventEmitter {
     return this._listeners?.get(eventName)?.size ?? 0;
   }
 
-  startObserving<EventName extends string | number | symbol>(_eventName: EventName): void {}
-  stopObserving<EventName extends string | number | symbol>(_eventName: EventName): void {}
+  startObserving<EventName extends string | number | symbol>(_eventName: EventName): void { }
+  stopObserving<EventName extends string | number | symbol>(_eventName: EventName): void { }
 }
 
 export class ExpoNativeModule extends ExpoEventEmitter {
@@ -88,7 +88,7 @@ export class ExpoNativeModule extends ExpoEventEmitter {
 }
 
 export class ExpoSharedObject extends ExpoEventEmitter {
-  release(): void {}
+  release(): void { }
 }
 
 export class ExpoSharedRef extends ExpoSharedObject {
@@ -113,12 +113,12 @@ if (!expoAny.expo) {
     getViewConfig: () => {
       throw new Error('getViewConfig is not implemented in fallback mode');
     },
-    reloadAppAsync: async () => {},
+    reloadAppAsync: async () => { },
     expoModulesCoreVersion: '58.0.30',
     cacheDir: undefined,
     documentsDir: undefined,
     isRunningOnQuest: false,
-    installOnUIRuntime: () => {},
+    installOnUIRuntime: () => { },
   };
 } else if (!expoAny.expo.EventEmitter) {
   expoAny.expo.EventEmitter = ExpoEventEmitter;

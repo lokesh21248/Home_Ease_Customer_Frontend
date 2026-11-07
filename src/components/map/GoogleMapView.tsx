@@ -503,6 +503,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
               description={customerAddress}
               anchor={{ x: 0.5, y: 1 }}
               zIndex={30}
+              tracksViewChanges={false}
             >
               <View style={styles.destinationMarkerWrap}>
                 <View style={styles.destinationMarkerPin}>
@@ -529,6 +530,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
                 anchor={{ x: 0.5, y: 0.5 }}
                 flat={true}
                 zIndex={31}
+                tracksViewChanges={false}
               >
                 <View style={styles.customerGpsDotOuter}>
                   <View style={styles.customerGpsDotInner} />
@@ -547,6 +549,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
                 flat={true}
                 rotation={partnerBearing}
                 zIndex={32}
+                tracksViewChanges={false}
               >
                 <View style={styles.partnerMarkerWrap}>
                   <View style={styles.partnerVehicleCircle}>
