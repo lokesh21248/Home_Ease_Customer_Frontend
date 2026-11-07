@@ -123,7 +123,10 @@ async function retryMatchingForBooking(
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      headers['X-User-Id'] = token;
+    }
 
     // POST /api/v1/bookings/{id}/retry-dispatch — triggers re-dispatch on the same booking
     await fetch(`${BASE_URL}/bookings/${bookingId}/retry-dispatch`, {

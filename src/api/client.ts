@@ -1,6 +1,6 @@
 /**
  * Centralized API layer for HomeEase Customer App.
- * Base URL: http://3.107.161.126:8080/api/v1
+ * Base URL: http://3.108.55.219/api/v1
  *
  * Handles:
  *  - Auth token injection
@@ -12,7 +12,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || 'http://3.107.161.126:8080/api/v1';
+  process.env.EXPO_PUBLIC_API_URL || 'http://3.108.55.219/api/v1';
 
 // ─── Storage Keys ────────────────────────────────────────────────────────────
 export const STORAGE_KEYS = {
@@ -1184,21 +1184,27 @@ export const bookingApi = {
     userLat?: number,
     userLng?: number,
   ): Promise<DispatchTriggerResponse> => {
-    const res = await fetchWithTimeout(`${DISPATCH_BASE_URL}/dispatch/trigger`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        bookingId,
-        userLat: userLat ?? 17.4485,
-        userLng: userLng ?? 78.3748,
-      }),
-    });
-    if (!res.ok) {
-      throw new ApiError(res.status, `Dispatch retry failed (HTTP ${res.status})`);
+    try {
+      return await request<DispatchTriggerResponse>(
+        `/bookings/${bookingId}/retry-matching`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            bookingId,
+            userLat: userLat ?? 17.4485,
+            userLng: userLng ?? 78.3748,
+          }),
+        }
+      );
+    } catch {
+      // Fallback to retry-dispatch endpoint on main backend
+      return await request<DispatchTriggerResponse>(
+        `/bookings/${bookingId}/retry-dispatch`,
+        {
+          method: 'POST',
+        }
+      );
     }
-    return res.json();
   },
 
   acceptBookingAsWorker: async (
@@ -1223,9 +1229,9 @@ export const bookingApi = {
   },
 };
 
-// ─── Dispatch Microservice (Port 8081) ────────────────────────────────────────
+// ─── Dispatch Microservice ────────────────────────────────────────────────────
 export const DISPATCH_BASE_URL =
-  process.env.EXPO_PUBLIC_DISPATCH_API_URL || 'http://3.107.161.126:8081/api/v1';
+  process.env.EXPO_PUBLIC_DISPATCH_API_URL || 'http://3.108.55.219/api/v1';
 
 export interface DispatchTriggerResponse {
   bookingId: string;
@@ -1235,11 +1241,11 @@ export interface DispatchTriggerResponse {
   pinCode?: string | null;
 }
 
-// ─── Live Tracking Service (Port 8082) ────────────────────────────────────────
+// ─── Live Tracking Service ────────────────────────────────────────────────────
 export const TRACKING_BASE_URL =
-  process.env.EXPO_PUBLIC_TRACKING_API_URL || 'http://3.107.161.126:8082/api/v1';
+  process.env.EXPO_PUBLIC_TRACKING_API_URL || 'http://3.108.55.219/api/v1';
 export const TRACKING_WS_URL =
-  process.env.EXPO_PUBLIC_TRACKING_WS_URL || 'ws://3.107.161.126:8082/ws';
+  process.env.EXPO_PUBLIC_TRACKING_WS_URL || 'ws://3.108.55.219/ws';
 
 export interface TrackingLocationResponse {
   bookingId?: string;

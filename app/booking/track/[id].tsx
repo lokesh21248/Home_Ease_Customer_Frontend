@@ -243,7 +243,7 @@ export default function TrackingScreen() {
       const effLat = destLat ?? customerGps?.latitude ?? 17.4485;
       const effLng = destLng ?? customerGps?.longitude ?? 78.3748;
       const result = await bookingApi.retryMatching(id, effLat, effLng);
-      if (result.status === 'CANDIDATES_ALERTED') {
+      if (result.status === 'CANDIDATES_ALERTED' || (result as any).status === 'DISPATCHING') {
         Alert.alert(
           'Matching Nearby Partner',
           'We have alerted verified service professionals near your address. Please wait a moment while a partner accepts.'

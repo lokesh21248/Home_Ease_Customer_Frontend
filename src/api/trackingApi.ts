@@ -2,7 +2,7 @@ import { apiRequest } from './client';
 import type { GeoPoint } from './geoApi';
 
 const TRACKING_API_URL =
-  process.env.EXPO_PUBLIC_TRACKING_API_URL || 'http://3.107.161.126:8082/api/v1';
+  process.env.EXPO_PUBLIC_TRACKING_API_URL || 'http://3.108.55.219/api/v1';
 
 export interface ProviderLocation extends GeoPoint {
   bookingId?: string;
