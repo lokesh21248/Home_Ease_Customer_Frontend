@@ -106,6 +106,20 @@ export interface ExploreServiceItem {
   isFeatured?: boolean;
 }
 
+export interface Coupon {
+  couponId: string;
+  code: string;
+  discountType: 'FIXED_AMOUNT' | 'PERCENTAGE';
+  discountVal: number;
+  minOrderValue?: number;
+  maxDiscountAmount?: number;
+  validFrom?: string;
+  validUntil?: string;
+  usageLimit?: number;
+  timesUsed?: number;
+  isActive: boolean;
+}
+
 export interface ServiceCategory {
   serviceId: string;
   name: string;
@@ -753,89 +767,17 @@ export const userApi = {
 };
 
 // ─── Catalog APIs ─────────────────────────────────────────────────────────────
-const DEFAULT_EXPLORE_SERVICES: ExploreServiceItem[] = [
-  {
-    id: 'a1b2c3d4-0001-4000-8000-000000000001',
-    name: 'Full Home Deep Cleaning',
-    slug: 'full-home-deep-cleaning',
-    description: 'Complete top-to-bottom sanitization with mechanized scrubbers and eco-safe disinfectants.',
-    categoryId: 'be8bb640-cc11-4243-ab4a-5cbdf34a0937',
-    categoryName: 'Cleaning',
-    imageUrl: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800&q=80',
-    price: 1499.00,
-    originalPrice: 1999.00,
-    rating: 4.9,
-    reviewCount: 142,
-    displayOrder: 1,
-    isActive: true,
-    isFeatured: true,
-  },
-  {
-    id: 'a1b2c3d4-0002-4000-8000-000000000002',
-    name: 'Kitchen Intensive Degreasing & Sanitization',
-    slug: 'kitchen-intensive-degreasing',
-    description: 'Deep chimney, stovetop, slab and tile oil stain removal using hot foam and industrial degreasers.',
-    categoryId: 'be8bb640-cc11-4243-ab4a-5cbdf34a0937',
-    categoryName: 'Cleaning',
-    imageUrl: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=800&q=80',
-    price: 799.00,
-    originalPrice: 999.00,
-    rating: 4.8,
-    reviewCount: 89,
-    displayOrder: 2,
-    isActive: true,
-    isFeatured: true,
-  },
-  {
-    id: 'a1b2c3d4-0003-4000-8000-000000000003',
-    name: 'Switchboard Repair & Socket Replacement',
-    slug: 'switchboard-repair-socket-replacement',
-    description: 'Safe diagnostics, burnt wire insulation rewiring, and modular switch replacements.',
-    categoryId: '6e2e370b-7d5e-46d2-944b-afe7c15db6d5',
-    categoryName: 'Electrician Services',
-    imageUrl: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&q=80',
-    price: 149.00,
-    originalPrice: 249.00,
-    rating: 4.7,
-    reviewCount: 64,
-    displayOrder: 3,
-    isActive: true,
-    isFeatured: false,
-  },
-  {
-    id: 'a1b2c3d4-0004-4000-8000-000000000004',
-    name: 'Bathroom Deep Descale & Sanitization',
-    slug: 'bathroom-deep-descale-sanitization',
-    description: 'Hard-water stain scrubbing, tap acid wash, mirror polish and drain unclog treatment.',
-    categoryId: 'be8bb640-cc11-4243-ab4a-5cbdf34a0937',
-    categoryName: 'Cleaning',
-    imageUrl: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=800&q=80',
-    price: 499.00,
-    originalPrice: 699.00,
-    rating: 4.9,
-    reviewCount: 115,
-    displayOrder: 4,
-    isActive: true,
-    isFeatured: false,
-  }
-];
-
 export const catalogApi = {
   getBanners: (): Promise<Banner[]> => request('/banners', {}, false),
 
+  getCoupons: (): Promise<Coupon[]> => request('/coupons', {}, false),
+
   getExploreServices: async (categoryId?: string): Promise<ExploreServiceItem[]> => {
-    try {
-      const endpoint = categoryId
-        ? `/explore-services?categoryId=${encodeURIComponent(categoryId)}`
-        : '/explore-services';
-      const res = await request(endpoint, {}, false);
-      if (Array.isArray(res) && res.length > 0) return res;
-    } catch {
-      // Backend endpoint not yet deployed to EC2 - return default explore items
-    }
-    return categoryId
-      ? DEFAULT_EXPLORE_SERVICES.filter(s => s.categoryId === categoryId)
-      : DEFAULT_EXPLORE_SERVICES;
+    const endpoint = categoryId
+      ? `/explore-services?categoryId=${encodeURIComponent(categoryId)}`
+      : '/explore-services';
+    const res = await request(endpoint, {}, false);
+    return Array.isArray(res) ? res : [];
   },
 
   getCategories: async (): Promise<ServiceCategory[]> => {

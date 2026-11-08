@@ -208,18 +208,18 @@ export default function TrackingScreen() {
     isStaleKphbCoord && pinCentroid && (bookingPin?.includes('500010') || bookingPin === '500010')
       ? pinCentroid.latitude
       : hasValidBookingCoords
-      ? numBookingLat!
-      : pinCentroid?.latitude ??
-        (customerGps?.latitude !== undefined && isValidCoordinate(customerGps.latitude, customerGps.longitude ?? 0)
-          ? customerGps.latitude
-          : DEFAULT_MAP_LAT);
+    ? numBookingLat!
+    : pinCentroid?.latitude ??
+    (customerGps?.latitude !== undefined && isValidCoordinate(customerGps.latitude, customerGps.longitude ?? 0)
+      ? customerGps.latitude
+      : DEFAULT_MAP_LAT);
 
   const destLng =
     isStaleKphbCoord && pinCentroid && (bookingPin?.includes('500010') || bookingPin === '500010')
       ? pinCentroid.longitude
       : hasValidBookingCoords
-      ? numBookingLng!
-      : pinCentroid?.longitude ??
+        ? numBookingLng!
+        : pinCentroid?.longitude ??
         (customerGps?.longitude !== undefined && isValidCoordinate(customerGps.latitude ?? 0, customerGps.longitude)
           ? customerGps.longitude
           : DEFAULT_MAP_LNG);

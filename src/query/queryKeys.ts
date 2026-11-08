@@ -15,6 +15,8 @@ export const queryKeys = {
 
   exploreServices: (categoryId?: string) => ['exploreServices', categoryId ?? 'all'] as const,
 
+  coupons: () => ['coupons'] as const,
+
   categories: () => ['categories'] as const,
 
   serviceDetail: (serviceId: string) => ['serviceDetail', serviceId] as const,

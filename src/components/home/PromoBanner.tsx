@@ -10,48 +10,31 @@ interface PromoBannerProps {
   onPress?: (targetId: string, title: string) => void;
 }
 
-const DEFAULT_BANNER_IMAGE = {
-  uri: 'https://gheiuyygjssqatziviix.supabase.co/storage/v1/object/public/homeease-banners/banner-images/1af45e3e-7662-4f1d-9dd0-a8acf19c57e5.png',
-};
 // Banner image aspect ratio from native asset (434 x 189)
 const BANNER_ASPECT_RATIO = 434 / 189;
 
-const DEFAULT_BANNERS: Banner[] = [
-  {
-    bannerId: 'cbe9a00e-bce0-45fe-a6e1-a4c79d5cdf36',
-    title: 'Festival Home Cleaning Fest — Flat 25% Off',
-    imageUrl: 'https://gheiuyygjssqatziviix.supabase.co/storage/v1/object/public/homeease-banners/banner-images/1af45e3e-7662-4f1d-9dd0-a8acf19c57e5.png',
-    targetType: 'SERVICE',
-    targetId: 'be8bb640-cc11-4243-ab4a-5cbdf34a0937',
-    isActive: true,
-  },
-  {
-    bannerId: '9f622e9e-b1d0-48cc-aae8-38427ea569fe',
-    title: 'Beat the Summer Heat — AC Deep Jet Wash @ ₹499',
-    imageUrl: 'https://gheiuyygjssqatziviix.supabase.co/storage/v1/object/public/homeease-banners/banner-images/606097d2-9bfd-4766-aa61-22b038669840.png',
-    targetType: 'SERVICE',
-    targetId: '9b7f941c-ee83-4ffe-bd1d-2dacba5d4760',
-    isActive: true,
-  },
-];
-
-export function PromoBanner({ banners, onPress }: PromoBannerProps) {
+export function PromoBanner({ banners = [], onPress }: PromoBannerProps) {
   const { width: screenWidth } = useWindowDimensions();
   const [activeDot, setActiveDot] = useState(0);
 
-  const bannerList = banners && banners.length > 0 ? banners : DEFAULT_BANNERS;
+  if (!banners || banners.length === 0) {
+    return null;
+  }
+
+  const bannerList = banners.filter((b) => b.isActive !== false);
+  if (bannerList.length === 0) {
+    return null;
+  }
 
   const bannerWidth = screenWidth - LayoutConstants.HORIZONTAL_PADDING * 2;
   const bannerHeight = Math.round(bannerWidth / BANNER_ASPECT_RATIO);
 
   const activeBanner = bannerList[activeDot % bannerList.length];
-  const imageSource = activeBanner?.imageUrl ? { uri: activeBanner.imageUrl } : DEFAULT_BANNER_IMAGE;
+  const imageSource = activeBanner?.imageUrl ? { uri: activeBanner.imageUrl } : null;
 
   const handlePress = () => {
     if (activeBanner) {
       onPress?.(activeBanner.targetId, activeBanner.title);
-    } else {
-      onPress?.('be8bb640-cc11-4243-ab4a-5cbdf34a0937', 'Festival Home Cleaning Fest');
     }
   };
 

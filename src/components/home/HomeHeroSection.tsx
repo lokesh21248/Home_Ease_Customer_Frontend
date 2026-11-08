@@ -29,13 +29,13 @@ export function HomeHeroSection({
   const insets = useSafeAreaInsets();
   const { address } = useUserLocation();
 
-  // Dynamic address with fallback to reference screenshot ("Sector 55, Gurugram, Haryana, India")
-  const areaTitle = address?.area || 'Sector 55';
+  // Dynamic address with fallback to prompt user to select location if none active
+  const areaTitle = address?.area || (address?.city ? address.city : 'Select Location');
   const fullAddress =
     address?.formattedAddress ||
     (address?.area && address?.city
-      ? `${address.area}, ${address.city}, India`
-      : 'Sector 55, Gurugram, Haryana, India');
+      ? `${address.area}, ${address.city}${address.pincode ? ` - ${address.pincode}` : ''}`
+      : 'Tap to select your delivery address');
 
   const handleLocation = () => {
     if (onLocationPress) onLocationPress();

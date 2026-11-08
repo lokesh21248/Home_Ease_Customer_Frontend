@@ -1,49 +1,29 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../constants/theme';
-
-interface OfferItem {
-  id: string;
-  code: string;
-  title: string;
-  description: string;
-  tag: string;
-  badgeBg: string;
-}
-
-const OFFERS_DATA: OfferItem[] = [
-  {
-    id: 'offer-1',
-    code: 'FIRST100',
-    title: 'Flat ₹100 Off',
-    description: 'On your first home cleaning or repair service',
-    tag: 'NEW USER',
-    badgeBg: '#EFF6FF',
-  },
-  {
-    id: 'offer-2',
-    code: 'WALLET5',
-    title: '5% Cashback',
-    description: 'Pay using HomeEase Wallet on any booking',
-    tag: 'WALLET',
-    badgeBg: '#ECFDF5',
-  },
-  {
-    id: 'offer-3',
-    code: 'PASS99',
-    title: '3 Visits FREE',
-    description: 'Get HomeEase Pass for just ₹99/month',
-    tag: 'POPULAR',
-    badgeBg: '#FEF3C7',
-  },
-];
+import { useCoupons } from '../../hooks/useCoupons';
+import { Coupon } from '../../api/client';
 
 export function HomeOffersSection() {
-  const handleOfferPress = () => {
+  const { data: coupons = [], isLoading, isError } = useCoupons();
+
+  if (!isLoading && (isError || coupons.length === 0)) {
+    return null;
+  }
+
+  const activeCoupons = coupons.filter((c) => c.isActive !== false);
+
+  if (!isLoading && activeCoupons.length === 0) {
+    return null;
+  }
+
+  const handleOfferPress = (_coupon: Coupon) => {
     router.push('/(tabs)/categories');
   };
+
+  const badgeColors = ['#EFF6FF', '#ECFDF5', '#FEF3C7', '#F3E8FF'];
 
   return (
     <View style={styles.container}>
@@ -54,38 +34,61 @@ export function HomeOffersSection() {
         </View>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {OFFERS_DATA.map((offer) => (
-          <Pressable
-            key={offer.id}
-            style={({ pressed }) => [styles.offerCard, pressed && styles.cardPressed]}
-            onPress={handleOfferPress}
-            accessibilityRole="button"
-            accessibilityLabel={`${offer.title}: use code ${offer.code}`}
-          >
-            <View style={styles.topRow}>
-              <View style={[styles.tagPill, { backgroundColor: offer.badgeBg }]}>
-                <Text style={styles.tagText}>{offer.tag}</Text>
-              </View>
-              <View style={styles.codePill}>
-                <Text style={styles.codeText}>{offer.code}</Text>
-              </View>
-            </View>
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color={Colors.primary} />
+          <Text style={styles.loadingText}>Checking active offers...</Text>
+        </View>
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          {activeCoupons.map((coupon, index) => {
+            const isPercent = coupon.discountType === 'PERCENTAGE';
+            const title = isPercent
+              ? `${coupon.discountVal}% Off`
+              : `Flat ₹${Math.round(coupon.discountVal)} Off`;
 
-            <Text style={styles.offerTitle}>{offer.title}</Text>
-            <Text style={styles.offerDesc}>{offer.description}</Text>
+            const description = coupon.minOrderValue
+              ? `On orders above ₹${Math.round(coupon.minOrderValue)}`
+              : coupon.maxDiscountAmount
+              ? `Max discount up to ₹${Math.round(coupon.maxDiscountAmount)}`
+              : 'Valid on your home service booking';
 
-            <View style={styles.bottomLinkRow}>
-              <Text style={styles.tapToApply}>Tap to explore</Text>
-              <Ionicons name="arrow-forward" size={12} color={Colors.primary} />
-            </View>
-          </Pressable>
-        ))}
-      </ScrollView>
+            const tag = isPercent ? `${Math.round(coupon.discountVal)}% OFF` : 'PROMO';
+            const badgeBg = badgeColors[index % badgeColors.length];
+
+            return (
+              <Pressable
+                key={coupon.couponId || `coupon-${index}`}
+                style={({ pressed }) => [styles.offerCard, pressed && styles.cardPressed]}
+                onPress={() => handleOfferPress(coupon)}
+                accessibilityRole="button"
+                accessibilityLabel={`${title}: use code ${coupon.code}`}
+              >
+                <View style={styles.topRow}>
+                  <View style={[styles.tagPill, { backgroundColor: badgeBg }]}>
+                    <Text style={styles.tagText}>{tag}</Text>
+                  </View>
+                  <View style={styles.codePill}>
+                    <Text style={styles.codeText}>{coupon.code}</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.offerTitle}>{title}</Text>
+                <Text style={styles.offerDesc}>{description}</Text>
+
+                <View style={styles.bottomLinkRow}>
+                  <Text style={styles.tapToApply}>Tap to explore</Text>
+                  <Ionicons name="arrow-forward" size={12} color={Colors.primary} />
+                </View>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -107,6 +110,18 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontFamily.bold,
     fontSize: 18,
     color: Colors.textPrimary,
+  },
+  loadingContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  loadingText: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 13,
+    color: Colors.textSecondary,
   },
   scrollContent: {
     paddingHorizontal: 16,
@@ -179,4 +194,3 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
 });
-

@@ -10,18 +10,29 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HomeHeroSection } from './HomeHeroSection';
 import { HomeEasePassBanner } from './HomeEasePassBanner';
-import { ExploreServicesGrid, ExploreGridItem } from './ExploreServicesGrid';
-import { useCategories } from '../../hooks/useCategories';
+import { PromoBanner } from './PromoBanner';
+import { ExploreServicesGrid } from './ExploreServicesGrid';
+import { HomeOffersSection } from './HomeOffersSection';
+import { HomeRecentBookings } from './HomeRecentBookings';
+import { useExploreServices } from '../../hooks/useExploreServices';
+import { useBanners } from '../../hooks/useBanners';
 import { queryClient } from '../../query/queryClient';
 import { queryKeys } from '../../query/queryKeys';
 import { getScrollBottomPadding } from '../../constants/layout';
+import { ExploreServiceItem } from '../../api/client';
 
 export function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
 
   // ── Queries & Caching ──────────────────────────────────────────────────
-  const { data: rawCategories = [] } = useCategories();
+  const {
+    data: exploreServices = [],
+    isLoading: isExploreLoading,
+    isError: isExploreError,
+    refetch: refetchExplore,
+  } = useExploreServices();
+  const { data: banners = [] } = useBanners();
 
   // ── Pull-to-refresh ────────────────────────────────────────────────────
   const onRefresh = useCallback(async () => {
@@ -29,7 +40,9 @@ export function HomeScreen() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.categories() }),
       queryClient.invalidateQueries({ queryKey: queryKeys.banners() }),
-      queryClient.invalidateQueries({ queryKey: ['exploreServices'] }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.exploreServices() }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.coupons() }),
+      queryClient.invalidateQueries({ queryKey: ['myBookings'] }),
     ]);
     setRefreshing(false);
   }, []);
@@ -61,22 +74,35 @@ export function HomeScreen() {
     router.push('/(tabs)/categories');
   };
 
-  const handleSelectService = (item: ExploreGridItem) => {
-    if (rawCategories.length > 0 && item.categoryMatch) {
-      const matched = rawCategories.find(
-        (c) =>
-          c.name.toLowerCase().includes(item.categoryMatch!.toLowerCase()) ||
-          item.categoryMatch!.toLowerCase().includes(c.name.toLowerCase())
-      );
-      if (matched) {
-        router.push({
-          pathname: '/category/[id]',
-          params: { id: matched.serviceId, name: matched.name },
-        });
-        return;
-      }
+  const handleBannerPress = (targetId: string, _title: string) => {
+    if (targetId) {
+      router.push({
+        pathname: '/category/[id]',
+        params: { id: targetId },
+      });
+    } else {
+      router.push('/(tabs)/categories');
     }
-    router.push('/(tabs)/categories');
+  };
+
+  const handleSelectService = (item: ExploreServiceItem) => {
+    if (item.categoryId) {
+      router.push({
+        pathname: '/category/[id]',
+        params: { id: item.categoryId, name: item.categoryName || item.name },
+      });
+      return;
+    }
+
+    router.push({
+      pathname: '/service/[id]',
+      params: {
+        id: item.id,
+        name: item.name,
+        image: item.imageUrl,
+        price: item.price ? String(item.price) : undefined,
+      },
+    });
   };
 
   const handleViewAllPress = () => {
@@ -103,7 +129,7 @@ export function HomeScreen() {
           />
         }
       >
-        {/* 2. Top Bar & Hero Section (Location, Earn ₹200, Bell, Hero Title, Cleaning Character & 2 Quick Action Cards) */}
+        {/* 2. Top Bar & Hero Section (Location, Earn ₹200, Bell, Hero Title & Quick Action Cards) */}
         <HomeHeroSection
           onLocationPress={handleLocationPress}
           onNotificationPress={handleNotificationPress}
@@ -111,15 +137,27 @@ export function HomeScreen() {
           onSchedulePress={handleSchedulePress}
         />
 
-        {/* 3. HomeEase Pass Banner with 3 Pagination Dots */}
+        {/* 3. Dynamic Promotional Banners (From Backend API) */}
+        <PromoBanner banners={banners} onPress={handleBannerPress} />
+
+        {/* 4. HomeEase Pass Banner */}
         <HomeEasePassBanner onPress={handlePassPress} />
 
-        {/* 4. Explore Services: 4-Column x 3-Row Grid with 12 Exact Services */}
+        {/* 5. Recently Booked (Live customer bookings, hidden if none) */}
+        <HomeRecentBookings />
+
+        {/* 6. Explore Services: Dynamic Admin-Created Services Grid */}
         <ExploreServicesGrid
-          categories={rawCategories}
+          services={exploreServices}
+          isLoading={isExploreLoading}
+          isError={isExploreError}
+          onRetry={refetchExplore}
           onSelectService={handleSelectService}
           onViewAllPress={handleViewAllPress}
         />
+
+        {/* 7. Active Promotional Coupons & Offers (From Backend API) */}
+        <HomeOffersSection />
       </ScrollView>
     </View>
   );
