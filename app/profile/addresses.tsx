@@ -48,6 +48,7 @@ import {
   isLocationServicesEnabled,
   promptEnableLocationServices,
   searchLocations,
+  getCentroidForPincode,
   UserLocationData,
 } from '../../src/services/locationService';
 import { GoogleMapAddressPicker } from '../../src/components/map/GoogleMapAddressPicker';
@@ -109,7 +110,12 @@ export default function AddressesScreen() {
 
   // Select address for booking flow — strictly enforces backend PIN code serviceability
   const handleSelectAddress = async (addr: Address) => {
-    const cleanPin = (addr.pincode || '').replace(/\D/g, '');
+    let rawPin = addr.pincode || '';
+    if (!rawPin) {
+      const match = `${addr.city || ''} ${addr.addressLine || ''}`.match(/\b\d{6}\b/);
+      if (match) rawPin = match[0];
+    }
+    const cleanPin = rawPin.replace(/\D/g, '');
     if (cleanPin.length !== 6) {
       Alert.alert(
         'Location Not Serviceable',
@@ -135,17 +141,33 @@ export default function AddressesScreen() {
       return;
     }
 
-    setAddress(addr);
+    let targetLat = addr.lat;
+    let targetLng = addr.lng;
+    if (!targetLat || !targetLng || (cleanPin === '500010' && Math.abs(targetLat - 17.4947) < 0.005)) {
+      const centroid = getCentroidForPincode(cleanPin);
+      targetLat = centroid.latitude;
+      targetLng = centroid.longitude;
+    }
+
+    const updatedAddr: Address = {
+      ...addr,
+      pincode: cleanPin,
+      lat: targetLat,
+      lng: targetLng,
+    };
+
+    setAddress(updatedAddr);
     selectLocation({
-      coordinates: { latitude: addr.lat, longitude: addr.lng },
+      coordinates: { latitude: targetLat, longitude: targetLng },
       address: {
-        formattedAddress: `${addr.addressLine}, ${addr.city}`,
-        shortAddress: addr.title || addr.city,
-        area: addr.addressLine,
-        city: addr.city,
+        formattedAddress: `${updatedAddr.addressLine}, ${updatedAddr.city}`,
+        shortAddress: updatedAddr.title || updatedAddr.city,
+        area: updatedAddr.addressLine,
+        city: updatedAddr.city,
+        state: updatedAddr.state || 'Telangana',
         pincode: cleanPin,
-        addressLine: addr.addressLine,
-        fullAddress: `${addr.title ? addr.title + ': ' : ''}${addr.addressLine}, ${addr.city}`,
+        addressLine: updatedAddr.addressLine,
+        fullAddress: `${updatedAddr.title ? updatedAddr.title + ': ' : ''}${updatedAddr.addressLine}, ${updatedAddr.city}`,
       },
       isCustomSelected: true,
     });
@@ -456,16 +478,46 @@ export default function AddressesScreen() {
     };
 
     try {
+      let saved: Address;
       if (editingId) {
-        await userApi.updateAddress(editingId, payload);
+        saved = await userApi.updateAddress(editingId, payload);
       } else {
-        await userApi.addAddress(payload);
+        saved = await userApi.addAddress(payload);
       }
+
+      const effectiveAddr: Address = {
+        ...payload,
+        id: saved?.id || editingId || `addr-${Date.now()}`,
+        userId: saved?.userId || '',
+      };
+
+      setAddress(effectiveAddr);
+      selectLocation({
+        coordinates: { latitude: effectiveAddr.lat, longitude: effectiveAddr.lng },
+        address: {
+          formattedAddress: `${effectiveAddr.addressLine}, ${effectiveAddr.city}`,
+          shortAddress: effectiveAddr.title || effectiveAddr.city,
+          area: effectiveAddr.addressLine,
+          city: effectiveAddr.city,
+          state: effectiveAddr.state || 'Telangana',
+          pincode: cleanedPin,
+          addressLine: effectiveAddr.addressLine,
+          fullAddress: `${effectiveAddr.title ? effectiveAddr.title + ': ' : ''}${effectiveAddr.addressLine}, ${effectiveAddr.city}`,
+        },
+        isCustomSelected: true,
+      });
 
       setModalVisible(false);
       // Invalidate cache so ProfileScreen address count and this list both update
       await invalidateAddresses();
-      Alert.alert('Success', editingId ? 'Address updated successfully!' : 'Address saved successfully!');
+      Alert.alert(
+        'Address Saved',
+        editingId ? 'Address updated successfully!' : 'Address saved and selected for booking!',
+        [
+          { text: 'Use for Booking', onPress: () => router.back() },
+          { text: 'Done', style: 'cancel' },
+        ]
+      );
     } catch (err: any) {
       console.warn('[AddressesScreen] Save address error:', err);
       Alert.alert('Save Failed', err?.message || 'Unable to save address to server. Please try again.');

@@ -46,6 +46,7 @@ import {
   searchLocations,
   UserLocationData,
   PRESET_LOCALITIES,
+  getCentroidForPincode,
   isLocationServicesEnabled,
   getCurrentLocation,
   reverseGeocodeLocation,
@@ -170,8 +171,9 @@ export default function LocationSelectScreen() {
     }
 
     const matchedPreset = PRESET_LOCALITIES.find((p) => p.pincode === pincode);
-    const lat = 17.4947;
-    const lng = 78.3996;
+    const centroid = getCentroidForPincode(pincode);
+    const lat = matchedPreset ? matchedPreset.latitude : centroid.latitude;
+    const lng = matchedPreset ? matchedPreset.longitude : centroid.longitude;
     const area = pinResult.areaName || matchedPreset?.name || `PIN ${pincode}`;
     const city = pinResult.city || 'Hyderabad';
     const state = pinResult.state || 'Telangana';
@@ -403,10 +405,25 @@ export default function LocationSelectScreen() {
       return;
     }
 
+    let targetLat = addr.lat;
+    let targetLng = addr.lng;
+    if (!targetLat || !targetLng || (cleanPin === '500010' && Math.abs(targetLat - 17.4947) < 0.005)) {
+      const centroid = getCentroidForPincode(cleanPin);
+      targetLat = centroid.latitude;
+      targetLng = centroid.longitude;
+    }
+
+    const updatedAddr: Address = {
+      ...addr,
+      pincode: cleanPin,
+      lat: targetLat,
+      lng: targetLng,
+    };
+
     const locationData: UserLocationData = {
       coordinates: {
-        latitude: addr.lat,
-        longitude: addr.lng,
+        latitude: targetLat,
+        longitude: targetLng,
       },
       address: {
         formattedAddress: `${addr.addressLine}, ${addr.city}`,
@@ -414,7 +431,7 @@ export default function LocationSelectScreen() {
         area: addr.addressLine,
         city: addr.city,
         state: addr.state || 'Telangana',
-        pincode: addr.pincode || '',
+        pincode: cleanPin,
         addressLine: addr.addressLine,
         fullAddress: `${addr.title ? addr.title + ': ' : ''}${addr.addressLine}, ${addr.city}`,
       },
@@ -422,7 +439,7 @@ export default function LocationSelectScreen() {
     };
 
     await selectLocation(locationData);
-    setCartAddress(addr);
+    setCartAddress(updatedAddr);
     router.back();
   };
 

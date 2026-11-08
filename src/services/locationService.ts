@@ -305,20 +305,42 @@ export async function getCurrentLocation(): Promise<UserCoordinates | null> {
   }
 }
 
-// Preset localities for Hyderabad with validated pincodes
+// Preset localities for Hyderabad with validated pincodes & accurate centroid coordinates
 export const PRESET_LOCALITIES: {
   name: string;
   area: string;
   city: string;
   state: string;
   pincode: string;
+  latitude: number;
+  longitude: number;
 }[] = [
+  {
+    name: 'Alwal, Bolarum',
+    area: 'Alwal',
+    city: 'Hyderabad',
+    state: 'Telangana',
+    pincode: '500010',
+    latitude: 17.5028,
+    longitude: 78.5078,
+  },
+  {
+    name: 'Bolarum',
+    area: 'Bolarum',
+    city: 'Hyderabad',
+    state: 'Telangana',
+    pincode: '500010',
+    latitude: 17.5288,
+    longitude: 78.5042,
+  },
   {
     name: 'Kukatpally',
     area: 'Kukatpally',
     city: 'Hyderabad',
     state: 'Telangana',
     pincode: '500072',
+    latitude: 17.4947,
+    longitude: 78.3996,
   },
   {
     name: 'Vivekananda Nagar, Kukatpally',
@@ -326,6 +348,8 @@ export const PRESET_LOCALITIES: {
     city: 'Hyderabad',
     state: 'Telangana',
     pincode: '500072',
+    latitude: 17.4947,
+    longitude: 78.3996,
   },
   {
     name: 'Jubilee Hills',
@@ -333,6 +357,8 @@ export const PRESET_LOCALITIES: {
     city: 'Hyderabad',
     state: 'Telangana',
     pincode: '500033',
+    latitude: 17.4319,
+    longitude: 78.4073,
   },
   {
     name: 'Gachibowli',
@@ -340,6 +366,8 @@ export const PRESET_LOCALITIES: {
     city: 'Hyderabad',
     state: 'Telangana',
     pincode: '500032',
+    latitude: 17.4401,
+    longitude: 78.3489,
   },
   {
     name: 'Madhapur / Hitec City',
@@ -347,6 +375,8 @@ export const PRESET_LOCALITIES: {
     city: 'Hyderabad',
     state: 'Telangana',
     pincode: '500081',
+    latitude: 17.4485,
+    longitude: 78.3748,
   },
   {
     name: 'Banjara Hills',
@@ -354,6 +384,8 @@ export const PRESET_LOCALITIES: {
     city: 'Hyderabad',
     state: 'Telangana',
     pincode: '500034',
+    latitude: 17.4156,
+    longitude: 78.435,
   },
   {
     name: 'Kondapur',
@@ -361,6 +393,8 @@ export const PRESET_LOCALITIES: {
     city: 'Hyderabad',
     state: 'Telangana',
     pincode: '500084',
+    latitude: 17.4699,
+    longitude: 78.3578,
   },
   {
     name: 'Secunderabad',
@@ -368,6 +402,8 @@ export const PRESET_LOCALITIES: {
     city: 'Hyderabad',
     state: 'Telangana',
     pincode: '500003',
+    latitude: 17.4399,
+    longitude: 78.4983,
   },
   {
     name: 'Ameerpet',
@@ -375,6 +411,8 @@ export const PRESET_LOCALITIES: {
     city: 'Hyderabad',
     state: 'Telangana',
     pincode: '500016',
+    latitude: 17.4375,
+    longitude: 78.4482,
   },
   {
     name: 'Begumpet',
@@ -382,8 +420,22 @@ export const PRESET_LOCALITIES: {
     city: 'Hyderabad',
     state: 'Telangana',
     pincode: '500016',
+    latitude: 17.444,
+    longitude: 78.468,
   },
 ];
+
+export function getCentroidForPincode(pincode: string): { latitude: number; longitude: number } {
+  const clean = (pincode || '').replace(/\D/g, '');
+  const matched = PRESET_LOCALITIES.find((p) => p.pincode === clean);
+  if (matched) {
+    return { latitude: matched.latitude, longitude: matched.longitude };
+  }
+  if (clean === '500010') return { latitude: 17.5028, longitude: 78.5078 };
+  if (clean === '500072') return { latitude: 17.4947, longitude: 78.3996 };
+  if (clean === '500104') return { latitude: 17.4485, longitude: 78.3748 };
+  return { latitude: 17.4485, longitude: 78.3748 };
+}
 
 /**
  * Reverse geocodes coordinates using Google Maps Geocoding API (with 5s timeout).

@@ -40,6 +40,7 @@ import { useLiveTracking } from '../../../src/hooks/useLiveTracking';
 import { useCustomerLocation } from '../../../src/hooks/useCustomerLocation';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../../src/constants/theme';
 import { isValidCoordinate } from '../../../src/services/coordinates';
+import { getCentroidForPincode } from '../../../src/services/locationService';
 import { RatingModal, RadarSearchingView } from '../../../src/components/common';
 
 const { width } = Dimensions.get('window');
@@ -192,21 +193,42 @@ export default function TrackingScreen() {
     numBookingLng !== undefined &&
     isValidCoordinate(numBookingLat, numBookingLng);
 
-  const destLat = hasValidBookingCoords
-    ? numBookingLat!
-    : customerGps?.latitude !== undefined &&
-      isValidCoordinate(customerGps.latitude, customerGps.longitude ?? 0)
-    ? customerGps.latitude
-    : DEFAULT_MAP_LAT;
+  const bookingPin = (booking as any)?.servicePincode || (booking as any)?.pincode;
+  const pinCentroid = bookingPin ? getCentroidForPincode(bookingPin) : null;
 
-  const destLng = hasValidBookingCoords
-    ? numBookingLng!
-    : customerGps?.longitude !== undefined &&
-      isValidCoordinate(customerGps.latitude ?? 0, customerGps.longitude)
-    ? customerGps.longitude
-    : DEFAULT_MAP_LNG;
+  // Safeguard: If booking is for 500010 (Alwal/Bolarum) but carries old stale KPHB coordinates (17.4947, 78.3996),
+  // correct to genuine Alwal centroid coordinates so the tracking map never displays KPHB.
+  const isStaleKphbCoord =
+    numBookingLat !== undefined &&
+    numBookingLng !== undefined &&
+    Math.abs(numBookingLat - 17.4947) < 0.005 &&
+    Math.abs(numBookingLng - 78.3996) < 0.005;
 
-  const customerAddress = booking?.userLocation || 'Your Service Location';
+  const destLat =
+    isStaleKphbCoord && pinCentroid && (bookingPin?.includes('500010') || bookingPin === '500010')
+      ? pinCentroid.latitude
+      : hasValidBookingCoords
+      ? numBookingLat!
+      : pinCentroid?.latitude ??
+        (customerGps?.latitude !== undefined && isValidCoordinate(customerGps.latitude, customerGps.longitude ?? 0)
+          ? customerGps.latitude
+          : DEFAULT_MAP_LAT);
+
+  const destLng =
+    isStaleKphbCoord && pinCentroid && (bookingPin?.includes('500010') || bookingPin === '500010')
+      ? pinCentroid.longitude
+      : hasValidBookingCoords
+      ? numBookingLng!
+      : pinCentroid?.longitude ??
+        (customerGps?.longitude !== undefined && isValidCoordinate(customerGps.latitude ?? 0, customerGps.longitude)
+          ? customerGps.longitude
+          : DEFAULT_MAP_LNG);
+
+  const customerAddress =
+    (booking as any)?.customerAddress ||
+    booking?.userLocation ||
+    (bookingPin ? `Service Address — ${bookingPin}` : undefined) ||
+    'Your Service Location';
 
   // 3. Live Partner Tracking
   const trackingEnabled =

@@ -337,7 +337,11 @@ export default function SummaryScreen() {
       targetCity = address.city || 'Hyderabad';
 
       // Resolve 6-digit pincode strictly from selected address as source of truth
-      const rawPin = address.pincode || (userLoc.address?.pincode && /^\d{6}$/.test(userLoc.address.pincode) ? userLoc.address.pincode : '');
+      let rawPin = address.pincode || (userLoc.address?.pincode && /^\d{6}$/.test(userLoc.address.pincode) ? userLoc.address.pincode : '');
+      if (!rawPin) {
+        const match = `${address.city || ''} ${address.addressLine || ''}`.match(/\b\d{6}\b/);
+        if (match) rawPin = match[0];
+      }
       const cleanedPin = rawPin.replace(/\D/g, '');
       if (cleanedPin.length !== 6) {
         Alert.alert(
@@ -347,6 +351,12 @@ export default function SummaryScreen() {
         return;
       }
       targetPincode = cleanedPin;
+
+      // Coordinate sanity check: if 500010 (Alwal/Bolarum) has stale KPHB coordinates (17.4947), correct to Alwal centroid
+      if (cleanedPin === '500010' && (Math.abs(userLat - 17.4947) < 0.005 || !isValidCoordinate(userLat, userLng))) {
+        userLat = 17.5028;
+        userLng = 78.5078;
+      }
     }
 
     // 2. Pre-flight backend serviceability check (Authoritative check against PostgreSQL)

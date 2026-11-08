@@ -277,6 +277,10 @@ export interface Booking {
   userLat: number;
   userLng: number;
   userLocation?: string;
+  customerAddress?: string;
+  servicePincode?: string;
+  pincode?: string;
+  addressId?: string;
   baseAmount: number;
   extraAmount: number;
   discountAmount: number;
@@ -633,7 +637,9 @@ export const userApi = {
       city: data.city,
       lat: data.lat,
       lng: data.lng,
-      isDefault: data.isDefault,
+      isDefault: Boolean(data.isDefault),
+      ...(data.state ? { state: data.state } : {}),
+      ...(data.pincode ? { pincode: data.pincode.replace(/\D/g, '') } : {}),
     };
     try {
       return await request('/user/addresses', {
