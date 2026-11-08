@@ -255,7 +255,12 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // 3. Permission granted — quietly refresh if needed
+      // 3. If user has explicitly selected an address (custom selection), do NOT overwrite it with background GPS
+      if (saved && saved.isCustomSelected) {
+        return;
+      }
+
+      // 4. Permission granted and no custom address selected — quietly refresh if needed
       if (!saved) {
         setLoading(true);
       }

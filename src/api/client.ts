@@ -977,10 +977,11 @@ export const bookingApi = {
 
   getCapacitySlots: async (
     serviceId: string,
-    pincode: string = '500072',
+    pincode: string,
     date?: string
   ): Promise<SlotWindow[]> => {
-    const params = new URLSearchParams({ serviceId, pincode });
+    const cleanPin = (pincode || '').replace(/\D/g, '');
+    const params = new URLSearchParams({ serviceId, pincode: cleanPin });
     if (date) params.append('date', date);
     return await request(`/slots?${params.toString()}`);
   },
@@ -989,16 +990,17 @@ export const bookingApi = {
     serviceId: string,
     date: string,
     slotTime: string,
-    pincode: string = '500072',
+    pincode: string,
     userId?: string
   ): Promise<HoldResponse> => {
+    const cleanPin = (pincode || '').replace(/\D/g, '');
     return await request('/slot-holds', {
       method: 'POST',
       body: JSON.stringify({
         serviceId,
         date,
         slotTime,
-        pincode,
+        pincode: cleanPin,
         userId,
       }),
     });

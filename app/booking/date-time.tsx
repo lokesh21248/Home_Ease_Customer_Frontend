@@ -172,10 +172,12 @@ export default function DateTimeScreen() {
 
     setIsHoldingSlot(true);
     try {
-      const pincode = cart.selectedAddress?.pincode || '500072';
-      const hold = await bookingApi.holdSlot(serviceId, selectedDateStr, slotTime, pincode);
-      if (hold && hold.holdId) {
-        setActiveHold(hold);
+      const pincode = (cart.selectedAddress?.pincode || userLoc.address?.pincode || '').replace(/\D/g, '');
+      if (pincode.length === 6) {
+        const hold = await bookingApi.holdSlot(serviceId, selectedDateStr, slotTime, pincode);
+        if (hold && hold.holdId) {
+          setActiveHold(hold);
+        }
       }
     } catch (err: any) {
       console.warn('[DateTimeScreen] Slot hold notice:', err?.message || err);
@@ -192,8 +194,8 @@ export default function DateTimeScreen() {
       setSlotsLoading(true);
       setSlotsError('');
       try {
-        const pincode = cart.selectedAddress?.pincode || '500072';
-        if (serviceId) {
+        const pincode = (cart.selectedAddress?.pincode || userLoc.address?.pincode || '').replace(/\D/g, '');
+        if (serviceId && pincode.length === 6) {
           try {
             const capacitySlots = await bookingApi.getCapacitySlots(serviceId, pincode, selectedDateStr);
             if (mounted && capacitySlots.length > 0) {

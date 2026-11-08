@@ -212,9 +212,9 @@ export default function AddressesScreen() {
     setArea(parts[2] || '');
     setBuilding('');
     setLandmark('');
-    setCity(addr.city || '');
-    setStateName('');
-    setPincode('');
+    setCity(addr.city ? addr.city.replace(/\s*-\s*\d{6}$/, '').trim() : 'Hyderabad');
+    setStateName(addr.state || 'Telangana');
+    setPincode(addr.pincode ? addr.pincode.replace(/\D/g, '') : '');
     setIsDefault(addr.isDefault || false);
     setCoords(
       isValidCoordinate(addr.lat, addr.lng)
@@ -447,7 +447,8 @@ export default function AddressesScreen() {
     const payload = {
       title,
       addressLine: fullLine,
-      city: `${city.trim()}${cleanedPin ? ' - ' + cleanedPin : ''}`,
+      city: city.trim(),
+      state: stateName.trim() || 'Telangana',
       pincode: cleanedPin,
       lat: selectedCoordinates.latitude,
       lng: selectedCoordinates.longitude,

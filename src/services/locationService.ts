@@ -846,6 +846,7 @@ export async function sendBookingAddressToBackend(payload: BookingAddressRequest
         title: payload.label || 'Current Location',
         addressLine: payload.addressLine,
         city: payload.city,
+        pincode: payload.pincode,
         lat: payload.latitude,
         lng: payload.longitude,
         isDefault: false,

@@ -153,9 +153,27 @@ export default function SummaryScreen() {
     };
   }, [cart.selectedAddress, userLoc.address, isForFriend, recipientPincode]);
 
-  // Auto-fetch and select user's saved address or current detected address if not already selected
+  // Auto-fetch and select user's active selected address or saved address if not already selected
   useEffect(() => {
     if (!cart.selectedAddress) {
+      // 1. If user has an active selected address in LocationContext, prioritize it as the active booking address
+      if (userLoc.address && userLoc.location && userLoc.address.pincode && /^\d{6}$/.test(userLoc.address.pincode)) {
+        setAddress({
+          id: (userLoc.address as any).id || `loc-${userLoc.address.pincode}`,
+          userId: '',
+          title: userLoc.address.shortAddress || userLoc.address.area || 'Selected Address',
+          addressLine: userLoc.address.addressLine || userLoc.address.area || 'Selected Address',
+          city: userLoc.address.city || 'Hyderabad',
+          state: userLoc.address.state || 'Telangana',
+          pincode: userLoc.address.pincode,
+          lat: userLoc.location.latitude,
+          lng: userLoc.location.longitude,
+          isDefault: false,
+        });
+        return;
+      }
+
+      // 2. Otherwise load saved addresses from user profile
       userApi
         .getAddresses()
         .then((addresses) => {
@@ -279,13 +297,29 @@ export default function SummaryScreen() {
       // Self booking: address is required
       let address = cart.selectedAddress;
       if (!address) {
-        try {
-          const addresses = await userApi.getAddresses();
-          if (addresses && addresses.length > 0) {
-            address = addresses.find((a) => a.isDefault) || addresses[0];
-            setAddress(address);
-          }
-        } catch {}
+        if (userLoc.address && userLoc.location && userLoc.address.pincode && /^\d{6}$/.test(userLoc.address.pincode)) {
+          address = {
+            id: (userLoc.address as any).id || `loc-${userLoc.address.pincode}`,
+            userId: '',
+            title: userLoc.address.shortAddress || userLoc.address.area || 'Selected Address',
+            addressLine: userLoc.address.addressLine || userLoc.address.area || 'Selected Address',
+            city: userLoc.address.city || 'Hyderabad',
+            state: userLoc.address.state || 'Telangana',
+            pincode: userLoc.address.pincode,
+            lat: userLoc.location.latitude,
+            lng: userLoc.location.longitude,
+            isDefault: false,
+          };
+          setAddress(address);
+        } else {
+          try {
+            const addresses = await userApi.getAddresses();
+            if (addresses && addresses.length > 0) {
+              address = addresses.find((a) => a.isDefault) || addresses[0];
+              setAddress(address);
+            }
+          } catch {}
+        }
       }
 
       if (!address) {
@@ -302,13 +336,13 @@ export default function SummaryScreen() {
       targetAddressLine = address.addressLine || 'Service Location';
       targetCity = address.city || 'Hyderabad';
 
-      // Resolve 6-digit pincode
-      const rawPin = address.pincode || userLoc.address?.pincode || '';
+      // Resolve 6-digit pincode strictly from selected address as source of truth
+      const rawPin = address.pincode || (userLoc.address?.pincode && /^\d{6}$/.test(userLoc.address.pincode) ? userLoc.address.pincode : '');
       const cleanedPin = rawPin.replace(/\D/g, '');
       if (cleanedPin.length !== 6) {
         Alert.alert(
           'Location Not Serviceable',
-          'Your selected delivery address does not have a verified 6-digit PIN code. Bookings outside supported areas are not permitted.'
+          'Your selected delivery address does not have a verified 6-digit PIN code. Please select a valid address.'
         );
         return;
       }
@@ -413,6 +447,7 @@ export default function SummaryScreen() {
         : `${targetAddressLine}, ${targetCity}`,
       paymentMethod: cart.paymentMethod || 'COD',
       pincode: targetPincode,
+      addressId: !isForFriend && cart.selectedAddress?.id ? cart.selectedAddress.id : undefined,
       isForFriend: Boolean(isForFriend),
       idempotencyKey: idempotencyKeyRef.current,
       ...(isForFriend && {
