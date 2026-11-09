@@ -64,7 +64,9 @@ export default function RemindersScreen() {
           datetimeText: `${dateStr} • ${timeStr}`,
           description: isPast
             ? `Status: ${b.status} (Total: ₹${b.totalAmount})`
-            : `Scheduled service appointment (PIN: ${b.pinCode})`,
+            : b.status === 'ARRIVED' && b.pinCode && b.pinCode !== '****'
+            ? `Service partner arrived (PIN: ${b.pinCode})`
+            : 'Scheduled service appointment',
           isEnabled: !isPast,
           type: isPast ? 'past' : 'upcoming',
         };

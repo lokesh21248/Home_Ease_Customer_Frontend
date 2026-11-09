@@ -1200,6 +1200,12 @@ export const bookingApi = {
   getBookingById: (bookingId: string): Promise<Booking> =>
     request(`/bookings/${bookingId}`),
 
+  getServicePin: async (
+    bookingId: string
+  ): Promise<{ bookingId: string; pinCode: string; status: string; message: string }> => {
+    return await request(`/bookings/${encodeURIComponent(bookingId)}/service-pin`);
+  },
+
   cancelBooking: async (bookingId: string, reason = 'Customer requested'): Promise<{ message: string }> => {
     try {
       return await request(`/bookings/${encodeURIComponent(bookingId)}/cancel?reason=${encodeURIComponent(reason)}`, {

@@ -59,6 +59,9 @@ export default function TrackingScreen() {
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [pinCopied, setPinCopied] = useState(false);
+  const [servicePin, setServicePin] = useState<string | null>(null);
+  const [isFetchingPin, setIsFetchingPin] = useState(false);
+  const [pinFetchError, setPinFetchError] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [isRetryingSearch, setIsRetryingSearch] = useState(false);
   const [isRatingModalVisible, setIsRatingModalVisible] = useState(false);
@@ -109,10 +112,36 @@ export default function TrackingScreen() {
     }
   }, [id]);
 
+  // 2b. Fetch Service Start PIN (Only authorized customer, when status is ARRIVED)
+  const fetchServicePin = useCallback(async () => {
+    if (!id) return;
+    setIsFetchingPin(true);
+    setPinFetchError(null);
+    try {
+      const response = await bookingApi.getServicePin(id);
+      if (response?.pinCode) {
+        setServicePin(response.pinCode);
+      }
+    } catch (err: any) {
+      console.warn('[TrackingScreen] Could not fetch service PIN:', err?.message);
+      setPinFetchError(err?.message || 'Failed to retrieve PIN');
+    } finally {
+      setIsFetchingPin(false);
+    }
+  }, [id]);
+
+  // Polling with fast cadence on SEARCHING / ARRIVED / ACCEPTED
   useEffect(() => {
     fetchBooking();
     if (booking?.status === 'COMPLETED' || booking?.status === 'CANCELLED') return;
-    const pollInterval = booking?.status === 'SEARCHING' ? 3500 : 8000;
+    const pollInterval =
+      booking?.status === 'SEARCHING'
+        ? 3500
+        : booking?.status === 'ARRIVED'
+        ? 3500
+        : booking?.status === 'ACCEPTED' || booking?.status === 'ON_THE_WAY'
+        ? 4000
+        : 8000;
     pollingRef.current = setInterval(fetchBooking, pollInterval);
     return () => {
       requestSequence.current += 1;
@@ -120,13 +149,30 @@ export default function TrackingScreen() {
     };
   }, [fetchBooking, booking?.status]);
 
-  // Instant zero-latency transition to ASSIGNED when tracking frame arrives while SEARCHING
+  // Automatic retrieval of PIN when status is ARRIVED, and clearing on IN_PROGRESS
   useEffect(() => {
-    if (booking?.status !== 'SEARCHING' || !id) return;
+    if (booking?.status === 'ARRIVED') {
+      if (!servicePin && !isFetchingPin) {
+        void fetchServicePin();
+      }
+    } else if (
+      booking?.status === 'IN_PROGRESS' ||
+      booking?.status === 'COMPLETED' ||
+      booking?.status === 'CANCELLED'
+    ) {
+      if (servicePin) {
+        setServicePin(null);
+      }
+    }
+  }, [booking?.status, servicePin, isFetchingPin, fetchServicePin]);
+
+  // Real-time listener for booking lifecycle events (ASSIGNED, ARRIVED, IN_PROGRESS, COMPLETED)
+  useEffect(() => {
+    if (!id || booking?.status === 'COMPLETED' || booking?.status === 'CANCELLED') return;
     let client: Client | null = null;
     let cancelled = false;
 
-    const connectEarlyListener = async () => {
+    const connectLifecycleListener = async () => {
       try {
         const headers = await getAuthHeaders();
         if (cancelled) return;
@@ -136,9 +182,33 @@ export default function TrackingScreen() {
           reconnectDelay: 2000,
           onConnect: () => {
             if (cancelled || !client) return;
-            client.subscribe(`/topic/tracking/${id}`, () => {
-              // Partner accepted & published initial GPS! Instantly refresh booking state
-              fetchBooking();
+
+            const handleStatusEvent = (bodyStr: string) => {
+              try {
+                const event = JSON.parse(bodyStr);
+                const eventStatus = event.status || event.type;
+                if (eventStatus === 'ARRIVED' || eventStatus === 'WORKER_ARRIVED') {
+                  void fetchServicePin();
+                } else if (eventStatus === 'IN_PROGRESS' || eventStatus === 'SERVICE_STARTED') {
+                  setServicePin(null);
+                }
+              } catch (_) {}
+              void fetchBooking();
+            };
+
+            // 1. Partner live GPS & status tracking topic
+            client.subscribe(`/topic/tracking/${id}`, (message) => {
+              handleStatusEvent(message.body);
+            });
+
+            // 2. Booking execution topic
+            client.subscribe(`/topic/track/${id}`, (message) => {
+              handleStatusEvent(message.body);
+            });
+
+            // 3. General booking events topic
+            client.subscribe(`/topic/booking/${id}`, (message) => {
+              handleStatusEvent(message.body);
             });
           },
         });
@@ -148,13 +218,13 @@ export default function TrackingScreen() {
       }
     };
 
-    void connectEarlyListener();
+    void connectLifecycleListener();
 
     return () => {
       cancelled = true;
       if (client) void client.deactivate();
     };
-  }, [booking?.status, id, fetchBooking]);
+  }, [id, booking?.status, fetchBooking, fetchServicePin]);
 
   useEffect(() => {
     setBooking(null);
@@ -292,15 +362,20 @@ export default function TrackingScreen() {
   };
 
   const handleCopyPin = async () => {
-    if (booking?.pinCode) {
+    const pin =
+      servicePin ||
+      (booking?.pinCode && booking.pinCode !== '****' && booking.pinCode !== '0000'
+        ? booking.pinCode
+        : null);
+    if (pin) {
       try {
-        await Clipboard.setStringAsync(booking.pinCode);
+        await Clipboard.setStringAsync(pin);
+        setPinCopied(true);
+        setTimeout(() => setPinCopied(false), 2500);
       } catch (err) {
         // Fallback
       }
     }
-    setPinCopied(true);
-    setTimeout(() => setPinCopied(false), 2500);
   };
 
   const handleRetrySearch = async () => {
@@ -338,7 +413,7 @@ export default function TrackingScreen() {
       setBooking(updated);
       Alert.alert(
         'Partner Assigned',
-        `Partner ${updated.workerName || 'Leela sai krishna'} accepted the booking request. Verification PIN: ${updated.pinCode}`
+        `Partner ${updated.workerName || 'Service Partner'} accepted the booking request. Doorstep PIN will be revealed once partner arrives.`
       );
     } catch (e: any) {
       Alert.alert('Assignment', e?.message || 'Failed to accept booking on backend.');
@@ -413,11 +488,15 @@ export default function TrackingScreen() {
         };
       case 'CONFIRMED':
       case 'ACCEPTED':
+        return {
+          title: 'Partner Assigned',
+          desc: `${booking.workerName || 'Your partner'} has accepted your booking and will start travel shortly.`,
+          badgeColor: '#3B82F6',
+        };
       case 'ON_THE_WAY':
-      case 'ARRIVED':
         if (!hasPartnerLocation) {
           return {
-            title: 'Partner Assigned',
+            title: 'Partner En Route',
             desc: `Awaiting GPS broadcast from ${booking.workerName || 'your partner'}...`,
             badgeColor: '#3B82F6',
           };
@@ -432,6 +511,12 @@ export default function TrackingScreen() {
         return {
           title: 'Partner En Route',
           desc: etaText ? `Arriving in approximately ${etaText}` : 'Live tracking active',
+          badgeColor: '#10B981',
+        };
+      case 'ARRIVED':
+        return {
+          title: 'Partner Has Arrived',
+          desc: 'Your partner is at your doorstep. Share your 4-digit PIN below to start the service.',
           badgeColor: '#10B981',
         };
       case 'IN_PROGRESS':
@@ -640,30 +725,92 @@ export default function TrackingScreen() {
       {/* Bottom Booking & Partner Sheet */}
       <View style={[styles.bottomSheet, { paddingBottom: Math.max(insets.bottom, 14) }]}>
         <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-          {/* 1. Security START PIN Banner (Only when authorized and assigned) */}
-          {booking?.pinCode &&
-            booking.pinCode !== '0000' &&
-            (booking.status === 'ACCEPTED' || booking.status === 'IN_PROGRESS') && (
-              <Pressable style={styles.pinBanner} onPress={handleCopyPin}>
-                <View style={styles.pinBannerLeft}>
-                  <Text style={styles.pinBannerTag}>START PIN</Text>
-                  <Text style={styles.pinBannerValue}>{booking.pinCode}</Text>
+          {/* 1. Dedicated Service Start PIN Card (Displayed ONLY when ARRIVED) */}
+          {booking?.status === 'ARRIVED' && (
+            <View style={styles.securePinCard}>
+              <View style={styles.securePinHeader}>
+                <View style={styles.securePinBadge}>
+                  <Ionicons name="shield-checkmark" size={14} color="#1D4ED8" />
+                  <Text style={styles.securePinBadgeText}>SERVICE START PIN</Text>
                 </View>
-                <View style={styles.pinBannerTextWrap}>
-                  <Text style={styles.pinBannerTitle}>
-                    {pinCopied ? '✓ PIN Copied to Clipboard!' : 'Share PIN with Partner'}
-                  </Text>
-                  <Text style={styles.pinBannerDesc}>
-                    Give this 4-digit PIN upon arrival to verify & begin your service securely.
-                  </Text>
+                <Pressable
+                  style={({ pressed }) => [styles.copyPinBtn, pressed && { opacity: 0.8 }]}
+                  onPress={handleCopyPin}
+                  accessibilityRole="button"
+                  accessibilityLabel="Copy PIN"
+                >
+                  <Feather name={pinCopied ? 'check' : 'copy'} size={14} color="#1D4ED8" />
+                  <Text style={styles.copyPinBtnText}>{pinCopied ? 'Copied' : 'Copy PIN'}</Text>
+                </Pressable>
+              </View>
+
+              {/* 4 Digit Display Boxes */}
+              {isFetchingPin ? (
+                <View style={styles.pinLoadingRow}>
+                  <ActivityIndicator size="small" color="#1D4ED8" />
+                  <Text style={styles.pinLoadingText}>Retrieving secure start PIN...</Text>
                 </View>
-                <Feather
-                  name={pinCopied ? 'check' : 'copy'}
-                  size={18}
-                  color="#1D4ED8"
-                />
-              </Pressable>
-            )}
+              ) : (
+                <View style={styles.pinDigitsRow}>
+                  {(servicePin || (booking.pinCode && booking.pinCode !== '****' && booking.pinCode !== '0000' ? booking.pinCode : '----'))
+                    .slice(0, 4)
+                    .split('')
+                    .map((digit, idx) => (
+                      <View key={idx} style={styles.pinDigitBox}>
+                        <Text style={styles.pinDigitText}>{digit}</Text>
+                      </View>
+                    ))}
+                </View>
+              )}
+
+              {pinFetchError && !servicePin && (
+                <Pressable style={styles.retryPinBtn} onPress={fetchServicePin}>
+                  <Ionicons name="refresh" size={14} color="#DC2626" />
+                  <Text style={styles.retryPinText}>Could not load PIN. Tap to retry.</Text>
+                </Pressable>
+              )}
+
+              <View style={styles.pinInstructionRow}>
+                <Ionicons name="information-circle-outline" size={16} color="#1E40AF" />
+                <Text style={styles.securePinMessage}>
+                  Share this PIN with your service partner to start the service.
+                </Text>
+              </View>
+              <Text style={styles.securePinHint}>
+                Your service partner will enter this 4-digit code on their device to begin work.
+              </Text>
+            </View>
+          )}
+
+          {/* Pending PIN Notice — When Assigned / Travelling (PIN hidden for security) */}
+          {(booking?.status === 'ACCEPTED' ||
+            booking?.status === 'CONFIRMED' ||
+            booking?.status === 'ON_THE_WAY') && (
+            <View style={styles.pinPendingCard}>
+              <View style={styles.pinPendingIconWrap}>
+                <Ionicons name="lock-closed" size={16} color="#2563EB" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.pinPendingTitle}>Doorstep PIN Security</Text>
+                <Text style={styles.pinPendingText}>
+                  Your 4-digit Service Start PIN will appear here once your partner arrives.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* In Progress Notice */}
+          {booking?.status === 'IN_PROGRESS' && (
+            <View style={styles.inProgressCard}>
+              <View style={styles.inProgressPulse} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.inProgressTitle}>Service In Progress</Text>
+                <Text style={styles.inProgressSub}>
+                  Doorstep PIN verified. Your partner is currently completing your service.
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* 2. Partner Info Card (Only when assigned) */}
           {booking?.workerName ? (
@@ -1062,55 +1209,182 @@ const styles = StyleSheet.create({
     borderTopColor: '#F1F5F9',
   },
 
-  // PIN Banner
-  pinBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  // Secure Service Start PIN Card (Prominent display when ARRIVED)
+  securePinCard: {
     backgroundColor: '#EFF6FF',
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    padding: 12,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: '#93C5FD',
+    padding: 16,
+    marginBottom: 14,
+    ...Shadows.sm,
+  },
+  securePinHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
   },
-  pinBannerLeft: {
-    backgroundColor: '#DBEAFE',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+  securePinBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: '#93C5FD',
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 6,
   },
-  pinBannerTag: {
+  securePinBadgeText: {
     fontFamily: Typography.fontFamily.bold,
-    fontSize: 9,
-    color: '#1E40AF',
+    fontSize: 10,
+    color: '#1D4ED8',
     letterSpacing: 0.5,
   },
-  pinBannerValue: {
-    fontFamily: Typography.fontFamily.bold,
-    fontSize: 18,
+  copyPinBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    gap: 5,
+  },
+  copyPinBtnText: {
+    fontFamily: Typography.fontFamily.semiBold,
+    fontSize: 11,
     color: '#1D4ED8',
-    letterSpacing: 2,
-    marginTop: 1,
   },
-  pinBannerTextWrap: {
-    flex: 1,
-    marginRight: 8,
+  pinDigitsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginVertical: 8,
   },
-  pinBannerTitle: {
+  pinDigitBox: {
+    width: 48,
+    height: 54,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.sm,
+  },
+  pinDigitText: {
     fontFamily: Typography.fontFamily.bold,
-    fontSize: 12,
-    color: '#1E40AF',
+    fontSize: 26,
+    color: '#1E3A8A',
   },
-  pinBannerDesc: {
+  pinLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 8,
+  },
+  pinLoadingText: {
+    fontFamily: Typography.fontFamily.medium,
+    fontSize: 13,
+    color: '#1D4ED8',
+  },
+  retryPinBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+    gap: 6,
+  },
+  retryPinText: {
+    fontFamily: Typography.fontFamily.medium,
+    fontSize: 11,
+    color: '#DC2626',
+  },
+  pinInstructionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
+  securePinMessage: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 13,
+    color: '#1E40AF',
+    flex: 1,
+  },
+  securePinHint: {
     fontFamily: Typography.fontFamily.regular,
     fontSize: 11,
     color: '#3B82F6',
+    marginTop: 3,
+    lineHeight: 15,
+  },
+
+  // Pin Pending Card (When ACCEPTED or ON_THE_WAY)
+  pinPendingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
+    marginBottom: 14,
+    gap: 12,
+  },
+  pinPendingIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  pinPendingTitle: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 12,
+    color: '#0F172A',
+  },
+  pinPendingText: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 11,
+    color: '#64748B',
     marginTop: 2,
-    lineHeight: 14,
+    lineHeight: 15,
+  },
+
+  // In Progress Card
+  inProgressCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    padding: 12,
+    marginBottom: 14,
+    gap: 12,
+  },
+  inProgressPulse: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#10B981',
+  },
+  inProgressTitle: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 13,
+    color: '#065F46',
+  },
+  inProgressSub: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 11,
+    color: '#047857',
+    marginTop: 2,
   },
 
   // Worker Row
