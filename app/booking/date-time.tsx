@@ -35,6 +35,39 @@ import { Zap, Calendar, MapPin, Clock, Star, Users, CheckCircle, AlertCircle } f
 
 const { width } = Dimensions.get('window');
 
+export const getIstDateStr = (): string => {
+  const d = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istDate = new Date(d.getTime() + (d.getTimezoneOffset() * 60 * 1000) + istOffset);
+  return istDate.toISOString().split('T')[0];
+};
+
+export const isSlotValidForDate = (slotTime: string, dateStr: string, minNoticeMins = 30): boolean => {
+  const istDateStr = getIstDateStr();
+  if (dateStr > istDateStr) return true;
+  if (dateStr < istDateStr) return false;
+
+  const startPart = slotTime.split('-')[0].trim();
+  const match = startPart.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (!match) return false;
+
+  let hrs = parseInt(match[1], 10);
+  const mins = parseInt(match[2], 10);
+  const mod = match[3]?.toUpperCase();
+  if (mod === 'PM' && hrs < 12) hrs += 12;
+  if (mod === 'AM' && hrs === 12) hrs = 0;
+
+  const d = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const nowIst = new Date(d.getTime() + (d.getTimezoneOffset() * 60 * 1000) + istOffset);
+
+  const slotIst = new Date(nowIst);
+  slotIst.setHours(hrs, mins, 0, 0);
+
+  const minAllowedIst = new Date(nowIst.getTime() + minNoticeMins * 60 * 1000);
+  return slotIst.getTime() >= minAllowedIst.getTime();
+};
+
 export default function DateTimeScreen() {
   const insets = useSafeAreaInsets();
   const { cart, setSlot, setBookingType, setActiveHold } = useCart();
@@ -203,7 +236,7 @@ export default function DateTimeScreen() {
                 time: cs.timeSlot,
                 startTime: cs.startTime,
                 endTime: cs.endTime,
-                available: cs.available,
+                available: cs.available && isSlotValidForDate(cs.timeSlot, selectedDateStr),
                 period: cs.startTime.startsWith('0') || cs.startTime.startsWith('10') || cs.startTime.startsWith('11') ? 'MORNING' : 'AFTERNOON',
                 availableWorkersCount: cs.availableCapacity,
               }));
@@ -211,6 +244,8 @@ export default function DateTimeScreen() {
               const firstOpen = mapped.find((s) => s.available);
               if (firstOpen) {
                 handleSelectSlot(firstOpen.time);
+              } else {
+                setSelectedSlotTime(null);
               }
               setSlotsLoading(false);
               return;
@@ -222,10 +257,16 @@ export default function DateTimeScreen() {
 
         const slots = await bookingApi.getAvailableSlots(selectedDateStr, serviceId, subServiceId);
         if (mounted) {
-          setAvailableSlots(slots);
-          const firstOpen = slots.find((s) => s.available);
+          const mapped: AvailableSlot[] = slots.map((s) => ({
+            ...s,
+            available: s.available && isSlotValidForDate(s.time, selectedDateStr),
+          }));
+          setAvailableSlots(mapped);
+          const firstOpen = mapped.find((s) => s.available);
           if (firstOpen) {
             handleSelectSlot(firstOpen.time);
+          } else {
+            setSelectedSlotTime(null);
           }
         }
       } catch (err: any) {
@@ -258,8 +299,8 @@ export default function DateTimeScreen() {
       setSlot(slotObj, now.toISOString().split('T')[0]);
       router.push('/booking/summary');
     } else {
-      if (!selectedSlotTime) {
-        alert('Please select an available time slot.');
+      if (!selectedSlotTime || !isSlotValidForDate(selectedSlotTime, selectedDateStr)) {
+        alert('Please select an available time slot at least 30 minutes in advance.');
         return;
       }
       setBookingType('SCHEDULED');
@@ -489,7 +530,10 @@ export default function DateTimeScreen() {
                           !d.available && styles.datePillDisabled,
                         ]}
                         onPress={() => {
-                          if (d.available) setSelectedDateStr(d.date);
+                          if (d.available) {
+                            setSelectedDateStr(d.date);
+                            setSelectedSlotTime(null);
+                          }
                         }}
                         disabled={!d.available}
                       >
@@ -545,14 +589,14 @@ export default function DateTimeScreen() {
                   <AlertCircle size={18} color="#EF4444" />
                   <Text style={styles.errorText}>{slotsError}</Text>
                 </View>
-              ) : availableSlots.length === 0 ? (
+              ) : availableSlots.filter((s) => s.available && isSlotValidForDate(s.time, selectedDateStr)).length === 0 ? (
                 <View style={styles.noSlotsBox}>
                   <Text style={styles.noSlotsText}>No slots open on this date. Please select another date.</Text>
                 </View>
               ) : (
                 <View style={styles.slotsGrid}>
                   {availableSlots
-                    .filter((s) => s.available) // Requirement: "Hide unavailable slots"
+                    .filter((s) => s.available && isSlotValidForDate(s.time, selectedDateStr)) // Requirement: "Hide unavailable slots"
                     .map((slot) => {
                       const isSelected = selectedSlotTime === slot.time;
                       return (
@@ -644,10 +688,10 @@ export default function DateTimeScreen() {
           style={[
             styles.continueBtn,
             mode === 'INSTANT' && { backgroundColor: '#059669' },
-            mode === 'SCHEDULED' && !selectedSlotTime && { backgroundColor: '#9CA3AF' },
+            mode === 'SCHEDULED' && (!selectedSlotTime || !availableSlots.some(s => s.time === selectedSlotTime && s.available && isSlotValidForDate(s.time, selectedDateStr))) && { backgroundColor: '#9CA3AF' },
           ]}
           onPress={handleContinue}
-          disabled={mode === 'SCHEDULED' && !selectedSlotTime}
+          disabled={mode === 'SCHEDULED' && (!selectedSlotTime || !availableSlots.some(s => s.time === selectedSlotTime && s.available && isSlotValidForDate(s.time, selectedDateStr)))}
           activeOpacity={0.85}
         >
           <Text style={styles.continueBtnText}>

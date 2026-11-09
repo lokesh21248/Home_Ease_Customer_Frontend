@@ -227,6 +227,7 @@ export interface BookingRequest {
   holdId?: string;
   lockToken?: string;
   timeSlot?: string;
+  scheduledDate?: string;
 }
 
 export interface SlotWindow {
@@ -907,12 +908,97 @@ export const bookingApi = {
   },
 
   createScheduledBooking: (
-    data: BookingRequest & { scheduledDate?: string; timeSlot?: string }
+    data: BookingRequest & { scheduledDate: string; timeSlot: string }
   ): Promise<Booking> => {
-    return bookingApi.createBooking({
-      ...data,
-      bookingType: 'SCHEDULED',
-    });
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const cleanedPin = (data.pincode || '').replace(/\D/g, '');
+    if (cleanedPin.length !== 6) {
+      throw new ApiError(400, 'Location Not Serviceable: A valid 6-digit PIN code is required to place a booking.');
+    }
+    const paymentMethod = data.paymentMethod === 'WALLET' ? 'UPI' : (data.paymentMethod || 'COD');
+    const userLat = Number(data.userLat) || 17.4485;
+    const userLng = Number(data.userLng) || 78.3748;
+
+    let serviceId = data.serviceId;
+    if (!UUID_REGEX.test(serviceId)) {
+      const fallbackMap: Record<string, string> = {
+        electrician: '6e2e370b-7d5e-46d2-944b-afe7c15db6d5',
+        cleaning: 'be8bb640-cc11-4243-ab4a-5cbdf34a0937',
+        massage: '6beaaf16-cb8b-4107-9f8b-617b23c0bd21',
+        ac: '9b7f941c-ee83-4ffe-bd1d-2dacba5d4760',
+      };
+      serviceId = fallbackMap[(serviceId || '').toLowerCase()] || '6e2e370b-7d5e-46d2-944b-afe7c15db6d5';
+    }
+
+    let subServices =
+      Array.isArray(data.subServices)
+        ? data.subServices
+            .filter((s) => s && s.subServiceId && UUID_REGEX.test(s.subServiceId))
+            .map((s) => ({
+              subServiceId: s.subServiceId,
+              quantity: Math.max(1, Number(s.quantity) || 1),
+            }))
+        : [];
+    if (subServices.length === 0) {
+      subServices = [{ subServiceId: '3c391970-28ee-4f28-a566-5c3b48763525', quantity: 1 }];
+    }
+
+    const idempotencyKey = data.idempotencyKey || generateUUID();
+    const scheduledPayload: any = {
+      serviceId,
+      userLat,
+      userLng,
+      paymentMethod,
+      pincode: cleanedPin,
+      subServices,
+      scheduledDate: data.scheduledDate,
+      timeSlot: data.timeSlot,
+    };
+
+    if (data.addressId && UUID_REGEX.test(data.addressId)) {
+      scheduledPayload.addressId = data.addressId;
+    }
+    if (data.couponCode && data.couponCode.trim()) {
+      scheduledPayload.couponCode = data.couponCode.trim().toUpperCase();
+    }
+    if (Array.isArray(data.addons) && data.addons.length > 0) {
+      const validAddons = data.addons
+        .filter((a) => a && a.addonId && UUID_REGEX.test(a.addonId))
+        .map((a) => ({
+          addonId: a.addonId,
+          quantity: Math.max(1, Number(a.quantity) || 1),
+        }));
+      if (validAddons.length > 0) {
+        scheduledPayload.addons = validAddons;
+      }
+    }
+    if (data.holdId) scheduledPayload.holdId = data.holdId;
+    if (data.lockToken) scheduledPayload.lockToken = data.lockToken;
+
+    if (data.isForFriend) {
+      scheduledPayload.isForFriend = true;
+      if (data.recipientName && data.recipientName.trim()) {
+        scheduledPayload.recipientName = data.recipientName.trim().slice(0, 100);
+      }
+      if (data.recipientPhone) {
+        const cleanedPhone = data.recipientPhone.replace(/[\s-]/g, '');
+        if (/^(?:\+91|0)?[6-9]\d{9}$/.test(cleanedPhone)) {
+          scheduledPayload.recipientPhone = cleanedPhone;
+        }
+      }
+      if (data.recipientAddress && data.recipientAddress.trim()) {
+        scheduledPayload.recipientAddress = data.recipientAddress.trim();
+      }
+    } else {
+      scheduledPayload.isForFriend = false;
+    }
+
+    return request('/bookings/scheduled', {
+      method: 'POST',
+      body: JSON.stringify(scheduledPayload),
+      timeoutMs: 60000,
+      idempotencyKey,
+    } as any);
   },
 
   getBookingStatus: async (bookingId: string): Promise<any> => {
@@ -1081,6 +1167,7 @@ export const bookingApi = {
     if (data.holdId) cleanedPayload.holdId = data.holdId;
     if (data.lockToken) cleanedPayload.lockToken = data.lockToken;
     if (data.timeSlot) cleanedPayload.timeSlot = data.timeSlot;
+    if (data.scheduledDate) cleanedPayload.scheduledDate = data.scheduledDate;
 
     if (data.isForFriend) {
       cleanedPayload.isForFriend = true;

@@ -388,7 +388,7 @@ export default function SummaryScreen() {
     const scheduledDate = cart.selectedDate || new Date().toISOString().split('T')[0];
     let scheduledAt = new Date().toISOString();
     if (cart.bookingType === 'SCHEDULED') {
-      scheduledAt = `${scheduledDate}T09:00:00Z`;
+      scheduledAt = `${scheduledDate}T09:00:00+05:30`;
       if (cart.selectedSlot?.time) {
         const startPart = cart.selectedSlot.time.split('-')[0].trim();
         const match = startPart.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
@@ -398,9 +398,7 @@ export default function SummaryScreen() {
           const mod = match[3]?.toUpperCase();
           if (mod === 'PM' && hrs < 12) hrs += 12;
           if (mod === 'AM' && hrs === 12) hrs = 0;
-          const localIso = `${scheduledDate}T${String(hrs).padStart(2, '0')}:${mins}:00`;
-          const d = new Date(localIso);
-          scheduledAt = isNaN(d.getTime()) ? `${localIso}Z` : d.toISOString();
+          scheduledAt = `${scheduledDate}T${String(hrs).padStart(2, '0')}:${mins}:00+05:30`;
         }
       }
     }
