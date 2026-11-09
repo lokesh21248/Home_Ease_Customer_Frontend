@@ -20,6 +20,7 @@ import {
   shouldRecalculateRoute,
 } from '../services/trackingMath';
 import { isValidCoordinate } from '../services/coordinates';
+import { trackingLifecycleManager } from '../services/TrackingLifecycleManager';
 
 export interface PartnerCoordinate {
   lat: number;
@@ -82,19 +83,37 @@ export function useLiveTracking({
   const previousPositionRef = useRef<PartnerCoordinate | null>(null);
   const activeBookingIdRef = useRef(bookingId);
   activeBookingIdRef.current = bookingId;
-  const terminal = status === 'COMPLETED' || status === 'CANCELLED';
+  const isTravelStage = trackingLifecycleManager.isTravelTrackingAuthorized(bookingId, status);
+  const terminal =
+    status === 'COMPLETED' ||
+    status === 'CANCELLED' ||
+    status === 'ARRIVED' ||
+    status === 'IN_PROGRESS';
   const hasDestination =
     customerLat !== undefined &&
     customerLng !== undefined &&
     isValidCoordinate(customerLat, customerLng);
-  const trackingActive = Boolean(bookingId && enabled && !terminal && !trackingEnded);
+  const trackingActive = Boolean(
+    bookingId && enabled && isTravelStage && !terminal && !trackingEnded,
+  );
 
   const applyLocation = useCallback(
     (payload: TrackingLocationEvent, expectedBookingId: string) => {
       if (expectedBookingId !== activeBookingIdRef.current) return;
       if (payload.bookingId && payload.bookingId !== expectedBookingId) return;
-      if (payload.status === 'TRACKING_ENDED' || payload.trackingActive === false) {
+      if (
+        payload.status === 'TRACKING_ENDED' ||
+        payload.status === 'ARRIVED' ||
+        (payload as any).type === 'WORKER_ARRIVED' ||
+        (payload as any).type === 'BOOKING_TRACKING_STOPPED' ||
+        payload.trackingActive === false
+      ) {
         setTrackingEnded(true);
+        setIsLiveConnected(false);
+        setConnectionStatus('DISCONNECTED');
+        pollAbortRef.current?.abort();
+        routeAbortRef.current?.abort();
+        if (stompClientRef.current) void stompClientRef.current.deactivate();
         return;
       }
       const latitude = payload.latitude ?? payload.lat;
@@ -152,6 +171,72 @@ export function useLiveTracking({
     routeRequestRef.current = null;
   }, [bookingId]);
 
+  // Handle authoritative lifecycle events from TrackingLifecycleManager
+  useEffect(() => {
+    if (!bookingId) return;
+    const unsubscribe = trackingLifecycleManager.subscribe(bookingId, (event) => {
+      if (
+        event.type === 'WORKER_ARRIVED' ||
+        event.type === 'BOOKING_TRACKING_STOPPED' ||
+        event.type === 'SERVICE_STARTED' ||
+        event.type === 'SERVICE_COMPLETED' ||
+        event.type === 'BOOKING_CANCELLED' ||
+        event.trackingActive === false
+      ) {
+        setTrackingEnded(true);
+        setIsLiveConnected(false);
+        setConnectionStatus('DISCONNECTED');
+        pollAbortRef.current?.abort();
+        routeAbortRef.current?.abort();
+        if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
+        if (routeRetryTimerRef.current) clearTimeout(routeRetryTimerRef.current);
+        if (stompClientRef.current) void stompClientRef.current.deactivate();
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [bookingId]);
+
+  // Synchronize component status prop with authoritative lifecycle
+  useEffect(() => {
+    if (!bookingId) return;
+    if (status === 'ARRIVED') {
+      trackingLifecycleManager.markArrived(bookingId);
+      setTrackingEnded(true);
+      setIsLiveConnected(false);
+      setConnectionStatus('DISCONNECTED');
+      pollAbortRef.current?.abort();
+      routeAbortRef.current?.abort();
+      if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
+      if (routeRetryTimerRef.current) clearTimeout(routeRetryTimerRef.current);
+      if (stompClientRef.current) void stompClientRef.current.deactivate();
+    } else if (
+      status === 'IN_PROGRESS' ||
+      status === 'COMPLETED' ||
+      status === 'CANCELLED'
+    ) {
+      trackingLifecycleManager.stopTracking(bookingId, status);
+      setTrackingEnded(true);
+      setIsLiveConnected(false);
+      setConnectionStatus('DISCONNECTED');
+      pollAbortRef.current?.abort();
+      routeAbortRef.current?.abort();
+      if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
+      if (routeRetryTimerRef.current) clearTimeout(routeRetryTimerRef.current);
+      if (stompClientRef.current) void stompClientRef.current.deactivate();
+    } else if (
+      status === 'ON_THE_WAY' ||
+      status === 'ACCEPTED' ||
+      status === 'CONFIRMED'
+    ) {
+      if (trackingLifecycleManager.getState(bookingId) !== 'ARRIVED') {
+        setTrackingEnded(false);
+      }
+    }
+  }, [bookingId, status]);
+
   useEffect(() => {
     if (!trackingActive || !bookingId) {
       setIsGpsStale(false);
@@ -196,25 +281,38 @@ export function useLiveTracking({
           setIsLiveConnected(true);
           setConnectionStatus('CONNECTED');
           setTrackingError(null);
-          client.subscribe(`/topic/tracking/${bookingId}`, (message) => {
+
+          const handleIncoming = (messageBody: string) => {
             try {
-              const event: TrackingLocationEvent = JSON.parse(message.body);
+              const event: any = JSON.parse(messageBody);
+              trackingLifecycleManager.processRemoteEvent(bookingId, event);
+              if (
+                event.status === 'ARRIVED' ||
+                event.type === 'WORKER_ARRIVED' ||
+                event.type === 'BOOKING_TRACKING_STOPPED' ||
+                event.trackingActive === false
+              ) {
+                setTrackingEnded(true);
+                setIsLiveConnected(false);
+                setConnectionStatus('DISCONNECTED');
+                pollAbortRef.current?.abort();
+                routeAbortRef.current?.abort();
+                if (client) void client.deactivate();
+                return;
+              }
               applyLocation(event, bookingId);
             } catch (error) {
               console.warn('[LiveTracking] Ignored malformed location event:', error);
             }
+          };
+
+          client.subscribe(`/topic/tracking/${bookingId}`, (message) => {
+            handleIncoming(message.body);
           });
 
           // Also subscribe to broadcast update stream /topic/tracking/update
           client.subscribe('/topic/tracking/update', (message) => {
-            try {
-              const event: TrackingLocationEvent = JSON.parse(message.body);
-              if (!event.bookingId || event.bookingId === bookingId) {
-                applyLocation(event, bookingId);
-              }
-            } catch (error) {
-              console.warn('[LiveTracking] Ignored malformed location broadcast:', error);
-            }
+            handleIncoming(message.body);
           });
         },
         onDisconnect: () => {
@@ -459,7 +557,13 @@ export function useLiveTracking({
   } else if (status === 'CANCELLED') {
     distanceText = 'Booking cancelled';
     etaText = 'Cancelled';
-  } else if (status === 'ACCEPTED' || status === 'IN_PROGRESS') {
+  } else if (status === 'ARRIVED') {
+    distanceText = 'Partner arrived';
+    etaText = 'At your doorstep';
+  } else if (status === 'IN_PROGRESS') {
+    distanceText = 'Partner on site';
+    etaText = 'Service in progress';
+  } else if (status === 'ACCEPTED' || status === 'ON_THE_WAY' || status === 'CONFIRMED') {
     if (!hasPartnerLocation || !partnerPos) {
       distanceText = 'Awaiting service-person location';
       etaText = 'ETA unavailable';

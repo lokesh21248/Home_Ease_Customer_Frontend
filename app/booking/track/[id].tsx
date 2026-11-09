@@ -137,8 +137,6 @@ export default function TrackingScreen() {
     const pollInterval =
       booking?.status === 'SEARCHING'
         ? 3500
-        : booking?.status === 'ARRIVED'
-        ? 3500
         : booking?.status === 'ACCEPTED' || booking?.status === 'ON_THE_WAY'
         ? 4000
         : 8000;
@@ -300,14 +298,13 @@ export default function TrackingScreen() {
     (bookingPin ? `Service Address — ${bookingPin}` : undefined) ||
     'Your Service Location';
 
-  // 3. Live Partner Tracking
+  // 3. Live Partner Travel Tracking (ONLY active while partner is moving/travelling to customer)
+  // Automatically stops upon ARRIVED, IN_PROGRESS, COMPLETED, or CANCELLED
   const trackingEnabled =
     !!booking?.workerId &&
     (booking.status === 'ACCEPTED' ||
       booking.status === 'CONFIRMED' ||
-      booking.status === 'ON_THE_WAY' ||
-      booking.status === 'ARRIVED' ||
-      booking.status === 'IN_PROGRESS');
+      booking.status === 'ON_THE_WAY');
 
   const {
     partnerPos,
