@@ -1,6 +1,6 @@
 /**
  * Centralized API layer for HomeEase Customer App.
- * Base URL: http://3.108.55.219/api/v1
+ * Base URL: http://3.107.161.126:8080/api/v1
  *
  * Handles:
  *  - Auth token injection
@@ -620,10 +620,21 @@ export const userApi = {
     }),
 
   getAddresses: async (): Promise<Address[]> => {
+    const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) {
+      return [];
+    }
     try {
       return await request('/user/addresses');
-    } catch {
-      return await request('/users/me/addresses');
+    } catch (err: any) {
+      if (err?.status === 401 || err?.status === 403) {
+        return [];
+      }
+      try {
+        return await request('/users/me/addresses');
+      } catch {
+        return [];
+      }
     }
   },
 
@@ -779,7 +790,7 @@ export const catalogApi = {
 export const bookingApi = {
   getTimeSlots: (date?: string): Promise<TimeSlot[]> => {
     const query = date ? `?date=${date}` : '';
-    return request(`/bookings/time-slots${query}`);
+    return request(`/bookings/time-slots${query}`, {}, false);
   },
 
   getAvailableDates: async (serviceId?: string, subServiceId?: string, days = 14): Promise<AvailableDate[]> => {
@@ -788,7 +799,7 @@ export const bookingApi = {
     if (subServiceId) params.append('subServiceId', subServiceId);
     params.append('days', String(days));
     try {
-      return await request(`/bookings/available-dates?${params.toString()}`, { silent: true } as any);
+      return await request(`/bookings/available-dates?${params.toString()}`, { silent: true } as any, false);
     } catch {
       // Fallback: Generate upcoming `days` calendar dates dynamically
       return Array.from({ length: days }, (_, i) => {
@@ -811,7 +822,7 @@ export const bookingApi = {
     if (serviceId) params.append('serviceId', serviceId);
     if (subServiceId) params.append('subServiceId', subServiceId);
     try {
-      return await request(`/bookings/available-slots?${params.toString()}`, { silent: true } as any);
+      return await request(`/bookings/available-slots?${params.toString()}`, { silent: true } as any, false);
     } catch {
       // Fallback: Query standard /bookings/time-slots endpoint supported by backend
       try {
@@ -1074,7 +1085,7 @@ export const bookingApi = {
         message: 'Location Not Serviceable: Please enter a valid 6-digit Indian PIN code.',
       };
     }
-    return request(`/serviceability/check?pincode=${encodeURIComponent(cleaned)}`);
+    return request(`/serviceability/check?pincode=${encodeURIComponent(cleaned)}`, {}, false);
   },
 
   createBooking: (data: BookingRequest): Promise<Booking> => {
@@ -1177,7 +1188,20 @@ export const bookingApi = {
     } as any);
   },
 
-  getMyBookings: (): Promise<Booking[]> => request('/bookings/my-bookings'),
+  getMyBookings: async (): Promise<Booking[]> => {
+    const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+    if (!token) {
+      return [];
+    }
+    try {
+      return await request('/bookings/my-bookings');
+    } catch (err: any) {
+      if (err?.status === 401 || err?.status === 403) {
+        return [];
+      }
+      throw err;
+    }
+  },
 
   getBookingById: (bookingId: string): Promise<Booking> =>
     request(`/bookings/${bookingId}`),

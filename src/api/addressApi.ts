@@ -1,4 +1,5 @@
-import { apiRequest } from './client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiRequest, STORAGE_KEYS } from './client';
 import type { GeoPoint } from './geoApi';
 
 export type AddressLabel = 'HOME' | 'OFFICE' | 'OTHER';
@@ -50,17 +51,28 @@ function mapToCustomerAddress(raw: any): CustomerAddress {
 }
 
 export async function getAddresses(token?: string): Promise<CustomerAddress[]> {
+  const activeToken = token || (await AsyncStorage.getItem(STORAGE_KEYS.TOKEN));
+  if (!activeToken) {
+    return [];
+  }
   try {
     // Try standard user addresses endpoint verified on backend
-    const rawList = await apiRequest<any[]>('/user/addresses', token);
+    const rawList = await apiRequest<any[]>('/user/addresses', activeToken);
     if (Array.isArray(rawList)) {
       return rawList.map(mapToCustomerAddress);
     }
-  } catch {
+  } catch (err: any) {
+    if (err?.status === 401 || err?.status === 403) {
+      return [];
+    }
     // Fallback to proposed /api/v1/addresses route
-    const rawList = await apiRequest<any[]>('/api/v1/addresses', token);
-    if (Array.isArray(rawList)) {
-      return rawList.map(mapToCustomerAddress);
+    try {
+      const rawList = await apiRequest<any[]>('/api/v1/addresses', activeToken);
+      if (Array.isArray(rawList)) {
+        return rawList.map(mapToCustomerAddress);
+      }
+    } catch {
+      return [];
     }
   }
   return [];
