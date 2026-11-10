@@ -78,7 +78,7 @@ export const MASTER_SERVICES: CuratedHomeService[] = [
   {
     id: 'ac-service-repair',
     name: 'AC Service & Repair',
-    displayName: 'AC Service\n& Repair',
+    displayName: 'AC Service &\nRepair',
     rating: 4.9,
     ratingCount: '(52.4K)',
     localImage: require('../../../assets/images/services/ac_repair_thumb.png'),
@@ -105,7 +105,7 @@ export const MASTER_SERVICES: CuratedHomeService[] = [
   {
     id: 'pest-control',
     name: 'Pest Control',
-    displayName: 'Pest\nControl',
+    displayName: 'Pest Control',
     rating: 4.9,
     ratingCount: '(17.9K)',
     localImage: require('../../../assets/images/services/pest_control_thumb.png'),
@@ -165,8 +165,9 @@ export function ExploreServicesGrid({
 }: ExploreServicesGridProps) {
   const { width: screenWidth } = useWindowDimensions();
 
-  // 4 columns: 32 total padding (16 left, 16 right) + 3 gaps of 8px (24px)
-  const cardWidth = Math.floor((screenWidth - 32 - 24) / 4);
+  // Exact 3-column calculation: 32 total padding (16 left, 16 right) + 2 gaps of 10px (20px total gap)
+  const GAP = 10;
+  const cardWidth = Math.floor((screenWidth - 32 - (2 * GAP)) / 3);
 
   // Map backend services to curated master list to retain high-res assets & live IDs
   const displayItems = useMemo<ExploreCardItem[]>(() => {
@@ -224,7 +225,7 @@ export function ExploreServicesGrid({
 
   return (
     <View style={styles.container}>
-      {/* Section Header: Explore Services & View All → */}
+      {/* Header row: Explore Services (bold navy) + View All → button (linking to Categories) */}
       <View style={styles.headerRow}>
         <Text style={styles.sectionTitle}>Explore Services</Text>
         <Pressable
@@ -253,7 +254,7 @@ export function ExploreServicesGrid({
           )}
         </View>
       ) : (
-        /* 4-Column Grid */
+        /* Exact 3-Column Grid across all 12 services */
         <View style={styles.gridContainer}>
           {displayItems.map((item) => (
             <Pressable
@@ -269,14 +270,14 @@ export function ExploreServicesGrid({
             >
               {/* 1. Star Rating Row: ⭐ 4.9 (48.3K) */}
               <View style={styles.ratingRow}>
-                <Ionicons name="star" size={9.5} color="#F59E0B" />
+                <Ionicons name="star" size={10.5} color="#F59E0B" />
                 <Text style={styles.ratingText}>
                   {item.rating}{' '}
                   <Text style={styles.ratingCountText}>{item.ratingCount}</Text>
                 </Text>
               </View>
 
-              {/* 2. Image with Circular Plus Button */}
+              {/* 2. Center Image with Circular Plus Button */}
               <View style={styles.imageContainer}>
                 <Image
                   source={item.localImage}
@@ -284,13 +285,13 @@ export function ExploreServicesGrid({
                   contentFit="contain"
                   transition={120}
                 />
-                {/* Circular White Plus Button */}
+                {/* Circular White Plus Button with Blue Icon */}
                 <View style={styles.plusButton}>
-                  <Ionicons name="add" size={13} color="#0052FF" />
+                  <Ionicons name="add" size={14} color="#0052FF" />
                 </View>
               </View>
 
-              {/* 3. Service Name */}
+              {/* 3. Service Name (2 lines max, bold navy) */}
               <Text style={styles.serviceName} numberOfLines={2}>
                 {item.displayName}
               </Text>
@@ -317,30 +318,30 @@ export function ExploreServicesGrid({
 const styles = StyleSheet.create({
   container: {
     marginTop: 14,
-    marginBottom: 8,
+    marginBottom: 12,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 18.5,
     fontWeight: '800',
-    color: '#0F172A',
+    color: '#0F172A', // Bold navy
     letterSpacing: -0.3,
   },
   viewAllText: {
-    fontSize: 13.5,
+    fontSize: 14,
     fontWeight: '700',
     color: '#0052FF',
   },
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
     paddingHorizontal: 16,
   },
   card: {
@@ -348,39 +349,38 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#EEF2F6',
-    paddingVertical: 7,
-    paddingHorizontal: 5,
-    marginBottom: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    marginBottom: 10,
     justifyContent: 'space-between',
     shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    shadowRadius: 4,
+    elevation: 1.5,
   },
   cardPressed: {
-    opacity: 0.9,
+    opacity: 0.92,
     transform: [{ scale: 0.97 }],
   },
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2.5,
-    paddingHorizontal: 2,
-    marginBottom: 2,
+    gap: 3,
+    marginBottom: 4,
   },
   ratingText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '700',
     color: '#1F2937',
   },
   ratingCountText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '500',
     color: '#64748B',
   },
   imageContainer: {
-    height: 52,
+    height: 62,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
@@ -388,16 +388,16 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   cardImage: {
-    width: 48,
-    height: 48,
+    width: 56,
+    height: 56,
   },
   plusButton: {
     position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    right: 0,
+    bottom: -1,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -405,39 +405,37 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.14,
     shadowRadius: 2,
     elevation: 2,
   },
   serviceName: {
-    fontSize: 10.5,
+    fontSize: 11.5,
     fontWeight: '700',
-    color: '#0F172A',
-    lineHeight: 13,
-    marginTop: 2,
-    paddingHorizontal: 2,
-    minHeight: 26,
+    color: '#0F172A', // Bold navy
+    lineHeight: 15,
+    marginTop: 4,
+    minHeight: 30,
     textAlign: 'left',
   },
   priceRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    marginTop: 2,
-    paddingHorizontal: 2,
+    alignItems: 'baseline',
+    gap: 4,
+    marginTop: 3,
   },
   currentPriceText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
     color: '#0F172A',
   },
   originalPriceText: {
-    fontSize: 9.5,
+    fontSize: 10,
     color: '#94A3B8',
     textDecorationLine: 'line-through',
   },
   loadingContainer: {
-    paddingVertical: 24,
+    paddingVertical: 28,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
@@ -460,7 +458,7 @@ const styles = StyleSheet.create({
   retryButton: {
     backgroundColor: '#0052FF',
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 6,
   },
   retryText: {
