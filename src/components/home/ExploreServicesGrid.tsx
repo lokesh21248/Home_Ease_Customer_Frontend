@@ -31,9 +31,17 @@ interface CuratedHomeService {
   rating: number;
   ratingCount: string;
   localImage: any;
-  defaultCategoryId?: string;
+  defaultCategoryId: string;
   keywords: string[];
 }
+
+// Backend Category UUIDs
+const CATEGORY_IDS = {
+  CLEANING: 'be8bb640-cc11-4243-ab4a-5cbdf34a0937',
+  AC: '9b7f941c-ee83-4ffe-bd1d-2dacba5d4760',
+  ELECTRICIAN: '6e2e370b-7d5e-46d2-944b-afe7c15db6d5',
+  MASSAGE_HANDYMAN: '6beaaf16-cb8b-4107-9f8b-617b23c0bd21',
+};
 
 /**
  * Curated 12 Master Services matching HomeEase visual design.
@@ -51,7 +59,8 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.9,
     ratingCount: '(48.3K)',
     localImage: require('../../../assets/images/services/daily_cleaning_thumb.png'),
-    keywords: ['clean', 'daily', 'maid', 'home cleaning', 'housekeeping'],
+    defaultCategoryId: CATEGORY_IDS.CLEANING,
+    keywords: ['daily home', 'home cleaning', 'maid', 'deep cleaning'],
   },
   {
     id: 'homeease-verified',
@@ -60,6 +69,7 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.9,
     ratingCount: '(79.0K)',
     localImage: require('../../../assets/images/services/verified_worker_thumb.png'),
+    defaultCategoryId: CATEGORY_IDS.CLEANING,
     keywords: ['verified', 'partner', 'pro', 'expert'],
   },
   {
@@ -69,6 +79,7 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.9,
     ratingCount: '(79.0K)',
     localImage: require('../../../assets/images/services/cooking_thumb.png'),
+    defaultCategoryId: CATEGORY_IDS.CLEANING,
     keywords: ['cooking', 'cook', 'chef', 'food', 'meal'],
   },
   {
@@ -78,6 +89,7 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.8,
     ratingCount: '(32.1K)',
     localImage: require('../../../assets/images/services/sofa_carpet_thumb.png'),
+    defaultCategoryId: CATEGORY_IDS.CLEANING,
     keywords: ['sofa', 'carpet', 'couch', 'upholstery', 'mat'],
   },
   {
@@ -87,7 +99,8 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.9,
     ratingCount: '(52.4K)',
     localImage: require('../../../assets/images/services/ac_repair_thumb.png'),
-    keywords: ['ac', 'air', 'cooling', 'hvac', 'conditioner'],
+    defaultCategoryId: CATEGORY_IDS.AC,
+    keywords: ['ac ', 'ac deep', 'air conditioning', 'cooling'],
   },
   {
     id: 'appliance-repair',
@@ -96,7 +109,8 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.8,
     ratingCount: '(40.0K)',
     localImage: require('../../../assets/images/services/appliance_repair_thumb.png'),
-    keywords: ['appliance', 'washing', 'fridge', 'microwave', 'refrigerator', 'tv'],
+    defaultCategoryId: CATEGORY_IDS.ELECTRICIAN,
+    keywords: ['appliance', 'washing', 'fridge', 'refrigerator', 'microwave'],
   },
   {
     id: 'bathroom-cleaning',
@@ -105,7 +119,8 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.9,
     ratingCount: '(28.6K)',
     localImage: require('../../../assets/images/services/bathroom_cleaning_thumb.png'),
-    keywords: ['bath', 'toilet', 'washroom', 'sanitization', 'descale'],
+    defaultCategoryId: CATEGORY_IDS.CLEANING,
+    keywords: ['bathroom', 'descale', 'toilet', 'washroom'],
   },
   {
     id: 'pest-control',
@@ -114,7 +129,8 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.9,
     ratingCount: '(17.9K)',
     localImage: require('../../../assets/images/services/pest_control_thumb.png'),
-    keywords: ['pest', 'termite', 'cockroach', 'bug', 'mosquito', 'insect'],
+    defaultCategoryId: CATEGORY_IDS.CLEANING,
+    keywords: ['pest', 'termite', 'cockroach', 'mosquito', 'insect'],
   },
   {
     id: 'plumbing-service',
@@ -123,7 +139,8 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.8,
     ratingCount: '(11.9K)',
     localImage: require('../../../assets/images/services/plumbing_thumb.png'),
-    keywords: ['plumb', 'pipe', 'tap', 'leak', 'drain', 'basin', 'sink'],
+    defaultCategoryId: CATEGORY_IDS.MASSAGE_HANDYMAN,
+    keywords: ['plumbing', 'pipe', 'tap', 'leak', 'drain', 'sink'],
   },
   {
     id: 'painting',
@@ -132,6 +149,7 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.9,
     ratingCount: '(21.7K)',
     localImage: require('../../../assets/images/services/painting_thumb.png'),
+    defaultCategoryId: CATEGORY_IDS.CLEANING,
     keywords: ['paint', 'color', 'whitewash', 'wall'],
   },
   {
@@ -141,6 +159,7 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.8,
     ratingCount: '(15.6K)',
     localImage: require('../../../assets/images/services/electrician_thumb.png'),
+    defaultCategoryId: CATEGORY_IDS.ELECTRICIAN,
     keywords: ['electr', 'switch', 'socket', 'wire', 'fan'],
   },
   {
@@ -150,12 +169,13 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.8,
     ratingCount: '(11.9K)',
     localImage: require('../../../assets/images/services/carpentry_thumb.png'),
+    defaultCategoryId: CATEGORY_IDS.ELECTRICIAN,
     keywords: ['carpenter', 'wood', 'furniture', 'door', 'lock', 'drill'],
   },
 ];
 
 interface ExploreCardItem {
-  key?: string;
+  key: string;
   id: string;
   name: string;
   displayName: string;
@@ -168,85 +188,7 @@ interface ExploreCardItem {
   backendItem?: ExploreServiceItem;
 }
 
-/**
- * Service Grid Card:
- * - Star Rating: ⭐ 4.9 (48.3K) placed at top-left
- * - Middle: Centered service product image
- * - Bottom Row: Left title + Right circular blue-bordered plus (+) button
- */
-function ServiceGridCard({
-  item,
-  cardWidth,
-  index,
-  gap,
-  onPress,
-}: {
-  item: ExploreCardItem;
-  index: number;
-  gap: number;
-  cardWidth: number;
-  onPress: (item: ExploreCardItem) => void;
-}) {
-  const isRightmostCol = index % 3 === 2;
-
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.card,
-        {
-          width: cardWidth,
-          marginRight: isRightmostCol ? 0 : gap,
-          marginBottom: gap + 2,
-        },
-        pressed && styles.cardPressed,
-      ]}
-      onPress={() => onPress(item)}
-      accessibilityRole="button"
-      accessibilityLabel={`${item.name}, rating: ${item.rating}`}
-    >
-      {/* 1. Star Rating Row: ⭐ 4.9 (48.3K) at Top Left */}
-      <View style={styles.ratingRow}>
-        <Ionicons name="star" size={11} color="#F59E0B" />
-        <Text style={styles.ratingScore}>{item.rating}</Text>
-        <Text style={styles.ratingCount}>{item.ratingCount}</Text>
-      </View>
-
-      {/* 2. Centered Service Image */}
-      <View style={styles.imageContainer}>
-        {item.localImage ? (
-          <Image
-            source={item.localImage}
-            style={styles.cardImage}
-            contentFit="contain"
-            transition={100}
-          />
-        ) : item.imageUrl ? (
-          <Image
-            source={{ uri: item.imageUrl }}
-            style={styles.cardImage}
-            contentFit="contain"
-            transition={100}
-          />
-        ) : (
-          <View style={styles.imageFallback}>
-            <Ionicons name="sparkles" size={24} color="#0052FF" />
-          </View>
-        )}
-      </View>
-
-      {/* 3. Bottom Row: Service Title on Left + Circular (+) Button on Right */}
-      <View style={styles.bottomRow}>
-        <Text style={styles.serviceName} numberOfLines={2} ellipsizeMode="tail">
-          {item.displayName || item.name}
-        </Text>
-
-        <View style={styles.plusCircle}>
-          <Ionicons name="add" size={15} color="#0052FF" />
-        </View>
-      </View>
-    </Pressable>
-  );
-}
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function ExploreServicesGrid({
   services = [],
@@ -295,7 +237,7 @@ export function ExploreServicesGrid({
           imageUrl: backendMatch.imageUrl,
           localImage: curated.localImage,
           resolvedId: backendMatch.id,
-          resolvedCategoryId: backendMatch.categoryId,
+          resolvedCategoryId: backendMatch.categoryId || curated.defaultCategoryId,
           backendItem: backendMatch,
         };
       }
@@ -315,12 +257,20 @@ export function ExploreServicesGrid({
   }, [services, maxItems]);
 
   const handleCardPress = (item: ExploreCardItem) => {
+    // 1. HomeEase Verified links directly to the full category directory
+    if (item.id === 'homeease-verified') {
+      router.push('/(tabs)/categories');
+      return;
+    }
+
+    // 2. Custom parent handler
     if (onSelectService && item.backendItem) {
       onSelectService(item.backendItem);
       return;
     }
 
-    if (item.resolvedCategoryId) {
+    // 3. Category navigation with validated UUID
+    if (item.resolvedCategoryId && UUID_REGEX.test(item.resolvedCategoryId)) {
       router.push({
         pathname: '/category/[id]',
         params: { id: item.resolvedCategoryId, name: item.name },
@@ -328,14 +278,21 @@ export function ExploreServicesGrid({
       return;
     }
 
-    router.push({
-      pathname: '/service/[id]',
-      params: {
-        id: item.resolvedId,
-        name: item.name,
-        image: item.imageUrl,
-      },
-    });
+    // 4. Service details navigation ONLY if resolvedId is a valid backend UUID
+    if (UUID_REGEX.test(item.resolvedId)) {
+      router.push({
+        pathname: '/service/[id]',
+        params: {
+          id: item.resolvedId,
+          name: item.name,
+          image: item.imageUrl,
+        },
+      });
+      return;
+    }
+
+    // 5. Safe fallback to categories tab to avoid 400 Bad Request
+    router.push('/(tabs)/categories');
   };
 
   const handleViewAll = () => {
@@ -381,18 +338,70 @@ export function ExploreServicesGrid({
           )}
         </View>
       ) : (
-        /* 3-Column Grid from Live API Data with zero wrapping bug */
+        /* 3-Column Grid from Live API Data with direct inlined cards (prevents wrap-jsx unexported component crash) */
         <View style={styles.gridContainer}>
-          {displayItems.map((item, index) => (
-            <ServiceGridCard
-              key={item.key || `explore-card-${item.id}-${index}`}
-              item={item}
-              index={index}
-              gap={GAP}
-              cardWidth={cardWidth}
-              onPress={handleCardPress}
-            />
-          ))}
+          {displayItems.map((item, index) => {
+            const isRightmostCol = index % 3 === 2;
+
+            return (
+              <Pressable
+                key={item.key}
+                style={({ pressed }) => [
+                  styles.card,
+                  {
+                    width: cardWidth,
+                    marginRight: isRightmostCol ? 0 : GAP,
+                    marginBottom: GAP + 2,
+                  },
+                  pressed && styles.cardPressed,
+                ]}
+                onPress={() => handleCardPress(item)}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.name}, rating: ${item.rating}`}
+              >
+                {/* 1. Star Rating Row: ⭐ 4.9 (48.3K) at Top Left */}
+                <View style={styles.ratingRow}>
+                  <Ionicons name="star" size={11} color="#F59E0B" />
+                  <Text style={styles.ratingScore}>{item.rating}</Text>
+                  <Text style={styles.ratingCount}>{item.ratingCount}</Text>
+                </View>
+
+                {/* 2. Centered Service Image */}
+                <View style={styles.imageContainer}>
+                  {item.localImage ? (
+                    <Image
+                      source={item.localImage}
+                      style={styles.cardImage}
+                      contentFit="contain"
+                      transition={100}
+                    />
+                  ) : item.imageUrl ? (
+                    <Image
+                      source={{ uri: item.imageUrl }}
+                      style={styles.cardImage}
+                      contentFit="contain"
+                      transition={100}
+                    />
+                  ) : (
+                    <View style={styles.imageFallback}>
+                      <Ionicons name="sparkles" size={24} color="#0052FF" />
+                    </View>
+                  )}
+                </View>
+
+                {/* 3. Bottom Row: Service Title on Left + Circular (+) Button on Right */}
+                <View style={styles.bottomRow}>
+                  <Text style={styles.serviceName} numberOfLines={2} ellipsizeMode="tail">
+                    {item.displayName || item.name}
+                  </Text>
+
+                  <View style={styles.plusCircle}>
+                    <Ionicons name="add" size={15} color="#0052FF" />
+                  </View>
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
       )}
     </View>
