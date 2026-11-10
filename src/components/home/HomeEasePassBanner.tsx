@@ -13,7 +13,7 @@ export function HomeEasePassBanner({ onPress }: HomeEasePassBannerProps) {
   const [activeDot, setActiveDot] = useState(0);
 
   const handleBannerPress = () => {
-    setActiveDot((prev) => (prev + 1) % 4);
+    setActiveDot((prev) => (prev + 1) % 3);
     if (onPress) {
       onPress();
     } else {
@@ -44,9 +44,10 @@ export function HomeEasePassBanner({ onPress }: HomeEasePassBannerProps) {
               <Text style={styles.pillText}>HomeEase Pass</Text>
             </View>
 
-            {/* Bold Headline */}
+            {/* Bold Headline with "Three Visits FREE" highlighted in golden yellow */}
             <Text style={styles.headline}>
-              {'Buy One Pass\nThree Visits FREE'}
+              Buy One Pass{'\n'}
+              <Text style={styles.headlineHighlight}>Three Visits FREE</Text>
             </Text>
           </View>
 
@@ -62,12 +63,11 @@ export function HomeEasePassBanner({ onPress }: HomeEasePassBannerProps) {
         </LinearGradient>
       </Pressable>
 
-      {/* 2. Four Circular/Oval Pagination Dots */}
+      {/* 2. Three Circular/Oval Pagination Dots */}
       <View style={styles.paginationRow}>
         <View style={[styles.dot, activeDot === 0 && styles.activeDot]} />
         <View style={[styles.dot, activeDot === 1 && styles.activeDot]} />
         <View style={[styles.dot, activeDot === 2 && styles.activeDot]} />
-        <View style={[styles.dot, activeDot === 3 && styles.activeDot]} />
       </View>
     </View>
   );
@@ -76,7 +76,7 @@ export function HomeEasePassBanner({ onPress }: HomeEasePassBannerProps) {
 const styles = StyleSheet.create({
   wrapper: {
     marginHorizontal: 16,
-    marginTop: 14,
+    marginTop: 12,
   },
   bannerPressable: {
     borderRadius: 20,
@@ -128,6 +128,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
     letterSpacing: -0.3,
   },
+  headlineHighlight: {
+    color: '#FACC15', // Vibrant golden yellow matching master design
+  },
   rightGraphicsCol: {
     width: 148,
     height: 98,
@@ -147,14 +150,14 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#CBD5E1',
   },
   activeDot: {
     width: 18,
-    borderRadius: 3.5,
+    borderRadius: 3,
     backgroundColor: '#0052FF',
   },
 });

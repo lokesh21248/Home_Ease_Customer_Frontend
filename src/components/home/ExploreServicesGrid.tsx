@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -30,15 +30,19 @@ interface CuratedHomeService {
   displayName: string;
   rating: number;
   ratingCount: string;
-  price?: number;
-  originalPrice?: number;
-  imageUrl?: string;
-  localImage?: any;
+  localImage: any;
   defaultCategoryId?: string;
   keywords: string[];
 }
 
-// Curated fallbacks in case of network drop or offline mode
+/**
+ * Curated 12 Master Services matching HomeEase visual design.
+ * Order 1-9 matches the master 3x3 grid screenshot:
+ *  Row 1: Daily Home Cleaning, HomeEase Verified, Cooking
+ *  Row 2: Sofa & Carpet Cleaning, AC Service & Repair, Appliance Repair
+ *  Row 3: Bathroom Cleaning, Pest Control, Plumbing Service
+ *  Row 4 (view all / full list): Painting, Electrician Service, Carpentry Service
+ */
 export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
   {
     id: 'daily-home-cleaning',
@@ -47,7 +51,7 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.9,
     ratingCount: '(48.3K)',
     localImage: require('../../../assets/images/services/daily_cleaning_thumb.png'),
-    keywords: ['clean', 'daily', 'maid', 'home cleaning'],
+    keywords: ['clean', 'daily', 'maid', 'home cleaning', 'housekeeping'],
   },
   {
     id: 'homeease-verified',
@@ -56,7 +60,7 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.9,
     ratingCount: '(79.0K)',
     localImage: require('../../../assets/images/services/verified_worker_thumb.png'),
-    keywords: ['verified', 'partner', 'pro'],
+    keywords: ['verified', 'partner', 'pro', 'expert'],
   },
   {
     id: 'cooking',
@@ -64,10 +68,8 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     displayName: 'Cooking',
     rating: 4.9,
     ratingCount: '(79.0K)',
-    price: 49,
-    originalPrice: 99,
     localImage: require('../../../assets/images/services/cooking_thumb.png'),
-    keywords: ['cook', 'chef', 'food', 'kitchen'],
+    keywords: ['cook', 'chef', 'food', 'kitchen', 'meal'],
   },
   {
     id: 'sofa-carpet-cleaning',
@@ -76,7 +78,7 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.8,
     ratingCount: '(32.1K)',
     localImage: require('../../../assets/images/services/sofa_carpet_thumb.png'),
-    keywords: ['sofa', 'carpet', 'couch', 'upholstery'],
+    keywords: ['sofa', 'carpet', 'couch', 'upholstery', 'mat'],
   },
   {
     id: 'ac-service-repair',
@@ -85,7 +87,7 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.9,
     ratingCount: '(52.4K)',
     localImage: require('../../../assets/images/services/ac_repair_thumb.png'),
-    keywords: ['ac', 'air', 'cooling', 'hvac'],
+    keywords: ['ac', 'air', 'cooling', 'hvac', 'conditioner'],
   },
   {
     id: 'appliance-repair',
@@ -94,7 +96,7 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.8,
     ratingCount: '(40.0K)',
     localImage: require('../../../assets/images/services/appliance_repair_thumb.png'),
-    keywords: ['appliance', 'washing', 'fridge', 'microwave'],
+    keywords: ['appliance', 'washing', 'fridge', 'microwave', 'refrigerator', 'tv'],
   },
   {
     id: 'bathroom-cleaning',
@@ -103,7 +105,34 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.9,
     ratingCount: '(28.6K)',
     localImage: require('../../../assets/images/services/bathroom_cleaning_thumb.png'),
-    keywords: ['bath', 'toilet', 'washroom'],
+    keywords: ['bath', 'toilet', 'washroom', 'sanitization', 'descale'],
+  },
+  {
+    id: 'pest-control',
+    name: 'Pest Control',
+    displayName: 'Pest\nControl',
+    rating: 4.9,
+    ratingCount: '(17.9K)',
+    localImage: require('../../../assets/images/services/pest_control_thumb.png'),
+    keywords: ['pest', 'termite', 'cockroach', 'bug', 'mosquito', 'insect'],
+  },
+  {
+    id: 'plumbing-service',
+    name: 'Plumbing Service',
+    displayName: 'Plumbing\nService',
+    rating: 4.8,
+    ratingCount: '(11.9K)',
+    localImage: require('../../../assets/images/services/plumbing_thumb.png'),
+    keywords: ['plumb', 'pipe', 'tap', 'leak', 'drain', 'basin', 'sink'],
+  },
+  {
+    id: 'painting',
+    name: 'Painting (Home/Office)',
+    displayName: 'Painting\n(Home/Office)',
+    rating: 4.9,
+    ratingCount: '(21.7K)',
+    localImage: require('../../../assets/images/services/painting_thumb.png'),
+    keywords: ['paint', 'color', 'whitewash', 'wall'],
   },
   {
     id: 'electrician-service',
@@ -115,13 +144,13 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     keywords: ['electr', 'switch', 'socket', 'wire', 'fan'],
   },
   {
-    id: 'plumbing-service',
-    name: 'Plumbing Service',
-    displayName: 'Plumbing\nService',
-    rating: 4.9,
-    ratingCount: '(12.3K)',
-    localImage: require('../../../assets/images/services/plumbing_thumb.png'),
-    keywords: ['plumb', 'pipe', 'tap', 'leak', 'drain'],
+    id: 'carpentry-service',
+    name: 'Carpentry Service',
+    displayName: 'Carpentry\nService',
+    rating: 4.8,
+    ratingCount: '(11.9K)',
+    localImage: require('../../../assets/images/services/carpentry_thumb.png'),
+    keywords: ['carpenter', 'wood', 'furniture', 'door', 'lock', 'drill'],
   },
 ];
 
@@ -131,8 +160,6 @@ interface ExploreCardItem {
   displayName: string;
   rating: number;
   ratingCount: string;
-  price?: number;
-  originalPrice?: number;
   imageUrl?: string;
   localImage?: any;
   resolvedId: string;
@@ -140,7 +167,12 @@ interface ExploreCardItem {
   backendItem?: ExploreServiceItem;
 }
 
-// Subcomponent for each service card with explicit column margin & locked height
+/**
+ * Service Grid Card:
+ * - Star Rating: ⭐ 4.9 (48.3K) placed at top-left
+ * - Middle: Centered service product image
+ * - Bottom Row: Left title + Right circular blue-bordered plus (+) button
+ */
 function ServiceGridCard({
   item,
   cardWidth,
@@ -149,18 +181,11 @@ function ServiceGridCard({
   onPress,
 }: {
   item: ExploreCardItem;
-  cardWidth: number;
   index: number;
   gap: number;
+  cardWidth: number;
   onPress: (item: ExploreCardItem) => void;
 }) {
-  const [imageFailed, setImageFailed] = useState(false);
-
-  const hasDiscount =
-    item.originalPrice != null &&
-    item.price != null &&
-    Number(item.originalPrice) > Number(item.price);
-
   const isRightmostCol = index % 3 === 2;
 
   return (
@@ -178,64 +203,46 @@ function ServiceGridCard({
       accessibilityRole="button"
       accessibilityLabel={`${item.name}, rating: ${item.rating}`}
     >
-      {/* 1. Star Rating Row: ⭐ 4.9 (142) */}
+      {/* 1. Star Rating Row: ⭐ 4.9 (48.3K) at Top Left */}
       <View style={styles.ratingRow}>
-        <Ionicons name="star" size={10} color="#F59E0B" />
-        <Text style={styles.ratingText} numberOfLines={1}>
-          {item.rating}{' '}
-          <Text style={styles.ratingCountText}>{item.ratingCount}</Text>
-        </Text>
+        <Ionicons name="star" size={11} color="#F59E0B" />
+        <Text style={styles.ratingScore}>{item.rating}</Text>
+        <Text style={styles.ratingCount}>{item.ratingCount}</Text>
       </View>
 
-      {/* 2. Image with Circular Plus Button */}
+      {/* 2. Centered Service Image */}
       <View style={styles.imageContainer}>
-        {item.imageUrl && !imageFailed ? (
-          <Image
-            source={{ uri: item.imageUrl }}
-            style={styles.cardImageCover}
-            contentFit="cover"
-            transition={150}
-            onError={() => setImageFailed(true)}
-          />
-        ) : item.localImage ? (
+        {item.localImage ? (
           <Image
             source={item.localImage}
             style={styles.cardImage}
             contentFit="contain"
-            transition={120}
+            transition={100}
+          />
+        ) : item.imageUrl ? (
+          <Image
+            source={{ uri: item.imageUrl }}
+            style={styles.cardImage}
+            contentFit="contain"
+            transition={100}
           />
         ) : (
           <View style={styles.imageFallback}>
             <Ionicons name="sparkles" size={24} color="#0052FF" />
           </View>
         )}
-
-        {/* Circular White Plus Button with Blue Icon */}
-        <View style={styles.plusButton}>
-          <Ionicons name="add" size={13} color="#0052FF" />
-        </View>
       </View>
 
-      {/* 3. Service Name (Locked 2 lines height prevents row jitter) */}
-      <Text style={styles.serviceName} numberOfLines={2} ellipsizeMode="tail">
-        {item.displayName || item.name}
-      </Text>
+      {/* 3. Bottom Row: Service Title on Left + Circular (+) Button on Right */}
+      <View style={styles.bottomRow}>
+        <Text style={styles.serviceName} numberOfLines={2} ellipsizeMode="tail">
+          {item.displayName || item.name}
+        </Text>
 
-      {/* 4. Price Row with original price strikethrough if discounted */}
-      {item.price != null ? (
-        <View style={styles.priceRow}>
-          <Text style={styles.currentPriceText} numberOfLines={1}>
-            ₹{Number(item.price).toLocaleString('en-IN')}
-          </Text>
-          {hasDiscount && (
-            <Text style={styles.originalPriceText} numberOfLines={1}>
-              ₹{Number(item.originalPrice).toLocaleString('en-IN')}
-            </Text>
-          )}
+        <View style={styles.plusCircle}>
+          <Ionicons name="add" size={15} color="#0052FF" />
         </View>
-      ) : (
-        <View style={styles.priceRowPlaceholder} />
-      )}
+      </View>
     </Pressable>
   );
 }
@@ -255,48 +262,49 @@ export function ExploreServicesGrid({
   const GAP = 10;
   const cardWidth = Math.floor((screenWidth - 32 - (2 * GAP)) / 3);
 
-  // Directly map live API data from backend /explore-services endpoint
+  // Directly map live API data from backend /explore-services endpoint while maintaining exact master visual order
   const displayItems = useMemo<ExploreCardItem[]>(() => {
-    if (services && services.length > 0) {
-      return services.slice(0, maxItems).map((s) => {
-        // Look up local fallback thumbnail if available
+    return MASTER_FALLBACK_SERVICES.slice(0, maxItems).map((curated) => {
+      // Find matching backend item if live data exists
+      const backendMatch = services.find((s) => {
         const sName = (s.name || '').toLowerCase();
-        const fallback = MASTER_FALLBACK_SERVICES.find((f) =>
-          f.keywords.some((k) => sName.includes(k))
-        );
+        return curated.keywords.some((k) => sName.includes(k));
+      });
 
-        const revCount = s.reviewCount ?? 0;
+      if (backendMatch) {
+        const revCount = backendMatch.reviewCount ?? 0;
         const formattedRevCount =
           revCount > 999
             ? `(${(revCount / 1000).toFixed(1)}K)`
             : revCount > 0
             ? `(${revCount})`
-            : fallback?.ratingCount || '(50+)';
+            : curated.ratingCount;
 
         return {
-          id: s.id,
-          name: s.name,
-          displayName: s.name,
-          rating: s.rating != null ? Number(s.rating) : fallback?.rating ?? 4.9,
+          id: backendMatch.id,
+          name: backendMatch.name,
+          displayName: curated.displayName,
+          rating: backendMatch.rating != null ? Number(backendMatch.rating) : curated.rating,
           ratingCount: formattedRevCount,
-          price: s.price != null ? Number(s.price) : fallback?.price,
-          originalPrice:
-            s.originalPrice != null ? Number(s.originalPrice) : fallback?.originalPrice,
-          imageUrl: s.imageUrl,
-          localImage: fallback?.localImage,
-          resolvedId: s.id,
-          resolvedCategoryId: s.categoryId,
-          backendItem: s,
+          imageUrl: backendMatch.imageUrl,
+          localImage: curated.localImage,
+          resolvedId: backendMatch.id,
+          resolvedCategoryId: backendMatch.categoryId,
+          backendItem: backendMatch,
         };
-      });
-    }
+      }
 
-    // Fallback when API returns empty (offline or initial loading)
-    return MASTER_FALLBACK_SERVICES.slice(0, maxItems).map((curated) => ({
-      ...curated,
-      resolvedId: curated.id,
-      resolvedCategoryId: curated.defaultCategoryId,
-    }));
+      return {
+        id: curated.id,
+        name: curated.name,
+        displayName: curated.displayName,
+        rating: curated.rating,
+        ratingCount: curated.ratingCount,
+        localImage: curated.localImage,
+        resolvedId: curated.id,
+        resolvedCategoryId: curated.defaultCategoryId,
+      };
+    });
   }, [services, maxItems]);
 
   const handleCardPress = (item: ExploreCardItem) => {
@@ -319,7 +327,6 @@ export function ExploreServicesGrid({
         id: item.resolvedId,
         name: item.name,
         image: item.imageUrl,
-        price: item.price ? String(item.price) : undefined,
       },
     });
   };
@@ -334,9 +341,13 @@ export function ExploreServicesGrid({
 
   return (
     <View style={styles.container}>
-      {/* Header row: Explore Services (bold navy) + View All → button (linking to Categories) */}
+      {/* Header row: Left Blue Bar + "Explore Services" + Right "View All →" */}
       <View style={styles.headerRow}>
-        <Text style={styles.sectionTitle}>Explore Services</Text>
+        <View style={styles.headerTitleRow}>
+          <View style={styles.titleAccentBar} />
+          <Text style={styles.sectionTitle}>Explore Services</Text>
+        </View>
+
         <Pressable
           onPress={handleViewAll}
           hitSlop={8}
@@ -393,10 +404,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 12,
   },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  titleAccentBar: {
+    width: 3.5,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: '#0052FF',
+    marginRight: 8,
+  },
   sectionTitle: {
     fontSize: 18.5,
     fontWeight: '800',
-    color: '#0F172A', // Bold navy
+    color: '#0F172A',
     letterSpacing: -0.3,
   },
   viewAllText: {
@@ -411,18 +433,19 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#EEF2F6',
-    paddingVertical: 8,
-    paddingHorizontal: 7,
-    minHeight: 154,
+    paddingTop: 8,
+    paddingBottom: 10,
+    paddingHorizontal: 8,
+    minHeight: 148,
     justifyContent: 'space-between',
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1.5,
+    shadowRadius: 5,
+    elevation: 2,
   },
   cardPressed: {
     opacity: 0.92,
@@ -433,89 +456,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
     height: 16,
-    marginBottom: 2,
   },
-  ratingText: {
-    fontSize: 10,
+  ratingScore: {
+    fontSize: 10.5,
     fontWeight: '700',
-    color: '#1F2937',
+    color: '#111827',
   },
-  ratingCountText: {
-    fontSize: 9,
+  ratingCount: {
+    fontSize: 9.5,
     fontWeight: '500',
     color: '#64748B',
   },
   imageContainer: {
-    height: 62,
+    height: 64,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
-    marginVertical: 2,
-  },
-  cardImageCover: {
-    width: '100%',
-    height: 58,
-    borderRadius: 10,
+    marginVertical: 4,
   },
   cardImage: {
-    width: 52,
-    height: 52,
+    width: 58,
+    height: 58,
   },
   imageFallback: {
-    width: '100%',
+    width: 58,
     height: 58,
     borderRadius: 10,
     backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  plusButton: {
-    position: 'absolute',
-    right: 0,
-    bottom: -1,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+  bottomRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.14,
-    shadowRadius: 2,
-    elevation: 2,
+    justifyContent: 'space-between',
+    minHeight: 32,
+    marginTop: 2,
   },
   serviceName: {
+    flex: 1,
     fontSize: 11.5,
     fontWeight: '700',
-    color: '#0F172A', // Bold navy
-    lineHeight: 16,
-    height: 32,
-    marginTop: 2,
-    textAlign: 'left',
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-    height: 18,
-    marginTop: 2,
-  },
-  priceRowPlaceholder: {
-    height: 18,
-  },
-  currentPriceText: {
-    fontSize: 12,
-    fontWeight: '800',
     color: '#0F172A',
+    lineHeight: 15,
+    paddingRight: 4,
   },
-  originalPriceText: {
-    fontSize: 10,
-    color: '#94A3B8',
-    textDecorationLine: 'line-through',
+  plusCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#3B82F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0052FF',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
   },
   loadingContainer: {
     paddingVertical: 28,

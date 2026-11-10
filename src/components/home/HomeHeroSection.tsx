@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -28,6 +28,7 @@ export function HomeHeroSection({
 }: HomeHeroSectionProps) {
   const insets = useSafeAreaInsets();
   const { address } = useUserLocation();
+  const [activeActionDot, setActiveActionDot] = useState(0);
 
   // Dynamic address with fallback matching master design
   const areaTitle = address?.area || address?.city || 'Sector 55';
@@ -48,6 +49,7 @@ export function HomeHeroSection({
   };
 
   const handleInstant = () => {
+    setActiveActionDot(0);
     if (onInstantBookPress) onInstantBookPress();
     else {
       router.push({
@@ -58,6 +60,7 @@ export function HomeHeroSection({
   };
 
   const handleSchedule = () => {
+    setActiveActionDot(1);
     if (onSchedulePress) onSchedulePress();
     else {
       router.push({
@@ -69,10 +72,10 @@ export function HomeHeroSection({
 
   return (
     <LinearGradient
-      colors={['#074BD4', '#004ECC', '#005CE6', '#0172F5']}
+      colors={['#004BE4', '#005CE6', '#0172F5']}
       start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={[styles.container, { paddingTop: Math.max(insets.top, 24) + 12 }]}
+      end={{ x: 0.8, y: 1 }}
+      style={[styles.container, { paddingTop: Math.max(insets.top, 24) + 10 }]}
     >
       {/* 1. Top Location & Action Bar */}
       <View style={styles.topBar}>
@@ -123,14 +126,17 @@ export function HomeHeroSection({
             </View>
           </Pressable>
 
-          {/* Notification Bell Button */}
+          {/* Notification Bell Button with Red Badge 1 */}
           <Pressable
             style={styles.bellButton}
             onPress={handleNotification}
             accessibilityRole="button"
-            accessibilityLabel="Notifications"
+            accessibilityLabel="Notifications (1 new)"
           >
             <Bell size={20} color="#FFFFFF" strokeWidth={2.2} />
+            <View style={styles.bellBadge}>
+              <Text style={styles.bellBadgeText}>1</Text>
+            </View>
           </Pressable>
         </View>
       </View>
@@ -140,14 +146,21 @@ export function HomeHeroSection({
         <View style={styles.heroTextCol}>
           {/* HomeEase Brand Row */}
           <View style={styles.brandRow}>
-            <Ionicons name="home" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Ionicons name="home" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
             <Text style={styles.brandName}>HomeEase</Text>
           </View>
 
-          {/* Main 3-line Headline */}
-          <Text style={styles.heroHeading}>
-            {'One professional,\n16+ home cleaning\nservices'}
-          </Text>
+          {/* Main 3-line Headline with 16+ highlighted in golden yellow */}
+          <View style={styles.headlineWrapper}>
+            <Text style={styles.heroHeading}>
+              One professional,{'\n'}
+              <Text style={styles.heroHighlight}>16+</Text> home cleaning{'\n'}
+              services
+            </Text>
+
+            {/* Stylized Golden Curved Accent Swoosh under services */}
+            <View style={styles.swooshArc} />
+          </View>
         </View>
 
         {/* Hero Cleaning Character Illustration */}
@@ -170,17 +183,27 @@ export function HomeHeroSection({
           accessibilityRole="button"
           accessibilityLabel="Book Instant Service in 10 mins"
         >
-          <View style={styles.cardHeaderRow}>
+          <View style={styles.cardLeftCol}>
+            <Zap size={28} color="#0052FF" strokeWidth={2.2} style={styles.cardHeaderIcon} />
             <Text style={styles.cardTitle}>
               {'Book Instant\nService'}
             </Text>
-            <Zap size={32} color="#0284C7" strokeWidth={1.8} style={styles.cardIcon} />
+            {/* ⚡ 10 mins Pill */}
+            <View style={styles.instantPill}>
+              <Text style={styles.instantLightning}>⚡</Text>
+              <Text style={styles.instantPillText}>10 mins</Text>
+            </View>
           </View>
 
-          {/* ⚡ 10 mins Pill */}
-          <View style={styles.instantPill}>
-            <Text style={styles.instantLightning}>⚡</Text>
-            <Text style={styles.instantPillText}>10 mins</Text>
+          {/* Right 3D Stopwatch Graphic with "10 mins" */}
+          <View style={styles.stopwatchGraphic}>
+            <View style={styles.stopwatchRing}>
+              <View style={styles.stopwatchPlunger} />
+              <View style={styles.stopwatchDial}>
+                <Text style={styles.stopwatchTimeText}>10</Text>
+                <Text style={styles.stopwatchSubText}>mins</Text>
+              </View>
+            </View>
           </View>
         </Pressable>
 
@@ -191,18 +214,39 @@ export function HomeHeroSection({
           accessibilityRole="button"
           accessibilityLabel="Schedule for Later today at 2 pm"
         >
-          <View style={styles.cardHeaderRow}>
+          <View style={styles.cardLeftCol}>
+            <Calendar size={28} color="#0052FF" strokeWidth={2.2} style={styles.cardHeaderIcon} />
             <Text style={styles.cardTitle}>
               {'Schedule for\nLater'}
             </Text>
-            <Calendar size={32} color="#2563EB" strokeWidth={1.8} style={styles.cardIcon} />
+            {/* Today, 2 pm Pill */}
+            <View style={styles.schedulePill}>
+              <Text style={styles.schedulePillText}>Today, 2 pm</Text>
+            </View>
           </View>
 
-          {/* Today, 2 pm Pill */}
-          <View style={styles.schedulePill}>
-            <Text style={styles.schedulePillText}>Today, 2 pm</Text>
+          {/* Right 3D Calendar + Clock Graphic */}
+          <View style={styles.calendarGraphic}>
+            <View style={styles.calendarSheet}>
+              <View style={styles.calendarTopBar} />
+              <View style={styles.calendarGrid}>
+                <View style={styles.calendarDot} />
+                <View style={styles.calendarDot} />
+                <View style={styles.calendarDot} />
+              </View>
+            </View>
+            <View style={styles.calendarClock}>
+              <Ionicons name="time-outline" size={18} color="#0052FF" />
+            </View>
           </View>
         </Pressable>
+      </View>
+
+      {/* 4. Action Cards 3 Pagination Dots */}
+      <View style={styles.actionPaginationRow}>
+        <View style={[styles.actionDot, activeActionDot === 0 && styles.actionActiveDot]} />
+        <View style={[styles.actionDot, activeActionDot === 1 && styles.actionActiveDot]} />
+        <View style={[styles.actionDot, activeActionDot === 2 && styles.actionActiveDot]} />
       </View>
     </LinearGradient>
   );
@@ -210,7 +254,7 @@ export function HomeHeroSection({
 
 const styles = StyleSheet.create({
   container: {
-    paddingBottom: 20,
+    paddingBottom: 14,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
   },
@@ -219,7 +263,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   locationContainer: {
     flexDirection: 'row',
@@ -245,7 +289,7 @@ const styles = StyleSheet.create({
   },
   locationSub: {
     fontSize: 11.5,
-    color: 'rgba(255, 255, 255, 0.85)',
+    color: 'rgba(255, 255, 255, 0.88)',
     fontWeight: '500',
     marginTop: 1,
   },
@@ -334,20 +378,39 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 3,
+    right: 3,
+    backgroundColor: '#EF4444',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.2,
+    borderColor: '#004BE4',
+  },
+  bellBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 8.5,
+    fontWeight: '800',
   },
   heroContentRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingTop: 6,
+    paddingBottom: 4,
     position: 'relative',
-    minHeight: 142,
+    minHeight: 146,
   },
   heroTextCol: {
     flex: 1,
-    paddingRight: 140,
+    paddingRight: 135,
     zIndex: 2,
   },
   brandRow: {
@@ -356,24 +419,38 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   brandName: {
-    fontSize: 15.5,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: -0.2,
   },
+  headlineWrapper: {
+    position: 'relative',
+  },
   heroHeading: {
-    fontSize: 23,
+    fontSize: 22.5,
     fontWeight: '800',
     color: '#FFFFFF',
-    lineHeight: 29,
+    lineHeight: 28.5,
     letterSpacing: -0.4,
+  },
+  heroHighlight: {
+    color: '#FACC15', // Vibrant golden yellow
+    fontWeight: '900',
+  },
+  swooshArc: {
+    marginTop: 4,
+    width: 82,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#FACC15', // Golden yellow swoop under services
   },
   heroImageWrapper: {
     position: 'absolute',
-    right: 6,
+    right: 4,
     top: -12,
-    width: 175,
-    height: 155,
+    width: 178,
+    height: 156,
     zIndex: 1,
   },
   heroImage: {
@@ -384,14 +461,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 16,
     gap: 12,
-    marginTop: 6,
+    marginTop: 8,
   },
   quickCard: {
     flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 13,
-    minHeight: 96,
+    padding: 12,
+    minHeight: 104,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
     elevation: 3,
     shadowColor: '#000000',
@@ -400,27 +479,26 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
   },
   cardPressed: {
-    opacity: 0.9,
+    opacity: 0.92,
     transform: [{ scale: 0.98 }],
   },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+  cardLeftCol: {
+    flex: 1,
     justifyContent: 'space-between',
+    paddingRight: 4,
+  },
+  cardHeaderIcon: {
+    marginBottom: 4,
   },
   cardTitle: {
-    fontSize: 14.5,
+    fontSize: 13.5,
     fontWeight: '800',
     color: '#0F172A',
-    lineHeight: 18.5,
+    lineHeight: 17,
     letterSpacing: -0.2,
   },
-  cardIcon: {
-    marginTop: -2,
-    marginRight: -2,
-  },
   instantPill: {
-    backgroundColor: '#E0F2FE',
+    backgroundColor: '#EFF6FF',
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 3.5,
@@ -428,27 +506,131 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 4,
-    marginTop: 8,
+    marginTop: 6,
   },
   instantLightning: {
-    fontSize: 11,
+    fontSize: 10.5,
   },
   instantPillText: {
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: '800',
-    color: '#0284C7',
+    color: '#0052FF',
   },
   schedulePill: {
-    backgroundColor: '#E0F2FE',
+    backgroundColor: '#EFF6FF',
     borderRadius: 12,
-    paddingHorizontal: 9,
+    paddingHorizontal: 8,
     paddingVertical: 3.5,
     alignSelf: 'flex-start',
-    marginTop: 8,
+    marginTop: 6,
   },
   schedulePillText: {
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: '800',
-    color: '#0284C7',
+    color: '#0052FF',
+  },
+  stopwatchGraphic: {
+    width: 46,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stopwatchRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 2.5,
+    borderColor: '#0052FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  stopwatchPlunger: {
+    position: 'absolute',
+    top: -5,
+    width: 8,
+    height: 4,
+    backgroundColor: '#0052FF',
+    borderRadius: 2,
+  },
+  stopwatchDial: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stopwatchTimeText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#0F172A',
+    lineHeight: 13,
+  },
+  stopwatchSubText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#0052FF',
+    lineHeight: 9,
+  },
+  calendarGraphic: {
+    width: 48,
+    height: 48,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarSheet: {
+    width: 40,
+    height: 38,
+    borderRadius: 6,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#0052FF',
+    overflow: 'hidden',
+  },
+  calendarTopBar: {
+    height: 8,
+    backgroundColor: '#0052FF',
+    width: '100%',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 6,
+    paddingHorizontal: 4,
+  },
+  calendarDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#94A3B8',
+  },
+  calendarClock: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#0052FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionPaginationRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
+  actionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.45)',
+  },
+  actionActiveDot: {
+    width: 16,
+    backgroundColor: '#FFFFFF',
   },
 });

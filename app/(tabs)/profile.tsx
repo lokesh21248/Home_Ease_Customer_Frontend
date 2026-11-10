@@ -50,7 +50,7 @@ function MenuItem({ iconName, IconComponent, label, desc, onPress, hideChevron }
         <Text style={styles.menuLabel} numberOfLines={1}>{label}</Text>
         {desc ? <Text style={styles.menuDesc} numberOfLines={1}>{desc}</Text> : null}
       </View>
-      {!hideChevron && <Feather name="chevron-right" size={18} color="#9CA3AF" />}
+      {!hideChevron && <Feather name="chevron-right" size={18} color="#94A3B8" />}
     </Pressable>
   );
 }
@@ -94,12 +94,12 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: bottomScrollPadding }}
       >
-        {/* ─── Blue Header ─── */}
+        {/* ─── Blue Header Section ─── */}
         <View style={[styles.headerContainer, { paddingTop: headerTopPadding }]}>
           <View style={styles.headerRow}>
             {/* Avatar */}
             <View style={styles.avatar}>
-              <Ionicons name="person-outline" size={34} color={PRIMARY_BLUE} />
+              <Ionicons name="person-outline" size={32} color={PRIMARY_BLUE} />
             </View>
 
             {/* User Info */}
@@ -131,7 +131,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* ─── Stats Card (Smooth Overlap) ─── */}
+        {/* ─── Quick Stats Card (3 Equal Columns with Zero Overlap Glitch) ─── */}
         <View style={styles.statsCardWrapper}>
           <View style={styles.statsCard}>
             <Pressable
@@ -169,21 +169,6 @@ export default function ProfileScreen() {
               <Ionicons name="location-outline" size={22} color="#10B981" />
               <Text style={styles.statValue}>{addressCount}</Text>
               <Text style={styles.statLabel}>Addresses</Text>
-            </Pressable>
-
-            <View style={styles.statDivider} />
-
-            <Pressable
-              style={styles.statItem}
-              onPress={() => router.push('/profile/wallet')}
-              accessibilityRole="button"
-              accessibilityLabel={`Wallet Balance: ₹${balance}`}
-            >
-              <Ionicons name="wallet-outline" size={22} color="#F59E0B" />
-              <Text style={[styles.statValue, { color: PRIMARY_BLUE }]}>
-                ₹{balance.toLocaleString('en-IN')}
-              </Text>
-              <Text style={styles.statLabel}>Wallet</Text>
             </Pressable>
           </View>
         </View>
@@ -338,9 +323,9 @@ const styles = StyleSheet.create({
   headerContainer: {
     backgroundColor: PRIMARY_BLUE,
     paddingHorizontal: LayoutConstants.HORIZONTAL_PADDING,
-    paddingBottom: 36,
-    borderBottomLeftRadius: LayoutConstants.HEADER_BORDER_RADIUS + 4,
-    borderBottomRightRadius: LayoutConstants.HEADER_BORDER_RADIUS + 4,
+    paddingBottom: 22,
+    borderBottomLeftRadius: LayoutConstants.HEADER_BORDER_RADIUS,
+    borderBottomRightRadius: LayoutConstants.HEADER_BORDER_RADIUS,
   },
   headerRow: {
     flexDirection: 'row',
@@ -382,23 +367,22 @@ const styles = StyleSheet.create({
   },
   editButton: {
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderColor: 'rgba(255, 255, 255, 0.45)',
     borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
   },
   editButtonText: {
     fontFamily: Typography.fontFamily.semiBold,
-    fontSize: 12,
+    fontSize: 12.5,
     color: '#FFFFFF',
   },
 
   // ─── Stats Card ───
   statsCardWrapper: {
     paddingHorizontal: LayoutConstants.HORIZONTAL_PADDING,
-    marginTop: -22,
-    zIndex: 10,
+    marginTop: 14,
   },
   statsCard: {
     flexDirection: 'row',
@@ -413,18 +397,18 @@ const styles = StyleSheet.create({
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
       },
       android: {
-        elevation: 3,
+        elevation: 2,
       },
       default: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
       },
     }),
   },
@@ -436,27 +420,27 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontFamily: Typography.fontFamily.bold,
-    fontSize: 15,
+    fontSize: 16,
     color: '#111827',
     marginTop: 6,
     marginBottom: 2,
   },
   statLabel: {
     fontFamily: Typography.fontFamily.medium,
-    fontSize: 10.5,
+    fontSize: 11,
     color: '#6B7280',
     textAlign: 'center',
   },
   statDivider: {
     width: 1,
-    height: 36,
-    backgroundColor: '#F3F4F6',
+    height: 32,
+    backgroundColor: '#F1F5F9',
   },
 
   // ─── Profile Wallet Card ───
   walletCardWrapper: {
     paddingHorizontal: LayoutConstants.HORIZONTAL_PADDING,
-    marginTop: 14,
+    marginTop: 12,
   },
   profileWalletCard: {
     flexDirection: 'row',
