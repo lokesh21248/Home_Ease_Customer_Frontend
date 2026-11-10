@@ -47,45 +47,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           AsyncStorage.getItem(STORAGE_KEYS.USER_DATA),
         ]);
 
-        // Real seeded user in Spring Boot backend database
-        const BACKEND_USER_ID = '1270d52d-9f4e-4399-9a80-15cab07f1763';
-        const BACKEND_TOKEN = '1270d52d-9f4e-4399-9a80-15cab07f1763';
-
-        // Direct Login: Auto-provision real backend customer session or migrate from old dummy ID
-        if (!token || !userId || userId === 'd0b89110-3fc7-4590-b18d-f5bf43242001') {
-          token = BACKEND_TOKEN;
-          userId = BACKEND_USER_ID;
-          const defaultUser: UserProfile = {
-            userId: BACKEND_USER_ID,
-            fullName: 'Rahul Sharma',
-            phoneNumber: '+919876543210',
-            email: 'rahul.sharma@example.com',
-            role: 'CUSTOMER',
-            createdAt: new Date().toISOString(),
-          };
-          await Promise.all([
-            AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token),
-            AsyncStorage.setItem(STORAGE_KEYS.USER_ID, userId),
-            AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(defaultUser)),
-          ]);
-          userDataRaw = JSON.stringify(defaultUser);
+        if (token && userId) {
+          const user: UserProfile | null = userDataRaw ? JSON.parse(userDataRaw) : null;
+          setState({
+            isLoading: false,
+            isAuthenticated: true,
+            token,
+            userId,
+            user,
+          });
+        } else {
+          setState({
+            isLoading: false,
+            isAuthenticated: false,
+            token: null,
+            userId: null,
+            user: null,
+          });
         }
-
-        const user: UserProfile | null = userDataRaw ? JSON.parse(userDataRaw) : null;
-        setState({
-          isLoading: false,
-          isAuthenticated: true,
-          token,
-          userId,
-          user,
-        });
       } catch {
         setState((s) => ({
           ...s,
           isLoading: false,
-          isAuthenticated: true,
-          token: '1270d52d-9f4e-4399-9a80-15cab07f1763',
-          userId: '1270d52d-9f4e-4399-9a80-15cab07f1763',
+          isAuthenticated: false,
+          token: null,
+          userId: null,
+          user: null,
         }));
       }
     })();

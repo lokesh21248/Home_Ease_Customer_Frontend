@@ -329,28 +329,10 @@ export async function getAuthHeaders(requiresAuth = true): Promise<Record<string
   };
 
   if (requiresAuth) {
-    const BACKEND_USER_ID = '1270d52d-9f4e-4399-9a80-15cab07f1763';
-    const BACKEND_TOKEN = '1270d52d-9f4e-4399-9a80-15cab07f1763';
-
-    let [token, userId] = await Promise.all([
+    const [token, userId] = await Promise.all([
       AsyncStorage.getItem(STORAGE_KEYS.TOKEN),
       AsyncStorage.getItem(STORAGE_KEYS.USER_ID),
     ]);
-
-    // Auto-migrate any dummy or stale credentials to the registered backend customer account
-    if (
-      !token ||
-      !userId ||
-      token === 'homeease-demo-customer-jwt-token' ||
-      userId === 'd0b89110-3fc7-4590-b18d-f5bf43242001'
-    ) {
-      token = BACKEND_TOKEN;
-      userId = BACKEND_USER_ID;
-      await Promise.all([
-        AsyncStorage.setItem(STORAGE_KEYS.TOKEN, BACKEND_TOKEN),
-        AsyncStorage.setItem(STORAGE_KEYS.USER_ID, BACKEND_USER_ID),
-      ]);
-    }
 
     if (token) headers.Authorization = `Bearer ${token}`;
     if (userId) headers['X-User-Id'] = userId;
