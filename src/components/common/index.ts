@@ -7,4 +7,5 @@ export { FloatingActionButton } from './FloatingActionButton';
 export { AppUpdateModal } from './AppUpdateModal';
 export { RatingModal } from './RatingModal';
 export { RadarSearchingView } from './RadarSearchingView';
+export { AppBottomSheet, type AppBottomSheetProps } from './AppBottomSheet';
 
