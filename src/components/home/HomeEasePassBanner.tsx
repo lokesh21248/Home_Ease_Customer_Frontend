@@ -13,7 +13,7 @@ export function HomeEasePassBanner({ onPress }: HomeEasePassBannerProps) {
   const [activeDot, setActiveDot] = useState(0);
 
   const handleBannerPress = () => {
-    setActiveDot((prev) => (prev + 1) % 3);
+    setActiveDot((prev) => (prev + 1) % 4);
     if (onPress) {
       onPress();
     } else {
@@ -62,11 +62,12 @@ export function HomeEasePassBanner({ onPress }: HomeEasePassBannerProps) {
         </LinearGradient>
       </Pressable>
 
-      {/* 2. Three Circular Pagination Dots */}
+      {/* 2. Four Circular/Oval Pagination Dots */}
       <View style={styles.paginationRow}>
         <View style={[styles.dot, activeDot === 0 && styles.activeDot]} />
         <View style={[styles.dot, activeDot === 1 && styles.activeDot]} />
         <View style={[styles.dot, activeDot === 2 && styles.activeDot]} />
+        <View style={[styles.dot, activeDot === 3 && styles.activeDot]} />
       </View>
     </View>
   );

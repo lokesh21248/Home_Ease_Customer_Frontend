@@ -10,12 +10,8 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HomeHeroSection } from './HomeHeroSection';
 import { HomeEasePassBanner } from './HomeEasePassBanner';
-import { PromoBanner } from './PromoBanner';
 import { ExploreServicesGrid } from './ExploreServicesGrid';
-import { HomeOffersSection } from './HomeOffersSection';
-import { HomeRecentBookings } from './HomeRecentBookings';
 import { useExploreServices } from '../../hooks/useExploreServices';
-import { useBanners } from '../../hooks/useBanners';
 import { queryClient } from '../../query/queryClient';
 import { queryKeys } from '../../query/queryKeys';
 import { getScrollBottomPadding } from '../../constants/layout';
@@ -32,7 +28,6 @@ export function HomeScreen() {
     isError: isExploreError,
     refetch: refetchExplore,
   } = useExploreServices();
-  const { data: banners = [] } = useBanners();
 
   // ── Pull-to-refresh ────────────────────────────────────────────────────
   const onRefresh = useCallback(async () => {
@@ -74,17 +69,6 @@ export function HomeScreen() {
     router.push('/(tabs)/categories');
   };
 
-  const handleBannerPress = (targetId: string, _title: string) => {
-    if (targetId) {
-      router.push({
-        pathname: '/category/[id]',
-        params: { id: targetId },
-      });
-    } else {
-      router.push('/(tabs)/categories');
-    }
-  };
-
   const handleSelectService = (item: ExploreServiceItem) => {
     if (item.categoryId) {
       router.push({
@@ -120,7 +104,7 @@ export function HomeScreen() {
       <View
         style={[
           styles.statusBarShield,
-          { height: insets.top, backgroundColor: '#074BD4' },
+          { height: insets.top, backgroundColor: '#004BE4' },
         ]}
       />
 
@@ -137,7 +121,7 @@ export function HomeScreen() {
           />
         }
       >
-        {/* 2. Top Bar & Hero Section (Location, Earn ₹200, Bell, Hero Title & Quick Action Cards) */}
+        {/* 1. Top Bar & Hero Section (Location, Earn ₹200, Bell, Hero Title & Quick Action Cards) */}
         <HomeHeroSection
           onLocationPress={handleLocationPress}
           onNotificationPress={handleNotificationPress}
@@ -145,16 +129,10 @@ export function HomeScreen() {
           onSchedulePress={handleSchedulePress}
         />
 
-        {/* 3. Dynamic Promotional Banners (From Backend API) */}
-        <PromoBanner banners={banners} onPress={handleBannerPress} />
-
-        {/* 4. HomeEase Pass Banner */}
+        {/* 2. HomeEase Pass Banner (Buy One Pass Three Visits FREE, 4 dots) */}
         <HomeEasePassBanner onPress={handlePassPress} />
 
-        {/* 5. Recently Booked (Live customer bookings, hidden if none) */}
-        <HomeRecentBookings />
-
-        {/* 6. Explore Services: Dynamic Admin-Created Services Grid */}
+        {/* 3. Explore Services: 4-Column Grid of 12 Services with Ratings, Thumbnails & Add Buttons */}
         <ExploreServicesGrid
           services={exploreServices}
           isLoading={isExploreLoading}
@@ -163,9 +141,6 @@ export function HomeScreen() {
           onSelectService={handleSelectService}
           onViewAllPress={handleViewAllPress}
         />
-
-        {/* 7. Active Promotional Coupons & Offers (From Backend API) */}
-        <HomeOffersSection />
       </ScrollView>
     </View>
   );

@@ -1,18 +1,16 @@
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  FlatList,
   useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { ExploreServiceItem } from '../../api/client';
-import { Typography } from '../../constants/theme';
 
 export type ExploreGridItem = ExploreServiceItem;
 
@@ -25,98 +23,138 @@ export interface ExploreServicesGridProps {
   onViewAllPress?: () => void;
 }
 
-// ─── Individual 3-Grid Card Component (Prompt 1) ─────────────────────────────
-interface ExploreServiceCardProps {
-  item: ExploreServiceItem;
-  cardWidth: number;
-  onPress: (item: ExploreServiceItem) => void;
+interface CuratedHomeService {
+  id: string;
+  name: string;
+  displayName: string;
+  rating: number;
+  ratingCount: string;
+  price?: number;
+  originalPrice?: number;
+  localImage: any;
+  defaultCategoryId?: string;
+  keywords: string[];
 }
 
-function ExploreServiceCard({ item, cardWidth, onPress }: ExploreServiceCardProps) {
-  const [imageError, setImageError] = useState(false);
+export const MASTER_SERVICES: CuratedHomeService[] = [
+  {
+    id: 'daily-home-cleaning',
+    name: 'Daily Home Cleaning',
+    displayName: 'Daily Home\nCleaning',
+    rating: 4.9,
+    ratingCount: '(48.3K)',
+    localImage: require('../../../assets/images/services/daily_cleaning_thumb.png'),
+    keywords: ['clean', 'daily', 'maid', 'home cleaning'],
+  },
+  {
+    id: 'homeease-verified',
+    name: 'HomeEase Verified',
+    displayName: 'HomeEase\nVerified',
+    rating: 4.9,
+    ratingCount: '(79.0K)',
+    localImage: require('../../../assets/images/services/verified_worker_thumb.png'),
+    keywords: ['verified', 'partner', 'pro'],
+  },
+  {
+    id: 'cooking',
+    name: 'Cooking',
+    displayName: 'Cooking',
+    rating: 4.9,
+    ratingCount: '(79.0K)',
+    price: 49,
+    originalPrice: 99,
+    localImage: require('../../../assets/images/services/cooking_thumb.png'),
+    keywords: ['cook', 'chef', 'food', 'kitchen'],
+  },
+  {
+    id: 'sofa-carpet-cleaning',
+    name: 'Sofa & Carpet Cleaning',
+    displayName: 'Sofa & Carpet\nCleaning',
+    rating: 4.8,
+    ratingCount: '(32.1K)',
+    localImage: require('../../../assets/images/services/sofa_carpet_thumb.png'),
+    keywords: ['sofa', 'carpet', 'couch', 'upholstery'],
+  },
+  {
+    id: 'ac-service-repair',
+    name: 'AC Service & Repair',
+    displayName: 'AC Service\n& Repair',
+    rating: 4.9,
+    ratingCount: '(52.4K)',
+    localImage: require('../../../assets/images/services/ac_repair_thumb.png'),
+    keywords: ['ac', 'air', 'cooling', 'hvac'],
+  },
+  {
+    id: 'appliance-repair',
+    name: 'Appliance Repair',
+    displayName: 'Appliance\nRepair',
+    rating: 4.8,
+    ratingCount: '(40.0K)',
+    localImage: require('../../../assets/images/services/appliance_repair_thumb.png'),
+    keywords: ['appliance', 'washing', 'fridge', 'microwave'],
+  },
+  {
+    id: 'bathroom-cleaning',
+    name: 'Bathroom Cleaning',
+    displayName: 'Bathroom\nCleaning',
+    rating: 4.9,
+    ratingCount: '(28.6K)',
+    localImage: require('../../../assets/images/services/bathroom_cleaning_thumb.png'),
+    keywords: ['bath', 'toilet', 'washroom'],
+  },
+  {
+    id: 'pest-control',
+    name: 'Pest Control',
+    displayName: 'Pest\nControl',
+    rating: 4.9,
+    ratingCount: '(17.9K)',
+    localImage: require('../../../assets/images/services/pest_control_thumb.png'),
+    keywords: ['pest', 'termite', 'cockroach', 'bug'],
+  },
+  {
+    id: 'painting',
+    name: 'Painting (Home/Office)',
+    displayName: 'Painting\n(Home/Office)',
+    rating: 4.9,
+    ratingCount: '(21.7K)',
+    localImage: require('../../../assets/images/services/painting_thumb.png'),
+    keywords: ['paint', 'color', 'wall'],
+  },
+  {
+    id: 'electrician-service',
+    name: 'Electrician Service',
+    displayName: 'Electrician\nService',
+    rating: 4.8,
+    ratingCount: '(15.6K)',
+    localImage: require('../../../assets/images/services/electrician_thumb.png'),
+    keywords: ['electr', 'switch', 'socket', 'wire', 'fan'],
+  },
+  {
+    id: 'plumbing-service',
+    name: 'Plumbing Service',
+    displayName: 'Plumbing\nService',
+    rating: 4.9,
+    ratingCount: '(12.3K)',
+    localImage: require('../../../assets/images/services/plumbing_thumb.png'),
+    keywords: ['plumb', 'pipe', 'tap', 'leak', 'drain'],
+  },
+  {
+    id: 'carpentry-service',
+    name: 'Carpentry Service',
+    displayName: 'Carpentry\nService',
+    rating: 4.8,
+    ratingCount: '(11.9K)',
+    localImage: require('../../../assets/images/services/carpentry_thumb.png'),
+    keywords: ['carpent', 'wood', 'furniture', 'door'],
+  },
+];
 
-  const hasDiscount =
-    item.originalPrice != null && Number(item.originalPrice) > Number(item.price);
-  const discountPercent = hasDiscount
-    ? Math.round(
-        ((Number(item.originalPrice) - Number(item.price)) / Number(item.originalPrice)) * 100
-      )
-    : 0;
-
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.cardContainer,
-        { width: cardWidth },
-        pressed && styles.cardPressed,
-      ]}
-      onPress={() => onPress(item)}
-      accessibilityRole="button"
-      accessibilityLabel={`${item.name}, Price: ₹${item.price}`}
-    >
-      {/* 1. Image & Badges Overlay (Aspect Ratio 1:1, borderRadius: 10) */}
-      <View style={styles.imageWrapper}>
-        {item.imageUrl && !imageError ? (
-          <Image
-            source={{ uri: item.imageUrl }}
-            style={styles.cardImage}
-            contentFit="cover"
-            transition={150}
-            onError={() => setImageError(true)}
-          />
-        ) : (
-          <View style={styles.imageFallback}>
-            <Ionicons name="briefcase-outline" size={24} color="#94A3B8" />
-          </View>
-        )}
-
-        {/* Discount Badge: Top-Right, Primary Blue (#2563EB) */}
-        {discountPercent > 0 && (
-          <View style={styles.discountBadge}>
-            <Text style={styles.discountText}>{discountPercent}% OFF</Text>
-          </View>
-        )}
-
-        {/* Rating Badge: Bottom-Left, Semi-transparent Black */}
-        {item.rating != null && (
-          <View style={styles.ratingBadge}>
-            <Ionicons name="star" size={9} color="#F59E0B" style={{ marginRight: 2.5 }} />
-            <Text style={styles.ratingText}>
-              {Number(item.rating).toFixed(1)}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* 2. Card Typography */}
-      {/* Category Label: uppercase, fontSize: 9, color: #64748B */}
-      {item.categoryName ? (
-        <Text style={styles.categoryLabel} numberOfLines={1}>
-          {item.categoryName}
-        </Text>
-      ) : null}
-
-      {/* Title: fontSize: 12, fontWeight: '700', lines: 2, height: 32 */}
-      <Text style={styles.serviceTitle} numberOfLines={2}>
-        {item.name}
-      </Text>
-
-      {/* Price Row: current price in #2563EB, original in #94A3B8 with strikethrough */}
-      <View style={styles.priceRow}>
-        <Text style={styles.currentPriceText}>
-          ₹{Number(item.price).toLocaleString('en-IN')}
-        </Text>
-        {hasDiscount && (
-          <Text style={styles.originalPriceText}>
-            ₹{Number(item.originalPrice).toLocaleString('en-IN')}
-          </Text>
-        )}
-      </View>
-    </Pressable>
-  );
+interface ExploreCardItem extends CuratedHomeService {
+  resolvedId: string;
+  resolvedCategoryId?: string;
+  backendItem?: ExploreServiceItem;
 }
 
-// ─── Main Explore Services 3-Grid Component ──────────────────────────────────
 export function ExploreServicesGrid({
   services = [],
   isLoading = false,
@@ -127,31 +165,52 @@ export function ExploreServicesGrid({
 }: ExploreServicesGridProps) {
   const { width: screenWidth } = useWindowDimensions();
 
-  // Dynamic 3-Column card width: (width - 32 padding - 16 gap) / 3
-  const cardWidth = Math.floor((screenWidth - 32 - 16) / 3);
+  // 4 columns: 32 total padding (16 left, 16 right) + 3 gaps of 8px (24px)
+  const cardWidth = Math.floor((screenWidth - 32 - 24) / 4);
 
-  const handleItemPress = (item: ExploreServiceItem) => {
-    if (onSelectService) {
-      onSelectService(item);
+  // Map backend services to curated master list to retain high-res assets & live IDs
+  const displayItems = useMemo<ExploreCardItem[]>(() => {
+    return MASTER_SERVICES.map((curated) => {
+      // Find matching backend item if available
+      const match = services.find((s) => {
+        const nameLower = (s.name || '').toLowerCase();
+        return (
+          nameLower === curated.name.toLowerCase() ||
+          curated.keywords.some((k) => nameLower.includes(k))
+        );
+      });
+
+      return {
+        ...curated,
+        resolvedId: match?.id || curated.id,
+        resolvedCategoryId: match?.categoryId || curated.defaultCategoryId,
+        price: curated.price ?? (match?.price ? Number(match.price) : undefined),
+        originalPrice:
+          curated.originalPrice ??
+          (match?.originalPrice ? Number(match.originalPrice) : undefined),
+        backendItem: match,
+      };
+    });
+  }, [services]);
+
+  const handleCardPress = (item: ExploreCardItem) => {
+    if (onSelectService && item.backendItem) {
+      onSelectService(item.backendItem);
       return;
     }
 
-    if (item.categoryId) {
+    if (item.resolvedCategoryId) {
       router.push({
         pathname: '/category/[id]',
-        params: { id: item.categoryId, name: item.categoryName || item.name },
+        params: { id: item.resolvedCategoryId, name: item.name },
       });
       return;
     }
 
+    // Default: route to categories tab or targeted service search
     router.push({
-      pathname: '/service/[id]',
-      params: {
-        id: item.id,
-        name: item.name,
-        image: item.imageUrl,
-        price: item.price ? String(item.price) : undefined,
-      },
+      pathname: '/(tabs)/categories',
+      params: { search: item.name },
     });
   };
 
@@ -163,102 +222,93 @@ export function ExploreServicesGrid({
     }
   };
 
-  const activeServices = services.filter((s) => s.isActive !== false);
-
   return (
     <View style={styles.container}>
-      {/* ── Header Section (Prompt 2) ─────────────────────────────── */}
+      {/* Section Header: Explore Services & View All → */}
       <View style={styles.headerRow}>
-        <View style={styles.titleRow}>
-          <Ionicons name="sparkles" size={18} color="#2563EB" style={{ marginRight: 6 }} />
-          <Text style={styles.headerTitle}>Explore Services</Text>
-        </View>
+        <Text style={styles.sectionTitle}>Explore Services</Text>
         <Pressable
-          style={({ pressed }) => [styles.viewAllBtn, pressed && styles.pressedText]}
           onPress={handleViewAll}
+          hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="View All Services"
+          accessibilityLabel="View all explore services"
         >
           <Text style={styles.viewAllText}>View All →</Text>
         </Pressable>
       </View>
 
-      {/* ── Loading Skeleton (3-Grid) ─────────────────────────────── */}
-      {isLoading && (
-        <View style={styles.skeletonWrapper}>
-          {[1, 2, 3, 4, 5, 6].map((key) => (
-            <View
-              key={`skeleton-${key}`}
-              style={[styles.skeletonCard, { width: cardWidth }]}
-            >
-              <View style={[styles.skeletonImage, { width: cardWidth, height: cardWidth }]}>
-                <ActivityIndicator size="small" color="#94A3B8" />
-              </View>
-              <View style={styles.skeletonBody}>
-                <View style={styles.skeletonLineShort} />
-                <View style={styles.skeletonLineLong} />
-                <View style={styles.skeletonLinePrice} />
-              </View>
-            </View>
-          ))}
+      {/* Loading indicator */}
+      {isLoading && services.length === 0 ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color="#0052FF" />
+          <Text style={styles.loadingText}>Loading services...</Text>
         </View>
-      )}
-
-      {/* ── Error State with Retry ──────────────────────────────────── */}
-      {!isLoading && isError && (
-        <View style={styles.stateContainer}>
-          <Ionicons name="alert-circle-outline" size={32} color="#EF4444" />
-          <Text style={styles.stateTitle}>Unable to load explore services</Text>
-          <Text style={styles.stateSub}>Please check your connection and try again.</Text>
+      ) : isError && services.length === 0 ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Unable to load latest services.</Text>
           {onRetry && (
-            <Pressable
-              style={({ pressed }) => [styles.retryButton, pressed && styles.pressedText]}
-              onPress={onRetry}
-              accessibilityRole="button"
-              accessibilityLabel="Retry loading services"
-            >
-              <Ionicons name="refresh" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.retryButtonText}>Retry</Text>
+            <Pressable style={styles.retryButton} onPress={onRetry}>
+              <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           )}
         </View>
-      )}
+      ) : (
+        /* 4-Column Grid */
+        <View style={styles.gridContainer}>
+          {displayItems.map((item) => (
+            <Pressable
+              key={item.id}
+              style={({ pressed }) => [
+                styles.card,
+                { width: cardWidth },
+                pressed && styles.cardPressed,
+              ]}
+              onPress={() => handleCardPress(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.name}, rating: ${item.rating}`}
+            >
+              {/* 1. Star Rating Row: ⭐ 4.9 (48.3K) */}
+              <View style={styles.ratingRow}>
+                <Ionicons name="star" size={9.5} color="#F59E0B" />
+                <Text style={styles.ratingText}>
+                  {item.rating}{' '}
+                  <Text style={styles.ratingCountText}>{item.ratingCount}</Text>
+                </Text>
+              </View>
 
-      {/* ── Empty State ─────────────────────────────────────────────── */}
-      {!isLoading && !isError && activeServices.length === 0 && (
-        <View style={styles.stateContainer}>
-          <Ionicons name="layers-outline" size={32} color="#94A3B8" />
-          <Text style={styles.stateTitle}>No services available</Text>
-          <Text style={styles.stateSub}>Check back later or browse all categories.</Text>
-          <Pressable
-            style={({ pressed }) => [styles.browseButton, pressed && styles.pressedText]}
-            onPress={handleViewAll}
-            accessibilityRole="button"
-            accessibilityLabel="Browse All Categories"
-          >
-            <Text style={styles.browseButtonText}>Browse All Categories</Text>
-          </Pressable>
+              {/* 2. Image with Circular Plus Button */}
+              <View style={styles.imageContainer}>
+                <Image
+                  source={item.localImage}
+                  style={styles.cardImage}
+                  contentFit="contain"
+                  transition={120}
+                />
+                {/* Circular White Plus Button */}
+                <View style={styles.plusButton}>
+                  <Ionicons name="add" size={13} color="#0052FF" />
+                </View>
+              </View>
+
+              {/* 3. Service Name */}
+              <Text style={styles.serviceName} numberOfLines={2}>
+                {item.displayName}
+              </Text>
+
+              {/* 4. Optional Price Row (e.g. Cooking ₹49 strikethrough ₹99) */}
+              {item.price ? (
+                <View style={styles.priceRow}>
+                  <Text style={styles.currentPriceText}>₹{item.price}</Text>
+                  {item.originalPrice ? (
+                    <Text style={styles.originalPriceText}>
+                      ₹{item.originalPrice}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+            </Pressable>
+          ))}
         </View>
-      )}
-
-      {/* ── 3-Column FlatList Grid (Prompt 1) ────────────────────────── */}
-      {!isLoading && !isError && activeServices.length > 0 && (
-        <FlatList
-          data={activeServices}
-          keyExtractor={(item) => item.id}
-          numColumns={3}
-          columnWrapperStyle={styles.columnWrapper}
-          contentContainerStyle={styles.flatListContent}
-          scrollEnabled={false}
-          nestedScrollEnabled={true}
-          renderItem={({ item }) => (
-            <ExploreServiceCard
-              item={item}
-              cardWidth={cardWidth}
-              onPress={handleItemPress}
-            />
-          )}
-        />
       )}
     </View>
   );
@@ -266,263 +316,156 @@ export function ExploreServicesGrid({
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 18,
-    marginBottom: 16,
+    marginTop: 14,
+    marginBottom: 8,
   },
-  /* Header Section */
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    marginBottom: 12,
+    marginBottom: 10,
   },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerTitle: {
+  sectionTitle: {
     fontSize: 18,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#0F172A',
     letterSpacing: -0.3,
   },
-  viewAllBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 2,
-  },
   viewAllText: {
-    fontSize: 14,
-    fontFamily: Typography.fontFamily.semiBold,
-    fontWeight: '600',
-    color: '#2563EB',
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#0052FF',
   },
-  pressedText: {
-    opacity: 0.7,
-  },
-
-  /* FlatList 3-Grid Configuration */
-  columnWrapper: {
-    justifyContent: 'space-between',
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     paddingHorizontal: 16,
   },
-  flatListContent: {
-    gap: 12,
-  },
-
-  /* Card Container */
-  cardContainer: {
+  card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1.5 },
-    shadowOpacity: 0.06,
+    borderColor: '#EEF2F6',
+    paddingVertical: 7,
+    paddingHorizontal: 5,
+    marginBottom: 8,
+    justifyContent: 'space-between',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
     shadowRadius: 3,
-    paddingBottom: 8,
+    elevation: 1,
   },
   cardPressed: {
-    opacity: 0.94,
+    opacity: 0.9,
     transform: [{ scale: 0.97 }],
   },
-
-  /* Image & Overlays */
-  imageWrapper: {
-    position: 'relative',
-    aspectRatio: 1,
-    width: '100%',
-    backgroundColor: '#F1F5F9',
-    overflow: 'hidden',
-    borderRadius: 10,
-  },
-  cardImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 10,
-  },
-  imageFallback: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EEF2F6',
-  },
-  discountBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    borderRadius: 4,
-    zIndex: 2,
-  },
-  discountText: {
-    fontSize: 9,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  ratingBadge: {
-    position: 'absolute',
-    bottom: 6,
-    left: 6,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
+  ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    zIndex: 2,
+    gap: 2.5,
+    paddingHorizontal: 2,
+    marginBottom: 2,
   },
   ratingText: {
     fontSize: 9,
-    fontFamily: Typography.fontFamily.semiBold,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontWeight: '700',
+    color: '#1F2937',
   },
-
-  /* Typography */
-  categoryLabel: {
-    fontSize: 9,
-    fontFamily: Typography.fontFamily.semiBold,
-    fontWeight: '600',
+  ratingCountText: {
+    fontSize: 8,
+    fontWeight: '500',
     color: '#64748B',
-    textTransform: 'uppercase',
-    marginTop: 6,
-    paddingHorizontal: 6,
   },
-  serviceTitle: {
-    fontSize: 12,
-    fontFamily: Typography.fontFamily.bold,
+  imageContainer: {
+    height: 52,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginVertical: 4,
+  },
+  cardImage: {
+    width: 48,
+    height: 48,
+  },
+  plusButton: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  serviceName: {
+    fontSize: 10.5,
     fontWeight: '700',
     color: '#0F172A',
+    lineHeight: 13,
     marginTop: 2,
-    paddingHorizontal: 6,
-    height: 32, // Consistent line-height & height prevents misaligned rows
-    lineHeight: 16,
+    paddingHorizontal: 2,
+    minHeight: 26,
+    textAlign: 'left',
   },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-    paddingHorizontal: 6,
+    gap: 3,
+    marginTop: 2,
+    paddingHorizontal: 2,
   },
   currentPriceText: {
-    fontSize: 12,
-    fontFamily: Typography.fontFamily.bold,
-    fontWeight: '700',
-    color: '#2563EB',
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0F172A',
   },
   originalPriceText: {
-    fontSize: 10,
-    fontFamily: Typography.fontFamily.regular,
+    fontSize: 9.5,
     color: '#94A3B8',
     textDecorationLine: 'line-through',
   },
-
-  /* Skeleton Loading */
-  skeletonWrapper: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-  },
-  skeletonCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingBottom: 8,
-  },
-  skeletonImage: {
-    backgroundColor: '#E2E8F0',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-  },
-  skeletonBody: {
-    padding: 6,
-    gap: 4,
-  },
-  skeletonLineShort: {
-    height: 8,
-    width: '60%',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 4,
-    marginTop: 4,
-  },
-  skeletonLineLong: {
-    height: 12,
-    width: '90%',
-    backgroundColor: '#E2E8F0',
-    borderRadius: 4,
-  },
-  skeletonLinePrice: {
-    height: 10,
-    width: '45%',
-    backgroundColor: '#E2E8F0',
-    borderRadius: 4,
-    marginTop: 2,
-  },
-
-  /* Error & Empty States */
-  stateContainer: {
-    marginHorizontal: 16,
+  loadingContainer: {
     paddingVertical: 24,
-    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    gap: 8,
   },
-  stateTitle: {
-    fontSize: 14,
-    fontFamily: Typography.fontFamily.bold,
-    color: '#1E293B',
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  stateSub: {
+  loadingText: {
     fontSize: 12,
-    fontFamily: Typography.fontFamily.regular,
     color: '#64748B',
-    textAlign: 'center',
-    marginBottom: 12,
+    fontWeight: '500',
+  },
+  errorContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#EF4444',
   },
   retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2563EB',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    backgroundColor: '#0052FF',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
-  retryButtonText: {
-    fontSize: 12,
-    fontFamily: Typography.fontFamily.bold,
+  retryText: {
+    fontSize: 11,
     color: '#FFFFFF',
-  },
-  browseButton: {
-    backgroundColor: '#F1F5F9',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  browseButtonText: {
-    fontSize: 12,
-    fontFamily: Typography.fontFamily.bold,
-    color: '#2563EB',
+    fontWeight: '700',
   },
 });

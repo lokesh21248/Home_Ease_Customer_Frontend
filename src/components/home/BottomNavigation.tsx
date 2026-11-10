@@ -99,7 +99,7 @@ export function BottomNavigation({
       <View style={styles.navRow}>
         {NAV_ITEMS.map((item) => {
           const isActive = currentTab === item.key;
-          const color = isActive ? '#0052FF' : '#1E293B';
+          const color = isActive ? '#0052FF' : '#64748B';
 
           return (
             <Pressable
@@ -184,6 +184,6 @@ const styles = StyleSheet.create({
   },
   labelInactive: {
     fontWeight: '500',
-    color: '#1E293B',
+    color: '#64748B',
   },
 });
