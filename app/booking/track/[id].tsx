@@ -635,43 +635,6 @@ export default function TrackingScreen() {
             </Text>
           </View>
         ) : null}
-
-        {/* Floating Map Controls (Recenter & Fit Bounds) */}
-        <View style={styles.floatingControls}>
-          <Pressable
-            style={styles.floatingBtn}
-            onPress={() => mapRef.current?.recenterToCustomerGps()}
-            accessibilityLabel="Recenter to my location"
-          >
-            <Ionicons name="navigate" size={19} color="#1D4ED8" />
-          </Pressable>
-
-          {hasPartnerLocation && (
-            <Pressable
-              style={styles.floatingBtn}
-              onPress={() => mapRef.current?.fitRouteBounds()}
-              accessibilityLabel="Fit map to route"
-            >
-              <Ionicons name="scan-outline" size={19} color="#1E293B" />
-            </Pressable>
-          )}
-
-          <Pressable
-            style={styles.floatingBtn}
-            onPress={() => mapRef.current?.zoomIn()}
-            accessibilityLabel="Zoom in"
-          >
-            <Ionicons name="add" size={20} color="#1E293B" />
-          </Pressable>
-
-          <Pressable
-            style={styles.floatingBtn}
-            onPress={() => mapRef.current?.zoomOut()}
-            accessibilityLabel="Zoom out"
-          >
-            <Ionicons name="remove" size={20} color="#1E293B" />
-          </Pressable>
-        </View>
       </View>
 
       {/* Live Status Pill */}
@@ -1081,26 +1044,6 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontFamily.bold,
     fontSize: 12,
     color: '#FFFFFF',
-  },
-
-  // Floating Controls
-  floatingControls: {
-    position: 'absolute',
-    right: 14,
-    top: 14,
-    gap: 8,
-    zIndex: 20,
-  },
-  floatingBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    ...Shadows.sm,
   },
 
   // Status Card

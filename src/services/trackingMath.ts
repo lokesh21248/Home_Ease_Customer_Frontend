@@ -94,3 +94,59 @@ export function isAcceptableLocationTimestamp(
     (previous === null || incoming > previous)
   );
 }
+
+/**
+ * Calculates the shortest angular difference between two headings in degrees (-180 to 180).
+ * Perfectly handles the 359° -> 1° (+2°) and 1° -> 359° (-2°) transition without wrapping around.
+ */
+export function shortestAngleDistance(fromAngle: number, toAngle: number): number {
+  return ((((toAngle - fromAngle) % 360) + 540) % 360) - 180;
+}
+
+/**
+ * Normalizes any heading angle into standard [0, 360) compass degree range.
+ */
+export function normalizeHeading(heading: number): number {
+  if (!Number.isFinite(heading)) return 0;
+  return ((heading % 360) + 360) % 360;
+}
+
+/**
+ * Validates whether an incoming GPS coordinate transition is physically possible.
+ * Rejects telemetry teleportation jumps exceeding maxSpeedKmh (default 150 km/h).
+ */
+export function isSensibleGpsJump(
+  prevLat: number,
+  prevLng: number,
+  nextLat: number,
+  nextLng: number,
+  timeDeltaMs: number,
+  maxSpeedKmh = 150,
+): boolean {
+  if (!isValidCoordinate(prevLat, prevLng) || !isValidCoordinate(nextLat, nextLng)) return false;
+  if (!Number.isFinite(timeDeltaMs) || timeDeltaMs <= 0) return true; // first frame or unknown interval
+  const distanceMeters = calculateHaversineDistance(prevLat, prevLng, nextLat, nextLng);
+  if (distanceMeters < 30) return true; // Small movements are always acceptable
+  const speedKmh = (distanceMeters / (timeDeltaMs / 1000)) * 3.6;
+  return speedKmh <= maxSpeedKmh;
+}
+
+/**
+ * Filters out heading jitter when stationary or moving very slowly.
+ * Retains previous heading if angle change is less than deadband degrees.
+ */
+export function filterHeadingJitter(
+  prevHeading: number,
+  newHeading: number,
+  speedKmh = 0,
+  deadbandDegrees = 3,
+): number {
+  if (!Number.isFinite(newHeading)) return normalizeHeading(prevHeading);
+  if (!Number.isFinite(prevHeading)) return normalizeHeading(newHeading);
+  const diff = Math.abs(shortestAngleDistance(prevHeading, newHeading));
+  // If moving very slowly and change is below deadband, retain heading
+  if (speedKmh < 2 && diff < deadbandDegrees) {
+    return normalizeHeading(prevHeading);
+  }
+  return normalizeHeading(newHeading);
+}

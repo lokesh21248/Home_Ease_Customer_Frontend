@@ -28,6 +28,10 @@ const {
   isAcceptableLocationTimestamp,
   parseLocationTimestamp,
   shouldRecalculateRoute,
+  shortestAngleDistance,
+  normalizeHeading,
+  isSensibleGpsJump,
+  filterHeadingJitter,
 } = require('../src/services/trackingMath.ts');
 
 test('validates coordinates and converts GeoJSON longitude/latitude order', () => {
@@ -98,4 +102,38 @@ test('normalizes location timestamps and rejects stale or future updates', () =>
   assert.equal(isAcceptableLocationTimestamp(2000, 1000, 2000), true);
   assert.equal(isAcceptableLocationTimestamp(1000, 2000, 2000), false);
   assert.equal(isAcceptableLocationTimestamp(62001, 0, 1000), false);
+});
+
+test('handles shortest angular distance and 359 to 1 degree transition seamlessly', () => {
+  // 359° to 1° is +2° turn (clockwise)
+  assert.equal(shortestAngleDistance(359, 1), 2);
+  // 1° to 359° is -2° turn (counter-clockwise)
+  assert.equal(shortestAngleDistance(1, 359), -2);
+  // 350° to 10° is +20°
+  assert.equal(shortestAngleDistance(350, 10), 20);
+  // 10° to 350° is -20°
+  assert.equal(shortestAngleDistance(10, 350), -20);
+  // Exact 180° difference
+  assert.equal(Math.abs(shortestAngleDistance(0, 180)), 180);
+
+  // Normalization
+  assert.equal(normalizeHeading(365), 5);
+  assert.equal(normalizeHeading(-10), 350);
+  assert.equal(normalizeHeading(0), 0);
+});
+
+test('filters impossible coordinate jumps and GPS teleportation', () => {
+  // Same coordinate -> always sensible
+  assert.equal(isSensibleGpsJump(17.44, 78.37, 17.44, 78.37, 3000), true);
+  // Realistic movement: 30 meters in 3 seconds = 36 km/h -> sensible
+  assert.equal(isSensibleGpsJump(17.4400, 78.3700, 17.4402, 78.3700, 3000, 150), true);
+  // Impossible jump: 5 km in 2 seconds (9000 km/h) -> rejected
+  assert.equal(isSensibleGpsJump(17.44, 78.37, 17.49, 78.37, 2000, 150), false);
+});
+
+test('filters heading jitter when stationary', () => {
+  // 2 degree drift while speed is 0 -> should retain previous heading
+  assert.equal(filterHeadingJitter(45, 47, 0, 3), 45);
+  // 10 degree turn while moving (15 km/h) -> should accept new heading
+  assert.equal(filterHeadingJitter(45, 55, 15, 3), 55);
 });

@@ -37,13 +37,14 @@ import MapView, {
   PROVIDER_GOOGLE,
   Region,
 } from 'react-native-maps';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Shadows } from '../../constants/theme';
 import {
   isValidCoordinate,
   toGoogleMapCoordinates,
   LatLngCoordinate,
 } from '../../services/coordinates';
+import { WorkerNavigationMarker } from './WorkerNavigationMarker';
 
 export interface Coordinates {
   latitude: number;
@@ -183,6 +184,18 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
     const [isMoving, setIsMoving] = useState(false);
     const [currentRegion, setCurrentRegion] = useState<Region | null>(null);
 
+    const isUserInteractingRef = useRef(false);
+    const userInteractionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastCameraFollowTimeRef = useRef<number>(0);
+
+    const handlePanDrag = useCallback(() => {
+      isUserInteractingRef.current = true;
+      if (userInteractionTimerRef.current) clearTimeout(userInteractionTimerRef.current);
+      userInteractionTimerRef.current = setTimeout(() => {
+        isUserInteractingRef.current = false;
+      }, 12000); // 12-second pause after manual panning before automatic follow resumes
+    }, []);
+
     const handleRetryMap = useCallback(() => {
       setIsMapReady(false);
       setMapTimedOut(false);
@@ -276,8 +289,15 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
     }, [isMoving, mode, showCenterPin, pinLiftAnim, shadowScaleAnim]);
 
     const handleRegionChangeComplete = useCallback(
-      (region: Region) => {
+      (region: Region, details?: { isGesture?: boolean }) => {
         setCurrentRegion(region);
+        if (details?.isGesture) {
+          isUserInteractingRef.current = true;
+          if (userInteractionTimerRef.current) clearTimeout(userInteractionTimerRef.current);
+          userInteractionTimerRef.current = setTimeout(() => {
+            isUserInteractingRef.current = false;
+          }, 12000);
+        }
         if (mode === 'picker' || showCenterPin) {
           setIsMoving(false);
           Animated.parallel([
@@ -421,9 +441,9 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
       ]
     );
 
-    // Camera synchronization when destination coordinates or GPS coordinates change
+    // Camera synchronization when destination coordinates change
     useEffect(() => {
-      if (!isMapReady) return;
+      if (!isMapReady || mode === 'tracking') return;
 
       const targetLat = isValidCoordinate(customerLat ?? NaN, customerLng ?? NaN)
         ? customerLat
@@ -445,7 +465,32 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
           );
         }
       }
-    }, [customerLat, customerLng, initialLat, initialLng, deltas, isMapReady, isMoving]);
+    }, [customerLat, customerLng, initialLat, initialLng, deltas, isMapReady, isMoving, mode]);
+
+    // Explicit camera-follow behavior for tracking mode
+    useEffect(() => {
+      if (!isMapReady || mode !== 'tracking') return;
+      if (isUserInteractingRef.current) return;
+
+      const pLat = effPartnerLat;
+      const pLng = effPartnerLng;
+      if (!isValidCoordinate(pLat ?? NaN, pLng ?? NaN)) return;
+
+      const now = Date.now();
+      // Throttle automatic camera following to at most once every 3.5 seconds
+      if (now - lastCameraFollowTimeRef.current < 3500) return;
+      lastCameraFollowTimeRef.current = now;
+
+      mapRef.current?.animateToRegion(
+        {
+          latitude: pLat!,
+          longitude: pLng!,
+          latitudeDelta: 0.007,
+          longitudeDelta: 0.007,
+        },
+        700
+      );
+    }, [effPartnerLat, effPartnerLng, isMapReady, mode]);
 
     const handleMapReady = useCallback(() => {
       setIsMapReady(true);
@@ -482,6 +527,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
           provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
           initialRegion={initialRegion}
           onMapReady={handleMapReady}
+          onPanDrag={handlePanDrag}
           onRegionChange={handleRegionChange}
           onRegionChangeComplete={handleRegionChangeComplete}
           showsUserLocation={false}
@@ -539,29 +585,16 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
             </>
           )}
 
-          {/* 3. Partner / Vehicle Live Marker */}
+          {/* 3. Partner / Professional Live Directional Marker */}
           {effHasPartnerLocation &&
             isValidCoordinate(effPartnerLat ?? NaN, effPartnerLng ?? NaN) && (
-              <Marker
+              <WorkerNavigationMarker
                 coordinate={{ latitude: effPartnerLat!, longitude: effPartnerLng! }}
-                title={partnerName}
-                anchor={{ x: 0.5, y: 0.5 }}
-                flat={true}
-                rotation={partnerBearing}
+                heading={partnerBearing}
+                name={partnerName}
+                isLive={isLiveConnected}
                 zIndex={32}
-                tracksViewChanges={false}
-              >
-                <View style={styles.partnerMarkerWrap}>
-                  <View style={styles.partnerVehicleCircle}>
-                    <MaterialCommunityIcons
-                      name="motorbike"
-                      size={20}
-                      color="#FFFFFF"
-                    />
-                  </View>
-                  <View style={styles.partnerHeadingArrow} />
-                </View>
-              </Marker>
+              />
             )}
 
           {/* 4. Turn-by-Turn Road Route Polyline */}
@@ -660,8 +693,8 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
           </View>
         )}
 
-        {/* ─── FLOATING MAP CONTROLS ─── */}
-        {showControls && (
+        {/* ─── FLOATING MAP CONTROLS (Only for address picker) ─── */}
+        {showControls && mode === 'picker' && (
           <View style={styles.floatingControls}>
             <Pressable
               style={styles.controlBtn}
@@ -683,63 +716,6 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
               ) : (
                 <Ionicons name="locate" size={20} color={Colors.primary || '#2563EB'} />
               )}
-            </Pressable>
-
-            {hasPartnerLocation && (
-              <Pressable
-                style={styles.controlBtn}
-                onPress={() => {
-                  const points: LatLngCoordinate[] = [];
-                  if (isValidCoordinate(customerLat ?? NaN, customerLng ?? NaN)) {
-                    points.push({ latitude: customerLat!, longitude: customerLng! });
-                  }
-                  if (isValidCoordinate(partnerLat ?? NaN, partnerLng ?? NaN)) {
-                    points.push({ latitude: partnerLat!, longitude: partnerLng! });
-                  }
-                  if (polylineCoords.length > 0) {
-                    points.push(...polylineCoords);
-                  }
-                  if (points.length >= 2) {
-                    mapRef.current?.fitToCoordinates(points, {
-                      edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
-                      animated: true,
-                    });
-                  }
-                }}
-                accessibilityLabel="Fit map to route"
-              >
-                <Ionicons name="scan-outline" size={19} color="#1E293B" />
-              </Pressable>
-            )}
-
-            <Pressable
-              style={styles.controlBtn}
-              onPress={() => {
-                if (!currentRegion) return;
-                mapRef.current?.animateToRegion({
-                  ...currentRegion,
-                  latitudeDelta: currentRegion.latitudeDelta / 2,
-                  longitudeDelta: currentRegion.longitudeDelta / 2,
-                });
-              }}
-              accessibilityLabel="Zoom in"
-            >
-              <Ionicons name="add" size={20} color="#1E293B" />
-            </Pressable>
-
-            <Pressable
-              style={styles.controlBtn}
-              onPress={() => {
-                if (!currentRegion) return;
-                mapRef.current?.animateToRegion({
-                  ...currentRegion,
-                  latitudeDelta: currentRegion.latitudeDelta * 2,
-                  longitudeDelta: currentRegion.longitudeDelta * 2,
-                });
-              }}
-              accessibilityLabel="Zoom out"
-            >
-              <Ionicons name="remove" size={20} color="#1E293B" />
             </Pressable>
           </View>
         )}
@@ -807,35 +783,52 @@ const styles = StyleSheet.create({
     backgroundColor: '#2563EB',
   },
 
-  /* Partner Vehicle Marker */
+  /* Partner Professional Live Directional Marker */
   partnerMarkerWrap: {
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  partnerVehicleCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#10B981',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2.5,
-    borderColor: '#FFFFFF',
-    ...Shadows.md,
-  },
-  partnerHeadingArrow: {
+  partnerPulseRing: {
     position: 'absolute',
-    top: -5,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 82, 255, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 82, 255, 0.28)',
+  },
+  partnerHeadingPointer: {
+    position: 'absolute',
+    top: 1,
     width: 0,
     height: 0,
     backgroundColor: 'transparent',
     borderStyle: 'solid',
-    borderLeftWidth: 4,
-    borderRightWidth: 4,
-    borderBottomWidth: 6,
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderBottomWidth: 8,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderBottomColor: '#10B981',
+    borderBottomColor: '#0052FF',
+    zIndex: 3,
+  },
+  partnerProfessionalCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#0052FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    elevation: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1.5 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    zIndex: 2,
   },
 
   /* Fixed Center Pin for Address Picker */
