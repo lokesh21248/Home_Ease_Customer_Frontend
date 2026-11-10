@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,7 +18,7 @@ export interface ExploreServicesGridProps {
   services?: ExploreServiceItem[];
   isLoading?: boolean;
   isError?: boolean;
-  maxItems?: number; // Defaults to 9 for exact 3x3 grid layout
+  maxItems?: number; // Defaults to 9 for 3x3 layout
   onRetry?: () => void;
   onSelectService?: (item: ExploreServiceItem) => void;
   onViewAllPress?: () => void;
@@ -32,12 +32,14 @@ interface CuratedHomeService {
   ratingCount: string;
   price?: number;
   originalPrice?: number;
-  localImage: any;
+  imageUrl?: string;
+  localImage?: any;
   defaultCategoryId?: string;
   keywords: string[];
 }
 
-export const MASTER_SERVICES: CuratedHomeService[] = [
+// Curated fallbacks in case of network drop or offline mode
+export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
   {
     id: 'daily-home-cleaning',
     name: 'Daily Home Cleaning',
@@ -121,39 +123,111 @@ export const MASTER_SERVICES: CuratedHomeService[] = [
     localImage: require('../../../assets/images/services/plumbing_thumb.png'),
     keywords: ['plumb', 'pipe', 'tap', 'leak', 'drain'],
   },
-  {
-    id: 'pest-control',
-    name: 'Pest Control',
-    displayName: 'Pest Control',
-    rating: 4.9,
-    ratingCount: '(17.9K)',
-    localImage: require('../../../assets/images/services/pest_control_thumb.png'),
-    keywords: ['pest', 'termite', 'cockroach', 'bug'],
-  },
-  {
-    id: 'painting',
-    name: 'Painting (Home/Office)',
-    displayName: 'Painting\n(Home/Office)',
-    rating: 4.9,
-    ratingCount: '(21.7K)',
-    localImage: require('../../../assets/images/services/painting_thumb.png'),
-    keywords: ['paint', 'color', 'wall'],
-  },
-  {
-    id: 'carpentry-service',
-    name: 'Carpentry Service',
-    displayName: 'Carpentry\nService',
-    rating: 4.8,
-    ratingCount: '(11.9K)',
-    localImage: require('../../../assets/images/services/carpentry_thumb.png'),
-    keywords: ['carpent', 'wood', 'furniture', 'door'],
-  },
 ];
 
-interface ExploreCardItem extends CuratedHomeService {
+interface ExploreCardItem {
+  id: string;
+  name: string;
+  displayName: string;
+  rating: number;
+  ratingCount: string;
+  price?: number;
+  originalPrice?: number;
+  imageUrl?: string;
+  localImage?: any;
   resolvedId: string;
   resolvedCategoryId?: string;
   backendItem?: ExploreServiceItem;
+}
+
+// Subcomponent for each service card to track image errors independently
+function ServiceGridCard({
+  item,
+  cardWidth,
+  onPress,
+}: {
+  item: ExploreCardItem;
+  cardWidth: number;
+  onPress: (item: ExploreCardItem) => void;
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  const hasDiscount =
+    item.originalPrice != null &&
+    item.price != null &&
+    Number(item.originalPrice) > Number(item.price);
+
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.card,
+        { width: cardWidth },
+        pressed && styles.cardPressed,
+      ]}
+      onPress={() => onPress(item)}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.name}, rating: ${item.rating}`}
+    >
+      {/* 1. Star Rating Row: ⭐ 4.9 (142) */}
+      <View style={styles.ratingRow}>
+        <Ionicons name="star" size={10.5} color="#F59E0B" />
+        <Text style={styles.ratingText}>
+          {item.rating}{' '}
+          <Text style={styles.ratingCountText}>{item.ratingCount}</Text>
+        </Text>
+      </View>
+
+      {/* 2. Image with Circular Plus Button */}
+      <View style={styles.imageContainer}>
+        {item.imageUrl && !imageFailed ? (
+          <Image
+            source={{ uri: item.imageUrl }}
+            style={styles.cardImageCover}
+            contentFit="cover"
+            transition={150}
+            onError={() => setImageFailed(true)}
+          />
+        ) : item.localImage ? (
+          <Image
+            source={item.localImage}
+            style={styles.cardImage}
+            contentFit="contain"
+            transition={120}
+          />
+        ) : (
+          <View style={styles.imageFallback}>
+            <Ionicons name="sparkles" size={26} color="#0052FF" />
+          </View>
+        )}
+
+        {/* Circular White Plus Button with Blue Icon */}
+        <View style={styles.plusButton}>
+          <Ionicons name="add" size={14} color="#0052FF" />
+        </View>
+      </View>
+
+      {/* 3. Service Name (2 lines max, bold navy) */}
+      <Text style={styles.serviceName} numberOfLines={2}>
+        {item.displayName || item.name}
+      </Text>
+
+      {/* 4. Price Row with original price strikethrough if discounted */}
+      {item.price != null ? (
+        <View style={styles.priceRow}>
+          <Text style={styles.currentPriceText}>
+            ₹{Number(item.price).toLocaleString('en-IN')}
+          </Text>
+          {hasDiscount && (
+            <Text style={styles.originalPriceText}>
+              ₹{Number(item.originalPrice).toLocaleString('en-IN')}
+            </Text>
+          )}
+        </View>
+      ) : (
+        <View style={styles.priceRowPlaceholder} />
+      )}
+    </Pressable>
+  );
 }
 
 export function ExploreServicesGrid({
@@ -171,31 +245,48 @@ export function ExploreServicesGrid({
   const GAP = 10;
   const cardWidth = Math.floor((screenWidth - 32 - (2 * GAP)) / 3);
 
-  // Map backend services to curated master list to retain high-res assets & live IDs, limited to 3x3 (9 items)
+  // Directly map live API data from backend /explore-services endpoint
   const displayItems = useMemo<ExploreCardItem[]>(() => {
-    const items = MASTER_SERVICES.map((curated) => {
-      // Find matching backend item if available
-      const match = services.find((s) => {
-        const nameLower = (s.name || '').toLowerCase();
-        return (
-          nameLower === curated.name.toLowerCase() ||
-          curated.keywords.some((k) => nameLower.includes(k))
+    if (services && services.length > 0) {
+      return services.slice(0, maxItems).map((s) => {
+        // Look up local fallback thumbnail if available
+        const sName = (s.name || '').toLowerCase();
+        const fallback = MASTER_FALLBACK_SERVICES.find((f) =>
+          f.keywords.some((k) => sName.includes(k))
         );
+
+        const revCount = s.reviewCount ?? 0;
+        const formattedRevCount =
+          revCount > 999
+            ? `(${(revCount / 1000).toFixed(1)}K)`
+            : revCount > 0
+            ? `(${revCount})`
+            : fallback?.ratingCount || '(50+)';
+
+        return {
+          id: s.id,
+          name: s.name,
+          displayName: s.name,
+          rating: s.rating != null ? Number(s.rating) : fallback?.rating ?? 4.9,
+          ratingCount: formattedRevCount,
+          price: s.price != null ? Number(s.price) : fallback?.price,
+          originalPrice:
+            s.originalPrice != null ? Number(s.originalPrice) : fallback?.originalPrice,
+          imageUrl: s.imageUrl,
+          localImage: fallback?.localImage,
+          resolvedId: s.id,
+          resolvedCategoryId: s.categoryId,
+          backendItem: s,
+        };
       });
+    }
 
-      return {
-        ...curated,
-        resolvedId: match?.id || curated.id,
-        resolvedCategoryId: match?.categoryId || curated.defaultCategoryId,
-        price: curated.price ?? (match?.price ? Number(match.price) : undefined),
-        originalPrice:
-          curated.originalPrice ??
-          (match?.originalPrice ? Number(match.originalPrice) : undefined),
-        backendItem: match,
-      };
-    });
-
-    return items.slice(0, maxItems);
+    // Fallback when API returns empty (offline or initial loading)
+    return MASTER_FALLBACK_SERVICES.slice(0, maxItems).map((curated) => ({
+      ...curated,
+      resolvedId: curated.id,
+      resolvedCategoryId: curated.defaultCategoryId,
+    }));
   }, [services, maxItems]);
 
   const handleCardPress = (item: ExploreCardItem) => {
@@ -212,10 +303,14 @@ export function ExploreServicesGrid({
       return;
     }
 
-    // Default: route to categories tab or targeted service search
     router.push({
-      pathname: '/(tabs)/categories',
-      params: { search: item.name },
+      pathname: '/service/[id]',
+      params: {
+        id: item.resolvedId,
+        name: item.name,
+        image: item.imageUrl,
+        price: item.price ? String(item.price) : undefined,
+      },
     });
   };
 
@@ -246,7 +341,7 @@ export function ExploreServicesGrid({
       {isLoading && services.length === 0 ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" color="#0052FF" />
-          <Text style={styles.loadingText}>Loading services...</Text>
+          <Text style={styles.loadingText}>Loading explore services...</Text>
         </View>
       ) : isError && services.length === 0 ? (
         <View style={styles.errorContainer}>
@@ -258,60 +353,15 @@ export function ExploreServicesGrid({
           )}
         </View>
       ) : (
-        /* Exact 3-Column Grid across all 12 services */
+        /* 3-Column Grid from Live API Data */
         <View style={styles.gridContainer}>
           {displayItems.map((item) => (
-            <Pressable
+            <ServiceGridCard
               key={item.id}
-              style={({ pressed }) => [
-                styles.card,
-                { width: cardWidth },
-                pressed && styles.cardPressed,
-              ]}
-              onPress={() => handleCardPress(item)}
-              accessibilityRole="button"
-              accessibilityLabel={`${item.name}, rating: ${item.rating}`}
-            >
-              {/* 1. Star Rating Row: ⭐ 4.9 (48.3K) */}
-              <View style={styles.ratingRow}>
-                <Ionicons name="star" size={10.5} color="#F59E0B" />
-                <Text style={styles.ratingText}>
-                  {item.rating}{' '}
-                  <Text style={styles.ratingCountText}>{item.ratingCount}</Text>
-                </Text>
-              </View>
-
-              {/* 2. Center Image with Circular Plus Button */}
-              <View style={styles.imageContainer}>
-                <Image
-                  source={item.localImage}
-                  style={styles.cardImage}
-                  contentFit="contain"
-                  transition={120}
-                />
-                {/* Circular White Plus Button with Blue Icon */}
-                <View style={styles.plusButton}>
-                  <Ionicons name="add" size={14} color="#0052FF" />
-                </View>
-              </View>
-
-              {/* 3. Service Name (2 lines max, bold navy) */}
-              <Text style={styles.serviceName} numberOfLines={2}>
-                {item.displayName}
-              </Text>
-
-              {/* 4. Optional Price Row (e.g. Cooking ₹49 strikethrough ₹99) */}
-              {item.price ? (
-                <View style={styles.priceRow}>
-                  <Text style={styles.currentPriceText}>₹{item.price}</Text>
-                  {item.originalPrice ? (
-                    <Text style={styles.originalPriceText}>
-                      ₹{item.originalPrice}
-                    </Text>
-                  ) : null}
-                </View>
-              ) : null}
-            </Pressable>
+              item={item}
+              cardWidth={cardWidth}
+              onPress={handleCardPress}
+            />
           ))}
         </View>
       )}
@@ -384,16 +434,29 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   imageContainer: {
-    height: 62,
+    height: 64,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
     marginVertical: 4,
   },
+  cardImageCover: {
+    width: '100%',
+    height: 60,
+    borderRadius: 10,
+  },
   cardImage: {
-    width: 56,
-    height: 56,
+    width: 54,
+    height: 54,
+  },
+  imageFallback: {
+    width: '100%',
+    height: 60,
+    borderRadius: 10,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   plusButton: {
     position: 'absolute',
@@ -427,6 +490,9 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     gap: 4,
     marginTop: 3,
+  },
+  priceRowPlaceholder: {
+    height: 16,
   },
   currentPriceText: {
     fontSize: 12,
