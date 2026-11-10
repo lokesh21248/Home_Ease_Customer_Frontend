@@ -38,17 +38,22 @@ export function HomeRecentBookings() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {recentList.map((item) => {
+        {recentList.map((item, index) => {
           const isOngoing =
             item.status === 'SEARCHING' ||
             item.status === 'ACCEPTED' ||
             item.status === 'ON_THE_WAY' ||
             item.status === 'IN_PROGRESS';
+          const isLast = index === recentList.length - 1;
 
           return (
             <Pressable
               key={item.bookingId}
-              style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+              style={({ pressed }) => [
+                styles.card,
+                !isLast && { marginRight: 12 },
+                pressed && styles.cardPressed,
+              ]}
               onPress={() => handleBookingPress(item)}
               accessibilityRole="button"
               accessibilityLabel={`${item.serviceName}, Status: ${item.status}`}
@@ -78,7 +83,7 @@ export function HomeRecentBookings() {
                 </View>
               </View>
 
-              <Text style={styles.serviceName} numberOfLines={1}>
+              <Text style={styles.serviceName} numberOfLines={1} ellipsizeMode="tail">
                 {item.serviceName}
               </Text>
 
@@ -123,11 +128,11 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    gap: 12,
+    paddingLeft: 16,
+    paddingRight: 20,
   },
   card: {
-    width: 200,
+    width: 220,
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.lg,
     borderWidth: 1,

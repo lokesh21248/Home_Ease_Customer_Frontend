@@ -116,6 +116,14 @@ export function HomeScreen() {
       {/* 1. Light Status Bar on royal blue top bar */}
       <StatusBar style="light" />
 
+      {/* Persistent Status Bar Shield: Keeps device status indicators (time, battery, WiFi) protected from scrolling content */}
+      <View
+        style={[
+          styles.statusBarShield,
+          { height: insets.top, backgroundColor: '#074BD4' },
+        ]}
+      />
+
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomScrollPadding }]}
@@ -167,6 +175,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+  },
+  statusBarShield: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
   },
   scroll: {
     flex: 1,

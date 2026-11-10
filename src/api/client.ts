@@ -926,11 +926,11 @@ export const bookingApi = {
     let subServices =
       Array.isArray(data.subServices)
         ? data.subServices
-            .filter((s) => s && s.subServiceId && UUID_REGEX.test(s.subServiceId))
-            .map((s) => ({
-              subServiceId: s.subServiceId,
-              quantity: Math.max(1, Number(s.quantity) || 1),
-            }))
+          .filter((s) => s && s.subServiceId && UUID_REGEX.test(s.subServiceId))
+          .map((s) => ({
+            subServiceId: s.subServiceId,
+            quantity: Math.max(1, Number(s.quantity) || 1),
+          }))
         : [];
     if (subServices.length === 0) {
       subServices = [{ subServiceId: '3c391970-28ee-4f28-a566-5c3b48763525', quantity: 1 }];

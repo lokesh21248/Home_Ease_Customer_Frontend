@@ -4,8 +4,8 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  Dimensions,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,12 +15,8 @@ import { Typography } from '../../constants/theme';
 
 export type ExploreGridItem = ExploreServiceItem;
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 const HORIZONTAL_PADDING = 16;
 const COLUMN_GAP = 12;
-const CARD_WIDTH = Math.floor((SCREEN_WIDTH - HORIZONTAL_PADDING * 2 - COLUMN_GAP) / 2);
-const IMAGE_HEIGHT = 110;
 
 export interface ExploreServicesGridProps {
   services?: ExploreServiceItem[];
@@ -39,7 +35,12 @@ export function ExploreServicesGrid({
   onSelectService,
   onViewAllPress,
 }: ExploreServicesGridProps) {
+  const { width: screenWidth } = useWindowDimensions();
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+
+  // Dynamic 2-column calculation
+  const cardWidth = Math.floor((screenWidth - HORIZONTAL_PADDING * 2 - COLUMN_GAP) / 2);
+  const imageHeight = Math.round(cardWidth * 0.72); // ~16:9 proportional thumbnail
 
   const handleItemPress = (item: ExploreServiceItem) => {
     if (onSelectService) {
@@ -82,7 +83,7 @@ export function ExploreServicesGrid({
       {/* Header Row */}
       <View style={styles.headerRow}>
         <View style={styles.titleRow}>
-          <Ionicons name="sparkles" size={18} color="#0052FF" style={{ marginRight: 6 }} />
+          <Ionicons name="sparkles" size={18} color="#1D4ED8" style={{ marginRight: 6 }} />
           <Text style={styles.headerTitle}>Explore Services</Text>
         </View>
         <Pressable
@@ -92,7 +93,7 @@ export function ExploreServicesGrid({
           accessibilityLabel="View All Services"
         >
           <Text style={styles.viewAllText}>View All</Text>
-          <Ionicons name="arrow-forward" size={14} color="#0052FF" style={{ marginLeft: 4 }} />
+          <Ionicons name="arrow-forward" size={14} color="#1D4ED8" style={{ marginLeft: 4 }} />
         </Pressable>
       </View>
 
@@ -100,8 +101,8 @@ export function ExploreServicesGrid({
       {isLoading && (
         <View style={styles.gridContainer}>
           {[1, 2, 3, 4].map((key) => (
-            <View key={`skeleton-${key}`} style={[styles.skeletonCard, { width: CARD_WIDTH }]}>
-              <View style={styles.skeletonImage}>
+            <View key={`skeleton-${key}`} style={[styles.skeletonCard, { width: cardWidth }]}>
+              <View style={[styles.skeletonImage, { height: imageHeight }]}>
                 <ActivityIndicator size="small" color="#94A3B8" />
               </View>
               <View style={styles.skeletonBody}>
@@ -151,7 +152,7 @@ export function ExploreServicesGrid({
         </View>
       )}
 
-      {/* ── Dynamic Grid ────────────────────────────────────────────── */}
+      {/* ── Dynamic 2-Column Grid ───────────────────────────────────── */}
       {!isLoading && !isError && activeServices.length > 0 && (
         <View style={styles.gridContainer}>
           {activeServices.map((item) => {
@@ -170,7 +171,7 @@ export function ExploreServicesGrid({
                 key={item.id}
                 style={({ pressed }) => [
                   styles.cardPressable,
-                  { width: CARD_WIDTH },
+                  { width: cardWidth },
                   pressed && styles.cardPressed,
                 ]}
                 onPress={() => handleItemPress(item)}
@@ -178,7 +179,7 @@ export function ExploreServicesGrid({
                 accessibilityLabel={`${item.name}, Price: ₹${item.price}`}
               >
                 {/* Image Container with Badges */}
-                <View style={styles.imageWrapper}>
+                <View style={[styles.imageWrapper, { height: imageHeight }]}>
                   {item.imageUrl && !isImgErr ? (
                     <Image
                       source={{ uri: item.imageUrl }}
@@ -195,10 +196,10 @@ export function ExploreServicesGrid({
                     </View>
                   )}
 
-                  {/* Rating Badge */}
+                  {/* Rating Badge Overlay (Bottom-Left) */}
                   {item.rating != null && (
                     <View style={styles.ratingBadge}>
-                      <Ionicons name="star" size={10} color="#F59E0B" style={{ marginRight: 3 }} />
+                      <Ionicons name="star" size={11} color="#F59E0B" style={{ marginRight: 3 }} />
                       <Text style={styles.ratingText}>
                         {Number(item.rating).toFixed(1)}
                         {item.reviewCount ? ` (${item.reviewCount})` : ''}
@@ -206,7 +207,7 @@ export function ExploreServicesGrid({
                     </View>
                   )}
 
-                  {/* Discount Badge */}
+                  {/* Discount Badge Overlay (Top-Right, Primary Blue) */}
                   {discountPercent > 0 && (
                     <View style={styles.discountBadge}>
                       <Text style={styles.discountText}>{discountPercent}% OFF</Text>
@@ -216,17 +217,19 @@ export function ExploreServicesGrid({
 
                 {/* Card Details */}
                 <View style={styles.detailsContainer}>
+                  {/* Category tag: Uppercase, fontSize: 11, color: '#64748B', letterSpacing: 0.5 */}
                   {item.categoryName ? (
                     <Text style={styles.categoryName} numberOfLines={1}>
                       {item.categoryName}
                     </Text>
                   ) : null}
 
+                  {/* Title: fontSize: 15, fontWeight: 700, lines: 2 max */}
                   <Text style={styles.serviceName} numberOfLines={2}>
                     {item.name}
                   </Text>
 
-                  {/* Pricing Row */}
+                  {/* Price row: bold blue (#1D4ED8) & strikethrough (#94A3B8) */}
                   <View style={styles.priceRow}>
                     <Text style={styles.priceText}>
                       ₹{Number(item.price).toLocaleString('en-IN')}
@@ -278,7 +281,7 @@ const styles = StyleSheet.create({
   viewAllText: {
     fontSize: 13,
     fontFamily: Typography.fontFamily.bold,
-    color: '#0052FF',
+    color: '#1D4ED8',
   },
   pressedText: {
     opacity: 0.7,
@@ -286,31 +289,33 @@ const styles = StyleSheet.create({
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    columnGap: COLUMN_GAP,
+    justifyContent: 'space-between',
     rowGap: 14,
   },
   cardPressable: {
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    elevation: 2,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1.5 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
-    shadowRadius: 3,
+    shadowRadius: 4,
+    marginBottom: 14,
   },
   cardPressed: {
-    opacity: 0.95,
+    opacity: 0.94,
     transform: [{ scale: 0.98 }],
   },
   imageWrapper: {
     width: '100%',
-    height: IMAGE_HEIGHT,
     backgroundColor: '#F1F5F9',
     position: 'relative',
     overflow: 'hidden',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   cardImage: {
     width: '100%',
@@ -324,52 +329,62 @@ const styles = StyleSheet.create({
   },
   ratingBadge: {
     position: 'absolute',
-    bottom: 6,
-    left: 6,
+    bottom: 8,
+    left: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingVertical: 2.5,
     borderRadius: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   ratingText: {
-    fontSize: 10,
+    fontSize: 11,
     fontFamily: Typography.fontFamily.bold,
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
   discountBadge: {
     position: 'absolute',
-    top: 6,
-    right: 6,
-    backgroundColor: '#0052FF',
+    top: 8,
+    right: 8,
+    backgroundColor: '#1D4ED8',
     paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingVertical: 2.5,
     borderRadius: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    elevation: 2,
   },
   discountText: {
     fontSize: 10,
     fontFamily: Typography.fontFamily.bold,
     color: '#FFFFFF',
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
   },
   detailsContainer: {
-    padding: 10,
+    padding: 12,
   },
   categoryName: {
     fontSize: 11,
-    fontFamily: Typography.fontFamily.medium,
+    fontFamily: Typography.fontFamily.semiBold,
     color: '#64748B',
-    marginBottom: 2,
+    marginBottom: 4,
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   },
   serviceName: {
-    fontSize: 13,
+    fontSize: 14.5,
     fontFamily: Typography.fontFamily.bold,
     color: '#0F172A',
-    lineHeight: 18,
-    marginBottom: 6,
+    lineHeight: 19,
+    marginBottom: 8,
   },
   priceRow: {
     flexDirection: 'row',
@@ -377,33 +392,35 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   priceText: {
-    fontSize: 14,
+    fontSize: 15.5,
     fontFamily: Typography.fontFamily.bold,
-    color: '#0052FF',
+    color: '#1D4ED8',
   },
   originalPriceText: {
-    fontSize: 11,
+    fontSize: 12,
     fontFamily: Typography.fontFamily.regular,
     color: '#94A3B8',
     textDecorationLine: 'line-through',
   },
   /* Skeleton Loading */
   skeletonCard: {
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    marginBottom: 14,
   },
   skeletonImage: {
     width: '100%',
-    height: IMAGE_HEIGHT,
     backgroundColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   skeletonBody: {
-    padding: 10,
+    padding: 12,
     gap: 6,
   },
   skeletonLineLong: {
@@ -432,7 +449,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
@@ -453,9 +470,9 @@ const styles = StyleSheet.create({
   retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0052FF',
-    paddingVertical: 7,
-    paddingHorizontal: 14,
+    backgroundColor: '#1D4ED8',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 8,
   },
   retryButtonText: {
@@ -465,13 +482,13 @@ const styles = StyleSheet.create({
   },
   browseButton: {
     backgroundColor: '#F1F5F9',
-    paddingVertical: 7,
-    paddingHorizontal: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 8,
   },
   browseButtonText: {
     fontSize: 12,
     fontFamily: Typography.fontFamily.bold,
-    color: '#0052FF',
+    color: '#1D4ED8',
   },
 });

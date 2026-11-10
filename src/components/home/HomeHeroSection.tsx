@@ -72,7 +72,7 @@ export function HomeHeroSection({
       colors={['#074BD4', '#004ECC', '#005CE6', '#0172F5']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
-      style={[styles.container, { paddingTop: Math.max(insets.top + 6, 38) }]}
+      style={[styles.container, { paddingTop: Math.max(insets.top, 24) + 12 }]}
     >
       {/* 1. Top Location & Action Bar */}
       <View style={styles.topBar}>

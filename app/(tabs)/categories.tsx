@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Pressable,
-  ScrollView,
+  FlatList,
   StyleSheet,
   Text,
   TextInput,
@@ -29,11 +29,13 @@ type CategoryItem = {
 };
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
-const CARD_GAP = 10;
+const HORIZONTAL_PADDING = 16;
+const GRID_GAP = 12;
+const NUM_COLUMNS = 3;
 const PRIMARY_BLUE = LayoutConstants.BRAND_BLUE;
 
-// ─── Category Card ────────────────────────────────────────────────────────────
-function CategoryCard({
+// ─── Category Grid Card (Prompt 1) ───────────────────────────────────────────
+function CategoryGridCard({
   item,
   cardWidth,
   onPress,
@@ -43,48 +45,41 @@ function CategoryCard({
   onPress: (item: CategoryItem) => void;
 }) {
   const [imageError, setImageError] = useState(false);
-  const imageHeight = Math.round(cardWidth * 0.74);
-  const cardFooterHeight = 46;
-  const totalCardHeight = imageHeight + cardFooterHeight;
-
   const fallbackUri = getCategoryFallbackImage(item.name);
   const imageUri = !imageError && item.image ? item.image : fallbackUri;
 
   return (
     <Pressable
       style={({ pressed }) => [
-        styles.card,
-        { width: cardWidth, height: totalCardHeight },
+        styles.cardContainer,
+        { width: cardWidth },
         pressed && styles.cardPressed,
       ]}
       onPress={() => onPress(item)}
       accessibilityRole="button"
       accessibilityLabel={`${item.name} category`}
     >
-      {/* Image or Icon Placeholder */}
-      <View style={[styles.cardImageWrap, { height: imageHeight }]}>
+      {/* 1. Rounded Image Thumbnail with Aspect Ratio 1:1 */}
+      <View style={[styles.thumbnailWrap, { width: cardWidth, height: cardWidth }]}>
         {imageUri ? (
           <Image
             source={{ uri: imageUri }}
-            style={styles.cardImage}
+            style={styles.thumbnailImage}
             contentFit="cover"
             transition={150}
             onError={() => setImageError(true)}
           />
         ) : (
           <View style={styles.placeholderWrap}>
-            <Ionicons name="apps-outline" size={26} color="#94A3B8" />
+            <Ionicons name="apps-outline" size={28} color="#94A3B8" />
           </View>
         )}
       </View>
 
-      {/* Name + chevron */}
-      <View style={[styles.cardFooter, { height: cardFooterHeight }]}>
-        <Text style={styles.cardName} numberOfLines={2} ellipsizeMode="tail">
-          {item.name}
-        </Text>
-        <Ionicons name="chevron-forward" size={13} color="#9CA3AF" />
-      </View>
+      {/* 2. Category Title Below Image */}
+      <Text style={styles.categoryTitle} numberOfLines={2} ellipsizeMode="tail">
+        {item.name}
+      </Text>
     </Pressable>
   );
 }
@@ -95,10 +90,9 @@ export default function CategoriesScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const [search, setSearch] = useState('');
 
-  // Responsive columns: 2 on compact (< 340), 4 on tablets (> 600), 3 on standard phones
-  const numColumns = screenWidth < 340 ? 2 : screenWidth > 600 ? 4 : 3;
+  // Explicit 3-column calculation
   const cardWidth = Math.floor(
-    (screenWidth - LayoutConstants.HORIZONTAL_PADDING * 2 - CARD_GAP * (numColumns - 1)) / numColumns
+    (screenWidth - HORIZONTAL_PADDING * 2 - GRID_GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS
   );
 
   const {
@@ -137,8 +131,8 @@ export default function CategoriesScreen() {
     });
   };
 
-  const headerTopPadding = getHeaderTopPadding(insets.top, 10);
-  const bottomScrollPadding = getScrollBottomPadding(insets.bottom);
+  const headerTopPadding = getHeaderTopPadding(insets.top, 8);
+  const bottomScrollPadding = getScrollBottomPadding(insets.bottom, 24);
 
   return (
     <View style={styles.container}>
@@ -147,27 +141,28 @@ export default function CategoriesScreen() {
       {/* Blue Top StatusBar filler for bounce/stretch */}
       <View style={[styles.topBarFill, { height: insets.top, backgroundColor: PRIMARY_BLUE }]} />
 
-      {/* Blue Header */}
+      {/* Blue Header with Search Bar */}
       <View style={[styles.header, { paddingTop: headerTopPadding }]}>
         <Text style={styles.headerTitle}>Categories</Text>
         <Text style={styles.headerSubtitle}>Choose a service category</Text>
 
+        {/* Search bar (height: 48, borderRadius: 24, paddingHorizontal: 16) */}
         <View style={styles.searchWrap}>
-          <Ionicons name="search" size={20} color="#8AA1C7" style={styles.searchIcon} />
+          <Ionicons name="search" size={20} color="#64748B" style={styles.searchIcon} />
           <TextInput
             id="categories-search-input"
             style={styles.searchInput}
             value={search}
             onChangeText={setSearch}
-            placeholder="Search for services, e.g. AC Service, Cleaning..."
-            placeholderTextColor="#8AA1C7"
+            placeholder="Search for services, e.g. Cleaning..."
+            placeholderTextColor="#94A3B8"
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
           />
           {search.length > 0 && (
             <Pressable onPress={() => setSearch('')} hitSlop={8} accessibilityLabel="Clear search">
-              <Ionicons name="close-circle" size={18} color="#8AA1C7" />
+              <Ionicons name="close-circle" size={18} color="#64748B" />
             </Pressable>
           )}
         </View>
@@ -192,9 +187,12 @@ export default function CategoriesScreen() {
           </Pressable>
         </View>
       ) : (
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={[styles.gridContent, { paddingBottom: bottomScrollPadding }]}
+        <FlatList
+          data={filteredCategories}
+          keyExtractor={(item, index) => item.key || `${item.id}-${index}`}
+          numColumns={NUM_COLUMNS}
+          columnWrapperStyle={styles.columnWrapper}
+          contentContainerStyle={[styles.listContent, { paddingBottom: bottomScrollPadding }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -206,8 +204,7 @@ export default function CategoriesScreen() {
               colors={[PRIMARY_BLUE]}
             />
           }
-        >
-          {filteredCategories.length === 0 ? (
+          ListEmptyComponent={
             <View style={styles.emptyWrap}>
               <Ionicons name="search-outline" size={52} color="#C7D2E0" />
               <Text style={styles.emptyText}>
@@ -224,19 +221,15 @@ export default function CategoriesScreen() {
                 </Pressable>
               )}
             </View>
-          ) : (
-            <View style={styles.grid}>
-              {filteredCategories.map((item, index) => (
-                <CategoryCard
-                  key={item.key || `${item.id}-${index}`}
-                  item={item}
-                  cardWidth={cardWidth}
-                  onPress={handleCategoryPress}
-                />
-              ))}
-            </View>
+          }
+          renderItem={({ item }) => (
+            <CategoryGridCard
+              item={item}
+              cardWidth={cardWidth}
+              onPress={handleCategoryPress}
+            />
           )}
-        </ScrollView>
+        />
       )}
     </View>
   );
@@ -256,10 +249,10 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: PRIMARY_BLUE,
-    paddingHorizontal: LayoutConstants.HORIZONTAL_PADDING,
-    paddingBottom: 22,
-    borderBottomLeftRadius: LayoutConstants.HEADER_BORDER_RADIUS + 4,
-    borderBottomRightRadius: LayoutConstants.HEADER_BORDER_RADIUS + 4,
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
   headerTitle: {
     fontFamily: Typography.fontFamily.bold,
@@ -279,52 +272,53 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    height: 46,
-    paddingHorizontal: 14,
+    height: 48,
+    paddingHorizontal: 16,
     ...Shadows.sm,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: 10,
   },
   searchInput: {
     flex: 1,
     fontFamily: Typography.fontFamily.regular,
-    fontSize: 13.5,
+    fontSize: 14,
     color: '#1E293B',
     paddingVertical: 0,
   },
 
-  // Grid
-  scrollView: {
-    flex: 1,
-  },
-  gridContent: {
-    paddingHorizontal: LayoutConstants.HORIZONTAL_PADDING,
-    paddingTop: 16,
+  // 3-Column Grid
+  listContent: {
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingTop: 18,
     paddingBottom: 24,
   },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: CARD_GAP,
+  columnWrapper: {
+    justifyContent: 'flex-start',
+    gap: GRID_GAP,
+    marginBottom: 14,
   },
-
-  // Card
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    ...Shadows.sm,
+  cardContainer: {
+    alignItems: 'center',
   },
   cardPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.97 }],
+    opacity: 0.9,
+    transform: [{ scale: 0.96 }],
   },
-  cardImageWrap: {
+  thumbnailWrap: {
+    aspectRatio: 1,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.sm,
+  },
+  thumbnailImage: {
     width: '100%',
-    backgroundColor: '#EEF2FA',
+    height: '100%',
   },
   placeholderWrap: {
     width: '100%',
@@ -333,25 +327,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#EEF2FA',
   },
-  cardImage: {
-    width: '100%',
-    height: '100%',
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-  },
-  cardName: {
-    flex: 1,
+  categoryTitle: {
     fontFamily: Typography.fontFamily.semiBold,
-    fontSize: 11.5,
+    fontSize: 13,
+    fontWeight: '600',
     color: '#1E293B',
-    lineHeight: 15,
-    paddingRight: 2,
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 17,
   },
 
   // Loading / Empty
