@@ -18,6 +18,7 @@ export interface ExploreServicesGridProps {
   services?: ExploreServiceItem[];
   isLoading?: boolean;
   isError?: boolean;
+  maxItems?: number; // Defaults to 9 for exact 3x3 grid layout
   onRetry?: () => void;
   onSelectService?: (item: ExploreServiceItem) => void;
   onViewAllPress?: () => void;
@@ -103,24 +104,6 @@ export const MASTER_SERVICES: CuratedHomeService[] = [
     keywords: ['bath', 'toilet', 'washroom'],
   },
   {
-    id: 'pest-control',
-    name: 'Pest Control',
-    displayName: 'Pest Control',
-    rating: 4.9,
-    ratingCount: '(17.9K)',
-    localImage: require('../../../assets/images/services/pest_control_thumb.png'),
-    keywords: ['pest', 'termite', 'cockroach', 'bug'],
-  },
-  {
-    id: 'painting',
-    name: 'Painting (Home/Office)',
-    displayName: 'Painting\n(Home/Office)',
-    rating: 4.9,
-    ratingCount: '(21.7K)',
-    localImage: require('../../../assets/images/services/painting_thumb.png'),
-    keywords: ['paint', 'color', 'wall'],
-  },
-  {
     id: 'electrician-service',
     name: 'Electrician Service',
     displayName: 'Electrician\nService',
@@ -137,6 +120,24 @@ export const MASTER_SERVICES: CuratedHomeService[] = [
     ratingCount: '(12.3K)',
     localImage: require('../../../assets/images/services/plumbing_thumb.png'),
     keywords: ['plumb', 'pipe', 'tap', 'leak', 'drain'],
+  },
+  {
+    id: 'pest-control',
+    name: 'Pest Control',
+    displayName: 'Pest Control',
+    rating: 4.9,
+    ratingCount: '(17.9K)',
+    localImage: require('../../../assets/images/services/pest_control_thumb.png'),
+    keywords: ['pest', 'termite', 'cockroach', 'bug'],
+  },
+  {
+    id: 'painting',
+    name: 'Painting (Home/Office)',
+    displayName: 'Painting\n(Home/Office)',
+    rating: 4.9,
+    ratingCount: '(21.7K)',
+    localImage: require('../../../assets/images/services/painting_thumb.png'),
+    keywords: ['paint', 'color', 'wall'],
   },
   {
     id: 'carpentry-service',
@@ -159,6 +160,7 @@ export function ExploreServicesGrid({
   services = [],
   isLoading = false,
   isError = false,
+  maxItems = 9,
   onRetry,
   onSelectService,
   onViewAllPress,
@@ -169,9 +171,9 @@ export function ExploreServicesGrid({
   const GAP = 10;
   const cardWidth = Math.floor((screenWidth - 32 - (2 * GAP)) / 3);
 
-  // Map backend services to curated master list to retain high-res assets & live IDs
+  // Map backend services to curated master list to retain high-res assets & live IDs, limited to 3x3 (9 items)
   const displayItems = useMemo<ExploreCardItem[]>(() => {
-    return MASTER_SERVICES.map((curated) => {
+    const items = MASTER_SERVICES.map((curated) => {
       // Find matching backend item if available
       const match = services.find((s) => {
         const nameLower = (s.name || '').toLowerCase();
@@ -192,7 +194,9 @@ export function ExploreServicesGrid({
         backendItem: match,
       };
     });
-  }, [services]);
+
+    return items.slice(0, maxItems);
+  }, [services, maxItems]);
 
   const handleCardPress = (item: ExploreCardItem) => {
     if (onSelectService && item.backendItem) {
