@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
+  FlatList,
   useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -15,9 +16,6 @@ import { Typography } from '../../constants/theme';
 
 export type ExploreGridItem = ExploreServiceItem;
 
-const HORIZONTAL_PADDING = 16;
-const COLUMN_GAP = 12;
-
 export interface ExploreServicesGridProps {
   services?: ExploreServiceItem[];
   isLoading?: boolean;
@@ -27,6 +25,98 @@ export interface ExploreServicesGridProps {
   onViewAllPress?: () => void;
 }
 
+// ─── Individual 3-Grid Card Component (Prompt 1) ─────────────────────────────
+interface ExploreServiceCardProps {
+  item: ExploreServiceItem;
+  cardWidth: number;
+  onPress: (item: ExploreServiceItem) => void;
+}
+
+function ExploreServiceCard({ item, cardWidth, onPress }: ExploreServiceCardProps) {
+  const [imageError, setImageError] = useState(false);
+
+  const hasDiscount =
+    item.originalPrice != null && Number(item.originalPrice) > Number(item.price);
+  const discountPercent = hasDiscount
+    ? Math.round(
+        ((Number(item.originalPrice) - Number(item.price)) / Number(item.originalPrice)) * 100
+      )
+    : 0;
+
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.cardContainer,
+        { width: cardWidth },
+        pressed && styles.cardPressed,
+      ]}
+      onPress={() => onPress(item)}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.name}, Price: ₹${item.price}`}
+    >
+      {/* 1. Image & Badges Overlay (Aspect Ratio 1:1, borderRadius: 10) */}
+      <View style={styles.imageWrapper}>
+        {item.imageUrl && !imageError ? (
+          <Image
+            source={{ uri: item.imageUrl }}
+            style={styles.cardImage}
+            contentFit="cover"
+            transition={150}
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          <View style={styles.imageFallback}>
+            <Ionicons name="briefcase-outline" size={24} color="#94A3B8" />
+          </View>
+        )}
+
+        {/* Discount Badge: Top-Right, Primary Blue (#2563EB) */}
+        {discountPercent > 0 && (
+          <View style={styles.discountBadge}>
+            <Text style={styles.discountText}>{discountPercent}% OFF</Text>
+          </View>
+        )}
+
+        {/* Rating Badge: Bottom-Left, Semi-transparent Black */}
+        {item.rating != null && (
+          <View style={styles.ratingBadge}>
+            <Ionicons name="star" size={9} color="#F59E0B" style={{ marginRight: 2.5 }} />
+            <Text style={styles.ratingText}>
+              {Number(item.rating).toFixed(1)}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* 2. Card Typography */}
+      {/* Category Label: uppercase, fontSize: 9, color: #64748B */}
+      {item.categoryName ? (
+        <Text style={styles.categoryLabel} numberOfLines={1}>
+          {item.categoryName}
+        </Text>
+      ) : null}
+
+      {/* Title: fontSize: 12, fontWeight: '700', lines: 2, height: 32 */}
+      <Text style={styles.serviceTitle} numberOfLines={2}>
+        {item.name}
+      </Text>
+
+      {/* Price Row: current price in #2563EB, original in #94A3B8 with strikethrough */}
+      <View style={styles.priceRow}>
+        <Text style={styles.currentPriceText}>
+          ₹{Number(item.price).toLocaleString('en-IN')}
+        </Text>
+        {hasDiscount && (
+          <Text style={styles.originalPriceText}>
+            ₹{Number(item.originalPrice).toLocaleString('en-IN')}
+          </Text>
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
+// ─── Main Explore Services 3-Grid Component ──────────────────────────────────
 export function ExploreServicesGrid({
   services = [],
   isLoading = false,
@@ -36,11 +126,9 @@ export function ExploreServicesGrid({
   onViewAllPress,
 }: ExploreServicesGridProps) {
   const { width: screenWidth } = useWindowDimensions();
-  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
-  // Dynamic 2-column calculation
-  const cardWidth = Math.floor((screenWidth - HORIZONTAL_PADDING * 2 - COLUMN_GAP) / 2);
-  const imageHeight = Math.round(cardWidth * 0.72); // ~16:9 proportional thumbnail
+  // Dynamic 3-Column card width: (width - 32 padding - 16 gap) / 3
+  const cardWidth = Math.floor((screenWidth - 32 - 16) / 3);
 
   const handleItemPress = (item: ExploreServiceItem) => {
     if (onSelectService) {
@@ -48,7 +136,6 @@ export function ExploreServicesGrid({
       return;
     }
 
-    // Default route: Navigate to category or service details
     if (item.categoryId) {
       router.push({
         pathname: '/category/[id]',
@@ -80,10 +167,10 @@ export function ExploreServicesGrid({
 
   return (
     <View style={styles.container}>
-      {/* Header Row */}
+      {/* ── Header Section (Prompt 2) ─────────────────────────────── */}
       <View style={styles.headerRow}>
         <View style={styles.titleRow}>
-          <Ionicons name="sparkles" size={18} color="#1D4ED8" style={{ marginRight: 6 }} />
+          <Ionicons name="sparkles" size={18} color="#2563EB" style={{ marginRight: 6 }} />
           <Text style={styles.headerTitle}>Explore Services</Text>
         </View>
         <Pressable
@@ -92,22 +179,24 @@ export function ExploreServicesGrid({
           accessibilityRole="button"
           accessibilityLabel="View All Services"
         >
-          <Text style={styles.viewAllText}>View All</Text>
-          <Ionicons name="arrow-forward" size={14} color="#1D4ED8" style={{ marginLeft: 4 }} />
+          <Text style={styles.viewAllText}>View All →</Text>
         </Pressable>
       </View>
 
-      {/* ── Loading Skeleton ────────────────────────────────────────── */}
+      {/* ── Loading Skeleton (3-Grid) ─────────────────────────────── */}
       {isLoading && (
-        <View style={styles.gridContainer}>
-          {[1, 2, 3, 4].map((key) => (
-            <View key={`skeleton-${key}`} style={[styles.skeletonCard, { width: cardWidth }]}>
-              <View style={[styles.skeletonImage, { height: imageHeight }]}>
+        <View style={styles.skeletonWrapper}>
+          {[1, 2, 3, 4, 5, 6].map((key) => (
+            <View
+              key={`skeleton-${key}`}
+              style={[styles.skeletonCard, { width: cardWidth }]}
+            >
+              <View style={[styles.skeletonImage, { width: cardWidth, height: cardWidth }]}>
                 <ActivityIndicator size="small" color="#94A3B8" />
               </View>
               <View style={styles.skeletonBody}>
-                <View style={styles.skeletonLineLong} />
                 <View style={styles.skeletonLineShort} />
+                <View style={styles.skeletonLineLong} />
                 <View style={styles.skeletonLinePrice} />
               </View>
             </View>
@@ -152,99 +241,24 @@ export function ExploreServicesGrid({
         </View>
       )}
 
-      {/* ── Dynamic 2-Column Grid ───────────────────────────────────── */}
+      {/* ── 3-Column FlatList Grid (Prompt 1) ────────────────────────── */}
       {!isLoading && !isError && activeServices.length > 0 && (
-        <View style={styles.gridContainer}>
-          {activeServices.map((item) => {
-            const hasDiscount =
-              item.originalPrice != null && Number(item.originalPrice) > Number(item.price);
-            const discountPercent = hasDiscount
-              ? Math.round(
-                  ((Number(item.originalPrice) - Number(item.price)) / Number(item.originalPrice)) * 100
-                )
-              : 0;
-
-            const isImgErr = imageErrors[item.id];
-
-            return (
-              <Pressable
-                key={item.id}
-                style={({ pressed }) => [
-                  styles.cardPressable,
-                  { width: cardWidth },
-                  pressed && styles.cardPressed,
-                ]}
-                onPress={() => handleItemPress(item)}
-                accessibilityRole="button"
-                accessibilityLabel={`${item.name}, Price: ₹${item.price}`}
-              >
-                {/* Image Container with Badges */}
-                <View style={[styles.imageWrapper, { height: imageHeight }]}>
-                  {item.imageUrl && !isImgErr ? (
-                    <Image
-                      source={{ uri: item.imageUrl }}
-                      style={styles.cardImage}
-                      contentFit="cover"
-                      transition={200}
-                      onError={() =>
-                        setImageErrors((prev) => ({ ...prev, [item.id]: true }))
-                      }
-                    />
-                  ) : (
-                    <View style={styles.imageFallback}>
-                      <Ionicons name="briefcase-outline" size={28} color="#94A3B8" />
-                    </View>
-                  )}
-
-                  {/* Rating Badge Overlay (Bottom-Left) */}
-                  {item.rating != null && (
-                    <View style={styles.ratingBadge}>
-                      <Ionicons name="star" size={11} color="#F59E0B" style={{ marginRight: 3 }} />
-                      <Text style={styles.ratingText}>
-                        {Number(item.rating).toFixed(1)}
-                        {item.reviewCount ? ` (${item.reviewCount})` : ''}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Discount Badge Overlay (Top-Right, Primary Blue) */}
-                  {discountPercent > 0 && (
-                    <View style={styles.discountBadge}>
-                      <Text style={styles.discountText}>{discountPercent}% OFF</Text>
-                    </View>
-                  )}
-                </View>
-
-                {/* Card Details */}
-                <View style={styles.detailsContainer}>
-                  {/* Category tag: Uppercase, fontSize: 11, color: '#64748B', letterSpacing: 0.5 */}
-                  {item.categoryName ? (
-                    <Text style={styles.categoryName} numberOfLines={1}>
-                      {item.categoryName}
-                    </Text>
-                  ) : null}
-
-                  {/* Title: fontSize: 15, fontWeight: 700, lines: 2 max */}
-                  <Text style={styles.serviceName} numberOfLines={2}>
-                    {item.name}
-                  </Text>
-
-                  {/* Price row: bold blue (#1D4ED8) & strikethrough (#94A3B8) */}
-                  <View style={styles.priceRow}>
-                    <Text style={styles.priceText}>
-                      ₹{Number(item.price).toLocaleString('en-IN')}
-                    </Text>
-                    {hasDiscount && (
-                      <Text style={styles.originalPriceText}>
-                        ₹{Number(item.originalPrice).toLocaleString('en-IN')}
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
+        <FlatList
+          data={activeServices}
+          keyExtractor={(item) => item.id}
+          numColumns={3}
+          columnWrapperStyle={styles.columnWrapper}
+          contentContainerStyle={styles.flatListContent}
+          scrollEnabled={false}
+          nestedScrollEnabled={true}
+          renderItem={({ item }) => (
+            <ExploreServiceCard
+              item={item}
+              cardWidth={cardWidth}
+              onPress={handleItemPress}
+            />
+          )}
+        />
       )}
     </View>
   );
@@ -253,14 +267,15 @@ export function ExploreServicesGrid({
 const styles = StyleSheet.create({
   container: {
     marginTop: 18,
-    paddingHorizontal: HORIZONTAL_PADDING,
-    marginBottom: 20,
+    marginBottom: 16,
   },
+  /* Header Section */
   headerRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
   titleRow: {
     flexDirection: 'row',
@@ -269,6 +284,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontFamily: Typography.fontFamily.bold,
+    fontWeight: '700',
     color: '#0F172A',
     letterSpacing: -0.3,
   },
@@ -279,47 +295,57 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   viewAllText: {
-    fontSize: 13,
-    fontFamily: Typography.fontFamily.bold,
-    color: '#1D4ED8',
+    fontSize: 14,
+    fontFamily: Typography.fontFamily.semiBold,
+    fontWeight: '600',
+    color: '#2563EB',
   },
   pressedText: {
     opacity: 0.7,
   },
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+
+  /* FlatList 3-Grid Configuration */
+  columnWrapper: {
     justifyContent: 'space-between',
-    rowGap: 14,
+    paddingHorizontal: 16,
   },
-  cardPressable: {
-    borderRadius: 16,
-    overflow: 'hidden',
+  flatListContent: {
+    gap: 12,
+  },
+
+  /* Card Container */
+  cardContainer: {
     backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    elevation: 3,
+    elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1.5 },
     shadowOpacity: 0.06,
-    shadowRadius: 4,
-    marginBottom: 14,
+    shadowRadius: 3,
+    paddingBottom: 8,
   },
   cardPressed: {
     opacity: 0.94,
-    transform: [{ scale: 0.98 }],
+    transform: [{ scale: 0.97 }],
   },
+
+  /* Image & Overlays */
   imageWrapper: {
+    position: 'relative',
+    aspectRatio: 1,
     width: '100%',
     backgroundColor: '#F1F5F9',
-    position: 'relative',
     overflow: 'hidden',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderRadius: 10,
   },
   cardImage: {
     width: '100%',
     height: '100%',
+    borderRadius: 10,
   },
   imageFallback: {
     flex: 1,
@@ -327,101 +353,113 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#EEF2F6',
   },
-  ratingBadge: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    paddingHorizontal: 6,
-    paddingVertical: 2.5,
-    borderRadius: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  ratingText: {
-    fontSize: 11,
-    fontFamily: Typography.fontFamily.bold,
-    color: '#0F172A',
-  },
   discountBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: '#1D4ED8',
-    paddingHorizontal: 6,
-    paddingVertical: 2.5,
-    borderRadius: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 2,
-    elevation: 2,
+    top: 6,
+    right: 6,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+    zIndex: 2,
   },
   discountText: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: Typography.fontFamily.bold,
+    fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 0.3,
   },
-  detailsContainer: {
-    padding: 12,
+  ratingBadge: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 2,
   },
-  categoryName: {
-    fontSize: 11,
+  ratingText: {
+    fontSize: 9,
     fontFamily: Typography.fontFamily.semiBold,
-    color: '#64748B',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
-  serviceName: {
-    fontSize: 14.5,
+
+  /* Typography */
+  categoryLabel: {
+    fontSize: 9,
+    fontFamily: Typography.fontFamily.semiBold,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    marginTop: 6,
+    paddingHorizontal: 6,
+  },
+  serviceTitle: {
+    fontSize: 12,
     fontFamily: Typography.fontFamily.bold,
+    fontWeight: '700',
     color: '#0F172A',
-    lineHeight: 19,
-    marginBottom: 8,
+    marginTop: 2,
+    paddingHorizontal: 6,
+    height: 32, // Consistent line-height & height prevents misaligned rows
+    lineHeight: 16,
   },
   priceRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+    paddingHorizontal: 6,
   },
-  priceText: {
-    fontSize: 15.5,
+  currentPriceText: {
+    fontSize: 12,
     fontFamily: Typography.fontFamily.bold,
-    color: '#1D4ED8',
+    fontWeight: '700',
+    color: '#2563EB',
   },
   originalPriceText: {
-    fontSize: 12,
+    fontSize: 10,
     fontFamily: Typography.fontFamily.regular,
     color: '#94A3B8',
     textDecorationLine: 'line-through',
   },
+
   /* Skeleton Loading */
+  skeletonWrapper: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+  },
   skeletonCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
     backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    marginBottom: 14,
+    paddingBottom: 8,
   },
   skeletonImage: {
-    width: '100%',
     backgroundColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderRadius: 10,
   },
   skeletonBody: {
-    padding: 12,
-    gap: 6,
+    padding: 6,
+    gap: 4,
+  },
+  skeletonLineShort: {
+    height: 8,
+    width: '60%',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 4,
+    marginTop: 4,
   },
   skeletonLineLong: {
     height: 12,
@@ -429,27 +467,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#E2E8F0',
     borderRadius: 4,
   },
-  skeletonLineShort: {
-    height: 10,
-    width: '50%',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 4,
-  },
   skeletonLinePrice: {
-    height: 12,
-    width: '40%',
+    height: 10,
+    width: '45%',
     backgroundColor: '#E2E8F0',
     borderRadius: 4,
-    marginTop: 4,
+    marginTop: 2,
   },
-  /* Error / Empty States */
+
+  /* Error & Empty States */
   stateContainer: {
+    marginHorizontal: 16,
     paddingVertical: 24,
     paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
@@ -470,7 +504,7 @@ const styles = StyleSheet.create({
   retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1D4ED8',
+    backgroundColor: '#2563EB',
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -489,6 +523,6 @@ const styles = StyleSheet.create({
   browseButtonText: {
     fontSize: 12,
     fontFamily: Typography.fontFamily.bold,
-    color: '#1D4ED8',
+    color: '#2563EB',
   },
 });
