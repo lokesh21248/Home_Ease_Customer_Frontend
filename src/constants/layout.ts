@@ -26,7 +26,7 @@ export const LayoutConstants = {
   TAB_BAR_BASE_HEIGHT: 58,
   TAB_BAR_TOP_PADDING: 10,
   HEADER_BORDER_RADIUS: 28,
-  BRAND_BLUE: '#1479F8',
+  BRAND_BLUE: '#0052FF',
 } as const;
 
 /**

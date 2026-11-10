@@ -226,13 +226,6 @@ export default function ProfileScreen() {
           <View style={styles.menuCard}>
             <MenuItem
               IconComponent={Ionicons}
-              iconName="wallet-outline"
-              label="HomeEase Wallet"
-              desc={`Balance: ₹${balance.toLocaleString('en-IN')} • Top up & history`}
-              onPress={() => router.push('/profile/wallet')}
-            />
-            <MenuItem
-              IconComponent={Ionicons}
               iconName="calendar-outline"
               label="My Bookings"
               desc="View, track and manage your bookings"
@@ -416,7 +409,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 8,
     borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.04)',
+    borderColor: '#EEF2F6',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -474,7 +467,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: 'rgba(20, 121, 248, 0.15)',
+    borderColor: '#EEF2F6',
     ...Shadows.sm,
   },
   profileWalletLeft: {
@@ -543,7 +536,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.04)',
+    borderColor: '#EEF2F6',
     ...Shadows.sm,
   },
   menuItem: {

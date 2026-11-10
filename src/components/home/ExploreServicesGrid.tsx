@@ -140,14 +140,18 @@ interface ExploreCardItem {
   backendItem?: ExploreServiceItem;
 }
 
-// Subcomponent for each service card to track image errors independently
+// Subcomponent for each service card with explicit column margin & locked height
 function ServiceGridCard({
   item,
   cardWidth,
+  index,
+  gap,
   onPress,
 }: {
   item: ExploreCardItem;
   cardWidth: number;
+  index: number;
+  gap: number;
   onPress: (item: ExploreCardItem) => void;
 }) {
   const [imageFailed, setImageFailed] = useState(false);
@@ -157,11 +161,17 @@ function ServiceGridCard({
     item.price != null &&
     Number(item.originalPrice) > Number(item.price);
 
+  const isRightmostCol = index % 3 === 2;
+
   return (
     <Pressable
       style={({ pressed }) => [
         styles.card,
-        { width: cardWidth },
+        {
+          width: cardWidth,
+          marginRight: isRightmostCol ? 0 : gap,
+          marginBottom: gap + 2,
+        },
         pressed && styles.cardPressed,
       ]}
       onPress={() => onPress(item)}
@@ -170,8 +180,8 @@ function ServiceGridCard({
     >
       {/* 1. Star Rating Row: ⭐ 4.9 (142) */}
       <View style={styles.ratingRow}>
-        <Ionicons name="star" size={10.5} color="#F59E0B" />
-        <Text style={styles.ratingText}>
+        <Ionicons name="star" size={10} color="#F59E0B" />
+        <Text style={styles.ratingText} numberOfLines={1}>
           {item.rating}{' '}
           <Text style={styles.ratingCountText}>{item.ratingCount}</Text>
         </Text>
@@ -196,29 +206,29 @@ function ServiceGridCard({
           />
         ) : (
           <View style={styles.imageFallback}>
-            <Ionicons name="sparkles" size={26} color="#0052FF" />
+            <Ionicons name="sparkles" size={24} color="#0052FF" />
           </View>
         )}
 
         {/* Circular White Plus Button with Blue Icon */}
         <View style={styles.plusButton}>
-          <Ionicons name="add" size={14} color="#0052FF" />
+          <Ionicons name="add" size={13} color="#0052FF" />
         </View>
       </View>
 
-      {/* 3. Service Name (2 lines max, bold navy) */}
-      <Text style={styles.serviceName} numberOfLines={2}>
+      {/* 3. Service Name (Locked 2 lines height prevents row jitter) */}
+      <Text style={styles.serviceName} numberOfLines={2} ellipsizeMode="tail">
         {item.displayName || item.name}
       </Text>
 
       {/* 4. Price Row with original price strikethrough if discounted */}
       {item.price != null ? (
         <View style={styles.priceRow}>
-          <Text style={styles.currentPriceText}>
+          <Text style={styles.currentPriceText} numberOfLines={1}>
             ₹{Number(item.price).toLocaleString('en-IN')}
           </Text>
           {hasDiscount && (
-            <Text style={styles.originalPriceText}>
+            <Text style={styles.originalPriceText} numberOfLines={1}>
               ₹{Number(item.originalPrice).toLocaleString('en-IN')}
             </Text>
           )}
@@ -353,12 +363,14 @@ export function ExploreServicesGrid({
           )}
         </View>
       ) : (
-        /* 3-Column Grid from Live API Data */
+        /* 3-Column Grid from Live API Data with zero wrapping bug */
         <View style={styles.gridContainer}>
-          {displayItems.map((item) => (
+          {displayItems.map((item, index) => (
             <ServiceGridCard
               key={item.id}
               item={item}
+              index={index}
+              gap={GAP}
               cardWidth={cardWidth}
               onPress={handleCardPress}
             />
@@ -395,7 +407,6 @@ const styles = StyleSheet.create({
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
     paddingHorizontal: 16,
   },
   card: {
@@ -403,9 +414,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#EEF2F6',
-    paddingVertical: 9,
-    paddingHorizontal: 8,
-    marginBottom: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 7,
+    minHeight: 154,
     justifyContent: 'space-between',
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 2 },
@@ -421,7 +432,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    marginBottom: 4,
+    height: 16,
+    marginBottom: 2,
   },
   ratingText: {
     fontSize: 10,
@@ -434,25 +446,25 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   imageContainer: {
-    height: 64,
+    height: 62,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    marginVertical: 4,
+    marginVertical: 2,
   },
   cardImageCover: {
     width: '100%',
-    height: 60,
+    height: 58,
     borderRadius: 10,
   },
   cardImage: {
-    width: 54,
-    height: 54,
+    width: 52,
+    height: 52,
   },
   imageFallback: {
     width: '100%',
-    height: 60,
+    height: 58,
     borderRadius: 10,
     backgroundColor: '#EFF6FF',
     alignItems: 'center',
@@ -480,19 +492,20 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '700',
     color: '#0F172A', // Bold navy
-    lineHeight: 15,
-    marginTop: 4,
-    minHeight: 30,
+    lineHeight: 16,
+    height: 32,
+    marginTop: 2,
     textAlign: 'left',
   },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 4,
-    marginTop: 3,
+    height: 18,
+    marginTop: 2,
   },
   priceRowPlaceholder: {
-    height: 16,
+    height: 18,
   },
   currentPriceText: {
     fontSize: 12,
