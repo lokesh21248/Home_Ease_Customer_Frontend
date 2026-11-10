@@ -69,7 +69,7 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     rating: 4.9,
     ratingCount: '(79.0K)',
     localImage: require('../../../assets/images/services/cooking_thumb.png'),
-    keywords: ['cook', 'chef', 'food', 'kitchen', 'meal'],
+    keywords: ['cooking', 'cook', 'chef', 'food', 'meal'],
   },
   {
     id: 'sofa-carpet-cleaning',
@@ -155,6 +155,7 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
 ];
 
 interface ExploreCardItem {
+  key?: string;
   id: string;
   name: string;
   displayName: string;
@@ -264,14 +265,18 @@ export function ExploreServicesGrid({
 
   // Directly map live API data from backend /explore-services endpoint while maintaining exact master visual order
   const displayItems = useMemo<ExploreCardItem[]>(() => {
-    return MASTER_FALLBACK_SERVICES.slice(0, maxItems).map((curated) => {
-      // Find matching backend item if live data exists
+    const usedBackendIds = new Set<string>();
+
+    return MASTER_FALLBACK_SERVICES.slice(0, maxItems).map((curated, index) => {
+      // Find matching backend item if live data exists without duplicates
       const backendMatch = services.find((s) => {
+        if (!s || !s.id || usedBackendIds.has(s.id)) return false;
         const sName = (s.name || '').toLowerCase();
         return curated.keywords.some((k) => sName.includes(k));
       });
 
       if (backendMatch) {
+        usedBackendIds.add(backendMatch.id);
         const revCount = backendMatch.reviewCount ?? 0;
         const formattedRevCount =
           revCount > 999
@@ -281,6 +286,7 @@ export function ExploreServicesGrid({
             : curated.ratingCount;
 
         return {
+          key: `curated-${curated.id}-${backendMatch.id}-${index}`,
           id: backendMatch.id,
           name: backendMatch.name,
           displayName: curated.displayName,
@@ -295,6 +301,7 @@ export function ExploreServicesGrid({
       }
 
       return {
+        key: `curated-${curated.id}-${index}`,
         id: curated.id,
         name: curated.name,
         displayName: curated.displayName,
@@ -378,7 +385,7 @@ export function ExploreServicesGrid({
         <View style={styles.gridContainer}>
           {displayItems.map((item, index) => (
             <ServiceGridCard
-              key={item.id}
+              key={item.key || `explore-card-${item.id}-${index}`}
               item={item}
               index={index}
               gap={GAP}
