@@ -110,6 +110,9 @@ export function BottomNavigation({
               accessibilityState={{ selected: isActive }}
               accessibilityLabel={item.label}
             >
+              {/* Active blue underline indicator at top */}
+              {isActive && <View style={styles.activeIndicator} />}
+
               <View style={styles.iconContainer}>
                 {item.icon(color)}
               </View>
@@ -166,6 +169,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flex: 1,
     paddingVertical: 4,
+    position: 'relative',
+  },
+  activeIndicator: {
+    position: 'absolute',
+    top: -8,
+    left: '15%',
+    right: '15%',
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: '#0052FF',
   },
   iconContainer: {
     width: 28,

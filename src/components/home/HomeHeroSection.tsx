@@ -4,13 +4,14 @@ import {
   Text,
   StyleSheet,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Zap, Calendar, MapPin, ChevronDown, Bell } from 'lucide-react-native';
+import { MapPin, ChevronDown, Bell, Zap, Calendar } from 'lucide-react-native';
 import { useUserLocation } from '../../hooks/useUserLocation';
 
 interface HomeHeroSectionProps {
@@ -27,10 +28,10 @@ export function HomeHeroSection({
   onSchedulePress,
 }: HomeHeroSectionProps) {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const { address } = useUserLocation();
   const [activeActionDot, setActiveActionDot] = useState(0);
 
-  // Dynamic address with fallback matching master design
   const areaTitle = address?.area || address?.city || 'Sector 55';
   const fullAddress =
     address?.formattedAddress ||
@@ -51,50 +52,41 @@ export function HomeHeroSection({
   const handleInstant = () => {
     setActiveActionDot(0);
     if (onInstantBookPress) onInstantBookPress();
-    else {
-      router.push({
-        pathname: '/booking/date-time',
-        params: { bookingType: 'INSTANT' },
-      });
-    }
+    else router.push({ pathname: '/booking/date-time', params: { bookingType: 'INSTANT' } });
   };
 
   const handleSchedule = () => {
     setActiveActionDot(1);
     if (onSchedulePress) onSchedulePress();
-    else {
-      router.push({
-        pathname: '/booking/date-time',
-        params: { bookingType: 'SCHEDULED' },
-      });
-    }
+    else router.push({ pathname: '/booking/date-time', params: { bookingType: 'SCHEDULED' } });
   };
+
+  // Card width = half screen minus horizontal padding and gap
+  const cardWidth = Math.floor((screenWidth - 32 - 10) / 2);
 
   return (
     <LinearGradient
-      colors={['#004BE4', '#005CE6', '#0172F5']}
+      colors={['#0047DD', '#0062F5', '#1877F2']}
       start={{ x: 0, y: 0 }}
-      end={{ x: 0.8, y: 1 }}
-      style={[styles.container, { paddingTop: Math.max(insets.top, 24) + 10 }]}
+      end={{ x: 1, y: 1 }}
+      style={[styles.container, { paddingTop: Math.max(insets.top, 20) + 6 }]}
     >
-      {/* 1. Top Location & Action Bar */}
+      {/* ── 1. TOP BAR: Location + Earn + Bell ── */}
       <View style={styles.topBar}>
-        {/* Left: Location Pin & Address */}
+        {/* Location */}
         <Pressable
-          style={styles.locationContainer}
+          style={styles.locationRow}
           onPress={handleLocation}
           accessibilityRole="button"
           accessibilityLabel={`Selected location: ${areaTitle}`}
         >
-          <View style={styles.locationPinCircle}>
-            <MapPin size={22} color="#FFFFFF" fill="#FFFFFF" />
-          </View>
+          <MapPin size={20} color="#FFFFFF" fill="#FFFFFF" />
           <View style={styles.locationTextCol}>
             <View style={styles.locationTitleRow}>
               <Text style={styles.locationTitle} numberOfLines={1}>
                 {areaTitle}
               </Text>
-              <ChevronDown size={17} color="#FFFFFF" style={{ marginLeft: 3 }} />
+              <ChevronDown size={15} color="#FFFFFF" style={{ marginLeft: 2 }} />
             </View>
             <Text style={styles.locationSub} numberOfLines={1}>
               {fullAddress}
@@ -102,36 +94,34 @@ export function HomeHeroSection({
           </View>
         </Pressable>
 
-        {/* Right: Earn ₹200 & Notification Bell */}
-        <View style={styles.rightActionsRow}>
-          {/* Earn ₹200 Capsule Button */}
+        {/* Right: Earn ₹200 + Bell */}
+        <View style={styles.rightActions}>
+          {/* Earn ₹200 pill */}
           <Pressable
-            style={styles.earnButton}
+            style={styles.earnPill}
             onPress={() => router.push('/profile/wallet')}
             accessibilityRole="button"
-            accessibilityLabel="Earn ₹200 wallet referral"
+            accessibilityLabel="Earn ₹200"
           >
-            {/* 3D Gold Coins Graphic */}
-            <View style={styles.coinGraphic}>
-              <View style={styles.coinBack}>
-                <Text style={styles.coinBackText}>₹</Text>
-              </View>
-              <View style={styles.coinFront}>
-                <Text style={styles.coinFrontText}>₹</Text>
+            {/* Gold coin stack */}
+            <View style={styles.coinStack}>
+              <View style={styles.coinB} />
+              <View style={styles.coinF}>
+                <Text style={styles.coinText}>₹</Text>
               </View>
             </View>
-            <View style={styles.earnTextCol}>
+            <View>
               <Text style={styles.earnLabel}>Earn</Text>
               <Text style={styles.earnAmount}>₹200</Text>
             </View>
           </Pressable>
 
-          {/* Notification Bell Button with Red Badge 1 */}
+          {/* Bell */}
           <Pressable
-            style={styles.bellButton}
+            style={styles.bellBtn}
             onPress={handleNotification}
             accessibilityRole="button"
-            accessibilityLabel="Notifications (1 new)"
+            accessibilityLabel="Notifications"
           >
             <Bell size={20} color="#FFFFFF" strokeWidth={2.2} />
             <View style={styles.bellBadge}>
@@ -141,199 +131,205 @@ export function HomeHeroSection({
         </View>
       </View>
 
-      {/* 2. Hero Headline & Cleaning Character */}
-      <View style={styles.heroContentRow}>
-        <View style={styles.heroTextCol}>
-          {/* HomeEase Brand Row */}
+      {/* ── 2. HERO CONTENT: Headline + Cleaner Image ── */}
+      <View style={styles.heroRow}>
+        {/* Left: Brand + Headline */}
+        <View style={styles.heroLeft}>
+          {/* HomeEase brand row */}
           <View style={styles.brandRow}>
-            <Ionicons name="home" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Ionicons name="home" size={15} color="#FFFFFF" style={{ marginRight: 5 }} />
             <Text style={styles.brandName}>HomeEase</Text>
           </View>
 
-          {/* Main 3-line Headline with 16+ highlighted in golden yellow */}
-          <View style={styles.headlineWrapper}>
-            <Text style={styles.heroHeading}>
-              One professional,{'\n'}
-              <Text style={styles.heroHighlight}>16+</Text> home cleaning{'\n'}
-              services
+          {/* Headline: "One professional, 16+ home cleaning services" */}
+          <View style={styles.headlineBlock}>
+            <Text style={styles.headlineLine}>One professional,</Text>
+            <Text style={styles.headlineLine}>
+              <Text style={styles.highlight}>16+</Text>
+              <Text style={styles.headlineLine}> home cleaning</Text>
             </Text>
-
-            {/* Stylized Golden Curved Accent Swoosh under services */}
-            <View style={styles.swooshArc} />
+            <Text style={styles.headlineLine}>services</Text>
+            {/* Golden swoosh underline */}
+            <View style={styles.swoosh} />
           </View>
         </View>
 
-        {/* Hero Cleaning Character Illustration */}
-        <View style={styles.heroImageWrapper}>
+        {/* Right: Cleaner woman illustration */}
+        <View style={styles.heroImageWrap}>
           <Image
             source={require('../../../assets/images/hero_cleaner.png')}
             style={styles.heroImage}
             contentFit="contain"
-            transition={150}
+            transition={200}
           />
         </View>
       </View>
 
-      {/* 3. Quick Action Cards (Book Instant Service & Schedule for Later) */}
-      <View style={styles.quickCardsRow}>
-        {/* Left Card: Book Instant Service */}
+      {/* ── 3. QUICK ACTION CARDS ── */}
+      <View style={styles.cardsRow}>
+        {/* Left: Book Instant Service */}
         <Pressable
-          style={({ pressed }) => [styles.quickCard, pressed && styles.cardPressed]}
+          style={({ pressed }) => [
+            styles.card,
+            { width: cardWidth },
+            pressed && styles.cardPressed,
+          ]}
           onPress={handleInstant}
           accessibilityRole="button"
-          accessibilityLabel="Book Instant Service in 10 mins"
+          accessibilityLabel="Book Instant Service in 10 minutes"
         >
+          {/* Left text column */}
           <View style={styles.cardLeftCol}>
-            <Zap size={28} color="#0052FF" strokeWidth={2.2} style={styles.cardHeaderIcon} />
-            <Text style={styles.cardTitle}>
-              {'Book Instant\nService'}
-            </Text>
-            {/* ⚡ 10 mins Pill */}
+            <Zap size={26} color="#0052FF" strokeWidth={2.3} />
+            <Text style={styles.cardTitle}>{'Book Instant\nService'}</Text>
             <View style={styles.instantPill}>
-              <Text style={styles.instantLightning}>⚡</Text>
-              <Text style={styles.instantPillText}>10 mins</Text>
+              <Text style={styles.pillEmoji}>⚡</Text>
+              <Text style={styles.pillText}>10 mins</Text>
             </View>
           </View>
 
-          {/* Right 3D Stopwatch Graphic with "10 mins" */}
-          <View style={styles.stopwatchGraphic}>
-            <View style={styles.stopwatchRing}>
-              <View style={styles.stopwatchPlunger} />
-              <View style={styles.stopwatchDial}>
-                <Text style={styles.stopwatchTimeText}>10</Text>
-                <Text style={styles.stopwatchSubText}>mins</Text>
-              </View>
+          {/* Right: Stopwatch graphic */}
+          <View style={styles.stopwatchWrap}>
+            {/* Plunger top */}
+            <View style={styles.plunger} />
+            {/* Circle dial */}
+            <View style={styles.watchCircle}>
+              <Text style={styles.watchNum}>10</Text>
+              <Text style={styles.watchSub}>mins</Text>
             </View>
+            {/* Tick marks */}
+            <View style={[styles.tick, { top: 4, left: '50%', marginLeft: -1 }]} />
+            <View style={[styles.tick, { bottom: 4, left: '50%', marginLeft: -1 }]} />
           </View>
         </Pressable>
 
-        {/* Right Card: Schedule for Later */}
+        {/* Right: Schedule for Later */}
         <Pressable
-          style={({ pressed }) => [styles.quickCard, pressed && styles.cardPressed]}
+          style={({ pressed }) => [
+            styles.card,
+            { width: cardWidth },
+            pressed && styles.cardPressed,
+          ]}
           onPress={handleSchedule}
           accessibilityRole="button"
-          accessibilityLabel="Schedule for Later today at 2 pm"
+          accessibilityLabel="Schedule for Later"
         >
+          {/* Left text column */}
           <View style={styles.cardLeftCol}>
-            <Calendar size={28} color="#0052FF" strokeWidth={2.2} style={styles.cardHeaderIcon} />
-            <Text style={styles.cardTitle}>
-              {'Schedule for\nLater'}
-            </Text>
-            {/* Today, 2 pm Pill */}
+            <Calendar size={26} color="#0052FF" strokeWidth={2.3} />
+            <Text style={styles.cardTitle}>{'Schedule for\nLater'}</Text>
             <View style={styles.schedulePill}>
               <Text style={styles.schedulePillText}>Today, 2 pm</Text>
             </View>
           </View>
 
-          {/* Right 3D Calendar + Clock Graphic */}
-          <View style={styles.calendarGraphic}>
-            <View style={styles.calendarSheet}>
-              <View style={styles.calendarTopBar} />
-              <View style={styles.calendarGrid}>
-                <View style={styles.calendarDot} />
-                <View style={styles.calendarDot} />
-                <View style={styles.calendarDot} />
+          {/* Right: Calendar + Clock graphic */}
+          <View style={styles.calWrap}>
+            {/* Calendar card */}
+            <View style={styles.calCard}>
+              <View style={styles.calHeader} />
+              <View style={styles.calBody}>
+                <View style={styles.calDotRow}>
+                  <View style={styles.calDot} />
+                  <View style={styles.calDot} />
+                  <View style={styles.calDot} />
+                </View>
+                <View style={styles.calDotRow}>
+                  <View style={styles.calDot} />
+                  <View style={[styles.calDot, styles.calDotHighlight]} />
+                  <View style={styles.calDot} />
+                </View>
               </View>
             </View>
-            <View style={styles.calendarClock}>
-              <Ionicons name="time-outline" size={18} color="#0052FF" />
+            {/* Clock overlay */}
+            <View style={styles.clockBadge}>
+              <Ionicons name="time" size={16} color="#0052FF" />
             </View>
           </View>
         </Pressable>
       </View>
 
-      {/* 4. Action Cards 3 Pagination Dots */}
-      <View style={styles.actionPaginationRow}>
-        <View style={[styles.actionDot, activeActionDot === 0 && styles.actionActiveDot]} />
-        <View style={[styles.actionDot, activeActionDot === 1 && styles.actionActiveDot]} />
-        <View style={[styles.actionDot, activeActionDot === 2 && styles.actionActiveDot]} />
+      {/* ── 4. PAGINATION DOTS ── */}
+      <View style={styles.dotsRow}>
+        <View style={[styles.dot, activeActionDot === 0 && styles.dotActive]} />
+        <View style={[styles.dot, activeActionDot === 1 && styles.dotActive]} />
+        <View style={[styles.dot, activeActionDot === 2 && styles.dotActive]} />
       </View>
     </LinearGradient>
   );
 }
 
+const CARD_H = 108;
+
 const styles = StyleSheet.create({
   container: {
-    paddingBottom: 14,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
   },
+
+  /* ── TOP BAR ── */
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  locationContainer: {
+  locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
     marginRight: 10,
+    gap: 5,
   },
-  locationPinCircle: {
-    marginRight: 6,
-  },
-  locationTextCol: {
-    flex: 1,
-  },
-  locationTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+  locationTextCol: { flex: 1 },
+  locationTitleRow: { flexDirection: 'row', alignItems: 'center' },
   locationTitle: {
-    fontSize: 16.5,
+    fontSize: 16,
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: -0.2,
   },
   locationSub: {
-    fontSize: 11.5,
-    color: 'rgba(255, 255, 255, 0.88)',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.85)',
     fontWeight: '500',
     marginTop: 1,
   },
-  rightActionsRow: {
+  rightActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  earnButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
-    borderColor: 'rgba(255, 255, 255, 0.35)',
-    borderWidth: 1,
-    borderRadius: 22,
+  earnPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.20)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.32)',
+    borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    gap: 6,
+    gap: 5,
   },
-  coinGraphic: {
+  coinStack: {
     width: 22,
     height: 20,
     position: 'relative',
-    justifyContent: 'center',
   },
-  coinBack: {
+  coinB: {
     position: 'absolute',
     left: 0,
-    top: 2,
+    top: 4,
     width: 14,
     height: 14,
     borderRadius: 7,
     backgroundColor: '#F59E0B',
+    borderWidth: 1,
     borderColor: '#FDE68A',
-    borderWidth: 1.2,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  coinBackText: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: '#78350F',
-  },
-  coinFront: {
+  coinF: {
     position: 'absolute',
     left: 7,
     top: 0,
@@ -341,76 +337,52 @@ const styles = StyleSheet.create({
     height: 15,
     borderRadius: 7.5,
     backgroundColor: '#FBBF24',
-    borderColor: '#FEF08A',
-    borderWidth: 1.2,
+    borderWidth: 1,
+    borderColor: '#FEF9C3',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
   },
-  coinFrontText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: '#92400E',
-  },
-  earnTextCol: {
-    justifyContent: 'center',
-  },
-  earnLabel: {
-    fontSize: 9.5,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    lineHeight: 11,
-  },
-  earnAmount: {
-    fontSize: 12.5,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    lineHeight: 14,
-  },
-  bellButton: {
+  coinText: { fontSize: 8, fontWeight: '900', color: '#92400E' },
+  earnLabel: { fontSize: 9, fontWeight: '600', color: '#FFFFFF', lineHeight: 10 },
+  earnAmount: { fontSize: 12, fontWeight: '800', color: '#FFFFFF', lineHeight: 14 },
+  bellBtn: {
     width: 38,
     height: 38,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
-    borderColor: 'rgba(255, 255, 255, 0.35)',
+    borderRadius: 11,
+    backgroundColor: 'rgba(255,255,255,0.20)',
     borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.32)',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   bellBadge: {
     position: 'absolute',
-    top: 3,
-    right: 3,
+    top: 5,
+    right: 5,
+    width: 13,
+    height: 13,
+    borderRadius: 6.5,
     backgroundColor: '#EF4444',
-    width: 14,
-    height: 14,
-    borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.2,
-    borderColor: '#004BE4',
+    borderColor: '#0047DD',
   },
-  bellBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 8.5,
-    fontWeight: '800',
-  },
-  heroContentRow: {
+  bellBadgeText: { fontSize: 7.5, fontWeight: '900', color: '#FFFFFF' },
+
+  /* ── HERO CONTENT ── */
+  heroRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 4,
-    position: 'relative',
-    minHeight: 146,
+    paddingTop: 4,
+    paddingBottom: 10,
+    minHeight: 148,
   },
-  heroTextCol: {
+  heroLeft: {
     flex: 1,
-    paddingRight: 135,
+    paddingRight: 8,
     zIndex: 2,
   },
   brandRow: {
@@ -419,194 +391,202 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   brandName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
   },
-  headlineWrapper: {
+  headlineBlock: {
     position: 'relative',
   },
-  heroHeading: {
-    fontSize: 22.5,
+  headlineLine: {
+    fontSize: 22,
     fontWeight: '800',
     color: '#FFFFFF',
-    lineHeight: 28.5,
+    lineHeight: 28,
     letterSpacing: -0.4,
   },
-  heroHighlight: {
-    color: '#FACC15', // Vibrant golden yellow
+  highlight: {
+    color: '#FACC15',
     fontWeight: '900',
+    fontSize: 22,
   },
-  swooshArc: {
-    marginTop: 4,
-    width: 82,
+  swoosh: {
+    marginTop: 5,
+    width: 76,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#FACC15', // Golden yellow swoop under services
+    backgroundColor: '#FACC15',
   },
-  heroImageWrapper: {
+  heroImageWrap: {
     position: 'absolute',
-    right: 4,
-    top: -12,
-    width: 178,
-    height: 156,
+    right: 0,
+    top: -16,
+    width: 170,
+    height: 160,
     zIndex: 1,
   },
   heroImage: {
     width: '100%',
     height: '100%',
   },
-  quickCardsRow: {
+
+  /* ── ACTION CARDS ── */
+  cardsRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    gap: 12,
-    marginTop: 8,
+    gap: 10,
+    marginTop: 4,
   },
-  quickCard: {
-    flex: 1,
+  card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 12,
-    minHeight: 104,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    height: CARD_H,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    elevation: 3,
-    shadowColor: '#000000',
+    elevation: 4,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
+    shadowOpacity: 0.10,
+    shadowRadius: 6,
   },
   cardPressed: {
-    opacity: 0.92,
+    opacity: 0.93,
     transform: [{ scale: 0.98 }],
   },
   cardLeftCol: {
     flex: 1,
     justifyContent: 'space-between',
-    paddingRight: 4,
-  },
-  cardHeaderIcon: {
-    marginBottom: 4,
+    height: '100%',
+    paddingRight: 6,
   },
   cardTitle: {
-    fontSize: 13.5,
+    fontSize: 13,
     fontWeight: '800',
     color: '#0F172A',
     lineHeight: 17,
     letterSpacing: -0.2,
+    marginTop: 4,
   },
   instantPill: {
-    backgroundColor: '#EFF6FF',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 3.5,
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     alignSelf: 'flex-start',
-    gap: 4,
-    marginTop: 6,
+    gap: 3,
+    marginTop: 'auto',
   },
-  instantLightning: {
-    fontSize: 10.5,
-  },
-  instantPillText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#0052FF',
-  },
+  pillEmoji: { fontSize: 10 },
+  pillText: { fontSize: 10.5, fontWeight: '800', color: '#0052FF' },
   schedulePill: {
     backgroundColor: '#EFF6FF',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 3.5,
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     alignSelf: 'flex-start',
-    marginTop: 6,
+    marginTop: 'auto',
   },
-  schedulePillText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#0052FF',
-  },
-  stopwatchGraphic: {
-    width: 46,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stopwatchRing: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#EFF6FF',
-    borderWidth: 2.5,
-    borderColor: '#0052FF',
+  schedulePillText: { fontSize: 10.5, fontWeight: '800', color: '#0052FF' },
+
+  /* Stopwatch graphic */
+  stopwatchWrap: {
+    width: 50,
+    height: 54,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
-  stopwatchPlunger: {
+  plunger: {
     position: 'absolute',
-    top: -5,
-    width: 8,
-    height: 4,
+    top: 2,
+    width: 10,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: '#0052FF',
-    borderRadius: 2,
+    zIndex: 2,
   },
-  stopwatchDial: {
+  watchCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 3,
+    borderColor: '#0052FF',
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 6,
   },
-  stopwatchTimeText: {
-    fontSize: 12,
+  watchNum: {
+    fontSize: 14,
     fontWeight: '900',
     color: '#0F172A',
-    lineHeight: 13,
+    lineHeight: 15,
   },
-  stopwatchSubText: {
+  watchSub: {
     fontSize: 8,
     fontWeight: '700',
     color: '#0052FF',
     lineHeight: 9,
   },
-  calendarGraphic: {
-    width: 48,
-    height: 48,
+  tick: {
+    position: 'absolute',
+    width: 2,
+    height: 5,
+    backgroundColor: '#0052FF',
+    borderRadius: 1,
+  },
+
+  /* Calendar graphic */
+  calWrap: {
+    width: 50,
+    height: 54,
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  calendarSheet: {
-    width: 40,
-    height: 38,
-    borderRadius: 6,
+  calCard: {
+    width: 42,
+    height: 40,
+    borderRadius: 7,
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
     borderColor: '#0052FF',
     overflow: 'hidden',
   },
-  calendarTopBar: {
-    height: 8,
+  calHeader: {
+    height: 9,
     backgroundColor: '#0052FF',
     width: '100%',
   },
-  calendarGrid: {
+  calBody: {
+    flex: 1,
+    paddingHorizontal: 4,
+    paddingTop: 3,
+    gap: 3,
+  },
+  calDotRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingTop: 6,
-    paddingHorizontal: 4,
   },
-  calendarDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#94A3B8',
+  calDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#CBD5E1',
   },
-  calendarClock: {
+  calDotHighlight: {
+    backgroundColor: '#0052FF',
+  },
+  clockBadge: {
     position: 'absolute',
-    bottom: -2,
-    right: -2,
+    bottom: -1,
+    right: -1,
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -615,22 +595,28 @@ const styles = StyleSheet.create({
     borderColor: '#0052FF',
     alignItems: 'center',
     justifyContent: 'center',
+    elevation: 2,
   },
-  actionPaginationRow: {
+
+  /* ── PAGINATION DOTS ── */
+  dotsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
     marginTop: 10,
+    marginBottom: 2,
   },
-  actionDot: {
+  dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.45)',
+    backgroundColor: 'rgba(255,255,255,0.40)',
   },
-  actionActiveDot: {
-    width: 16,
+  dotActive: {
+    width: 18,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#FFFFFF',
   },
 });

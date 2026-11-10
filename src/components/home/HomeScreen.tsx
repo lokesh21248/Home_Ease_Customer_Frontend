@@ -149,7 +149,7 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
   },
   statusBarShield: {
     position: 'absolute',
@@ -163,5 +163,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 24,
+    backgroundColor: '#FFFFFF',
   },
 });
