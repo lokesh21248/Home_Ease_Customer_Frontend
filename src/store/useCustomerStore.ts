@@ -204,3 +204,4 @@ export const useCustomerStore = create<CustomerStoreState>((set) => ({
     set({ activeSheet, sheetPayload }),
   closeBottomSheet: () => set({ activeSheet: null, sheetPayload: null }),
 }));
+
