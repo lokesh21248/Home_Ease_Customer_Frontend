@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Crown, ChevronRight } from 'lucide-react-native';
+import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 interface HomeEasePassBannerProps {
@@ -9,7 +10,7 @@ interface HomeEasePassBannerProps {
 }
 
 export function HomeEasePassBanner({ onPress }: HomeEasePassBannerProps) {
-  const [activeDot, setActiveDot] = useState(1); // second dot active (matches screenshot)
+  const [activeDot, setActiveDot] = useState(0);
 
   const handlePress = () => {
     setActiveDot((p) => (p + 1) % 3);
@@ -20,81 +21,71 @@ export function HomeEasePassBanner({ onPress }: HomeEasePassBannerProps) {
   return (
     <View style={styles.wrapper}>
       <Pressable
-        style={({ pressed }) => [styles.bannerWrap, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.pressable, pressed && styles.pressed]}
         onPress={handlePress}
         accessibilityRole="button"
         accessibilityLabel="HomeEase Pass: Buy One Pass Three Visits FREE"
       >
         <LinearGradient
-          colors={['#0047DD', '#0062F5', '#0870FF']}
+          colors={['#0047D0', '#005EF5', '#1270FF']}
           start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0.8 }}
+          end={{ x: 1, y: 1 }}
           style={styles.gradient}
         >
-          {/* ── LEFT: Text column ── */}
+          {/* ── Left text column ── */}
           <View style={styles.leftCol}>
-            {/* "HomeEase Pass" white pill with crown */}
-            <View style={styles.pillBadge}>
-              <Crown size={12} color="#0052FF" strokeWidth={2.5} style={{ marginRight: 4 }} />
-              <Text style={styles.pillText}>HomeEase Pass</Text>
+            {/* Crown + "HomeEase Pass" pill */}
+            <View style={styles.crownPill}>
+              <Ionicons name="ribbon" size={12} color="#0047D0" style={{ marginRight: 4 }} />
+              <Text style={styles.pillTxt}>HomeEase Pass</Text>
             </View>
 
             {/* Headline */}
             <Text style={styles.headline}>
-              Buy One Pass{'\n'}
-              <Text style={styles.headlineWhite}>Three Visits </Text>
+              {'Buy One Pass\n'}
+              <Text style={styles.headlineWhite}>{'Three Visits '}</Text>
               <Text style={styles.headlineGold}>FREE</Text>
             </Text>
           </View>
 
-          {/* ── RIGHT: Overlapping pass card graphics ── */}
+          {/* ── Right: overlapping pass card graphics ── */}
           <View style={styles.rightCol}>
-            {/* Back card: "HomeEase 3 VISITS ₹99" */}
-            <View style={styles.passCardBack}>
-              <LinearGradient
-                colors={['#1a6fff', '#0052DD']}
-                style={styles.passCardBackGradient}
-              >
-                <Text style={styles.passCardBrandSmall}>HomeEase</Text>
-                <Text style={styles.passCardVisits}>3 VISITS</Text>
-                <Text style={styles.passCardPrice}>₹99</Text>
-              </LinearGradient>
+            {/* Back card: "HomeEase / 3 VISITS / ₹99" */}
+            <View style={[styles.passCard, styles.passCardBack]}>
+              <View style={styles.passCardTopRow}>
+                <Ionicons name="home" size={10} color="#FFFFFF" />
+                <Text style={styles.passCardBrand}> HomeEase</Text>
+              </View>
+              <Text style={styles.passCardVisits}>3 VISITS</Text>
+              <Text style={styles.passCardPrice}>₹99</Text>
             </View>
 
-            {/* Front card: "HomeEase PASS" */}
-            <View style={styles.passCardFront}>
-              <LinearGradient
-                colors={['#1E5BF7', '#0040CC']}
-                style={styles.passCardFrontGradient}
-              >
-                {/* Home icon top-right */}
-                <View style={styles.passHomeIconWrap}>
-                  <Text style={styles.passHomeIcon}>⌂</Text>
-                </View>
-                <Text style={styles.passCardBrand}>HomeEase</Text>
-                <Text style={styles.passCardPassLabel}>PASS</Text>
-                <Text style={styles.passCardTagline}>Buy Once & Save</Text>
-              </LinearGradient>
-            </View>
+            {/* Front card: "HomeEase / PASS / Buy Once & Save" with arrow circle */}
+            <View style={[styles.passCard, styles.passCardFront]}>
+              <View style={styles.passCardTopRow}>
+                <Ionicons name="home" size={10} color="#FFFFFF" />
+                <Text style={styles.passCardBrand}> HomeEase</Text>
+              </View>
+              <Text style={styles.passCardPassLabel}>PASS</Text>
+              <Text style={styles.passCardSave}>Buy Once & Save</Text>
 
-            {/* Circle arrow button */}
-            <Pressable
-              style={styles.arrowBtn}
-              onPress={handlePress}
-              accessibilityRole="button"
-              accessibilityLabel="View HomeEase Pass"
-            >
-              <ChevronRight size={16} color="#0052FF" strokeWidth={2.5} />
-            </Pressable>
+              {/* Arrow circle */}
+              <View style={styles.arrowCircle}>
+                <Ionicons name="chevron-forward" size={12} color="#0047D0" />
+              </View>
+            </View>
           </View>
         </LinearGradient>
       </Pressable>
 
-      {/* ── PAGINATION DOTS ── */}
+      {/* Pagination dots */}
       <View style={styles.dotsRow}>
-        <View style={[styles.dot, activeDot === 0 && styles.dotActive]} />
-        <View style={[styles.dot, activeDot === 1 && styles.dotActive]} />
-        <View style={[styles.dot, activeDot === 2 && styles.dotActive]} />
+        {[0, 1, 2].map((i) => (
+          <View
+            key={i}
+            style={[styles.dot, activeDot === i && styles.dotActive]}
+          />
+        ))}
       </View>
     </View>
   );
@@ -102,191 +93,158 @@ export function HomeEasePassBanner({ onPress }: HomeEasePassBannerProps) {
 
 const styles = StyleSheet.create({
   wrapper: {
-    marginHorizontal: 16,
-    marginTop: 12,
+    marginHorizontal: 14,
+    marginTop: 10,
   },
-  bannerWrap: {
-    borderRadius: 20,
+  pressable: {
+    borderRadius: 18,
     overflow: 'hidden',
     elevation: 4,
     shadowColor: '#0040CC',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.18,
-    shadowRadius: 10,
+    shadowRadius: 8,
   },
   pressed: {
     opacity: 0.95,
-    transform: [{ scale: 0.995 }],
+    transform: [{ scale: 0.99 }],
   },
   gradient: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingLeft: 16,
     paddingRight: 10,
     paddingVertical: 14,
-    minHeight: 112,
-    overflow: 'hidden',
+    minHeight: 110,
   },
 
-  /* ── LEFT ── */
+  /* ─── Left text ─── */
   leftCol: {
     flex: 1,
-    justifyContent: 'center',
+    paddingRight: 8,
   },
-  pillBadge: {
+  crownPill: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
     alignSelf: 'flex-start',
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  pillText: {
+  pillTxt: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#0052FF',
+    color: '#0047D0',
     letterSpacing: -0.1,
   },
   headline: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '900',
-    lineHeight: 22,
+    lineHeight: 25,
     letterSpacing: -0.3,
   },
   headlineWhite: {
     color: '#FFFFFF',
     fontWeight: '900',
-    fontSize: 18,
+    fontSize: 20,
   },
   headlineGold: {
     color: '#FACC15',
     fontWeight: '900',
-    fontSize: 18,
+    fontSize: 20,
   },
 
-  /* ── RIGHT: Pass cards ── */
+  /* ─── Right pass card graphics ─── */
   rightCol: {
     width: 148,
-    height: 86,
+    height: 90,
     position: 'relative',
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
-
-  /* Back card */
-  passCardBack: {
+  passCard: {
     position: 'absolute',
-    left: 0,
-    top: 0,
-    width: 90,
-    height: 78,
+    width: 86,
+    height: 82,
     borderRadius: 10,
-    overflow: 'hidden',
-    transform: [{ rotate: '-6deg' }],
-    elevation: 1,
-  },
-  passCardBackGradient: {
-    flex: 1,
     padding: 8,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
   },
-  passCardBrandSmall: {
-    fontSize: 8,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.75)',
+  passCardBack: {
+    backgroundColor: '#1259E8',
+    left: 0,
+    top: 4,
+    transform: [{ rotate: '-4deg' }],
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  passCardFront: {
+    backgroundColor: '#2563EB',
+    right: 0,
+    top: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  passCardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 2,
   },
+  passCardBrand: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.9)',
+  },
   passCardVisits: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: 0.5,
+    marginVertical: 1,
   },
   passCardPrice: {
     fontSize: 15,
     fontWeight: '900',
-    color: '#FFFFFF',
-  },
-
-  /* Front card */
-  passCardFront: {
-    position: 'absolute',
-    right: 24,
-    top: 4,
-    width: 86,
-    height: 76,
-    borderRadius: 10,
-    overflow: 'hidden',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-  },
-  passCardFrontGradient: {
-    flex: 1,
-    padding: 8,
-    justifyContent: 'flex-end',
-  },
-  passHomeIconWrap: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  passHomeIcon: { fontSize: 12, color: '#FFFFFF' },
-  passCardBrand: {
-    fontSize: 8.5,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.80)',
-    marginBottom: 1,
+    color: '#FACC15',
   },
   passCardPassLabel: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '900',
     color: '#FFFFFF',
-    letterSpacing: 0.5,
-    lineHeight: 18,
+    letterSpacing: 1,
+    marginVertical: 2,
   },
-  passCardTagline: {
-    fontSize: 7,
+  passCardSave: {
+    fontSize: 8.5,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.75)',
-    marginTop: 2,
+    color: 'rgba(255,255,255,0.8)',
   },
-
-  /* Circle arrow */
-  arrowBtn: {
+  arrowCircle: {
     position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    bottom: 8,
+    right: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 3,
   },
 
-  /* ── PAGINATION DOTS ── */
+  /* ─── Dots ─── */
   dotsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
     gap: 7,
-    marginTop: 10,
+    marginTop: 9,
     marginBottom: 4,
   },
   dot: {
@@ -297,8 +255,7 @@ const styles = StyleSheet.create({
   },
   dotActive: {
     width: 18,
-    height: 6,
     borderRadius: 3,
-    backgroundColor: '#0052FF',
+    backgroundColor: '#0047D0',
   },
 });
