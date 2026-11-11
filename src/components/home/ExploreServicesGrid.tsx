@@ -33,6 +33,8 @@ interface CuratedHomeService {
   localImage: any;
   defaultCategoryId: string;
   keywords: string[];
+  price?: number;
+  originalPrice?: number;
 }
 
 // Backend Category UUIDs
@@ -46,10 +48,10 @@ const CATEGORY_IDS = {
 /**
  * Curated 12 Master Services matching HomeEase visual design.
  * Order 1-9 matches the master 3x3 grid screenshot:
- *  Row 1: Daily Home Cleaning, HomeEase Verified, Cooking
+ *  Row 1: Daily Home Cleaning, HomeEase Verified, Cooking (₹49)
  *  Row 2: Sofa & Carpet Cleaning, AC Service & Repair, Appliance Repair
  *  Row 3: Bathroom Cleaning, Pest Control, Plumbing Service
- *  Row 4 (view all / full list): Painting, Electrician Service, Carpentry Service
+ *  Row 4: Painting, Electrician Service, Carpentry Service
  */
 export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
   {
@@ -81,6 +83,8 @@ export const MASTER_FALLBACK_SERVICES: CuratedHomeService[] = [
     localImage: require('../../../assets/images/services/cooking_thumb.png'),
     defaultCategoryId: CATEGORY_IDS.CLEANING,
     keywords: ['cooking', 'cook', 'chef', 'food', 'meal'],
+    price: 49,
+    originalPrice: 99,
   },
   {
     id: 'sofa-carpet-cleaning',
@@ -186,6 +190,8 @@ interface ExploreCardItem {
   resolvedId: string;
   resolvedCategoryId?: string;
   backendItem?: ExploreServiceItem;
+  price?: number;
+  originalPrice?: number;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -201,7 +207,7 @@ export function ExploreServicesGrid({
 }: ExploreServicesGridProps) {
   const { width: screenWidth } = useWindowDimensions();
 
-  // Exact 3-column calculation: 32 total padding (16 left, 16 right) + 2 gaps of 10px (20px total gap)
+  // Exact 3-column calculation: 32 total horizontal padding (16 left, 16 right) + 2 gaps of 10px (20px total)
   const GAP = 10;
   const cardWidth = Math.floor((screenWidth - 32 - (2 * GAP)) / 3);
 
@@ -239,6 +245,8 @@ export function ExploreServicesGrid({
           resolvedId: backendMatch.id,
           resolvedCategoryId: backendMatch.categoryId || curated.defaultCategoryId,
           backendItem: backendMatch,
+          price: curated.price,
+          originalPrice: curated.originalPrice,
         };
       }
 
@@ -252,9 +260,20 @@ export function ExploreServicesGrid({
         localImage: curated.localImage,
         resolvedId: curated.id,
         resolvedCategoryId: curated.defaultCategoryId,
+        price: curated.price,
+        originalPrice: curated.originalPrice,
       };
     });
   }, [services, maxItems]);
+
+  // Chunk display items into strict rows of 3 to guarantee exact 3 columns across all devices
+  const rows = useMemo(() => {
+    const chunked: ExploreCardItem[][] = [];
+    for (let i = 0; i < displayItems.length; i += 3) {
+      chunked.push(displayItems.slice(i, i + 3));
+    }
+    return chunked;
+  }, [displayItems]);
 
   const handleCardPress = (item: ExploreCardItem) => {
     // 1. HomeEase Verified links directly to the full category directory
@@ -291,7 +310,7 @@ export function ExploreServicesGrid({
       return;
     }
 
-    // 5. Safe fallback to categories tab to avoid 400 Bad Request
+    // 5. Safe fallback to categories tab
     router.push('/(tabs)/categories');
   };
 
@@ -338,70 +357,90 @@ export function ExploreServicesGrid({
           )}
         </View>
       ) : (
-        /* 3-Column Grid from Live API Data with direct inlined cards (prevents wrap-jsx unexported component crash) */
+        /* Strict 3-Column Grid using chunked rows: Guaranteed 3 items per row on every screen */
         <View style={styles.gridContainer}>
-          {displayItems.map((item, index) => {
-            const isRightmostCol = index % 3 === 2;
-
-            return (
-              <Pressable
-                key={item.key}
-                style={({ pressed }) => [
-                  styles.card,
-                  {
-                    width: cardWidth,
-                    marginRight: isRightmostCol ? 0 : GAP,
-                    marginBottom: GAP + 2,
-                  },
-                  pressed && styles.cardPressed,
-                ]}
-                onPress={() => handleCardPress(item)}
-                accessibilityRole="button"
-                accessibilityLabel={`${item.name}, rating: ${item.rating}`}
-              >
-                {/* 1. Star Rating Row: ⭐ 4.9 (48.3K) at Top Left */}
-                <View style={styles.ratingRow}>
-                  <Ionicons name="star" size={11} color="#F59E0B" />
-                  <Text style={styles.ratingScore}>{item.rating}</Text>
-                  <Text style={styles.ratingCount}>{item.ratingCount}</Text>
-                </View>
-
-                {/* 2. Centered Service Image */}
-                <View style={styles.imageContainer}>
-                  {item.localImage ? (
-                    <Image
-                      source={item.localImage}
-                      style={styles.cardImage}
-                      contentFit="contain"
-                      transition={100}
-                    />
-                  ) : item.imageUrl ? (
-                    <Image
-                      source={{ uri: item.imageUrl }}
-                      style={styles.cardImage}
-                      contentFit="contain"
-                      transition={100}
-                    />
-                  ) : (
-                    <View style={styles.imageFallback}>
-                      <Ionicons name="sparkles" size={24} color="#0052FF" />
+          {rows.map((row, rowIndex) => (
+            <View key={`row-${rowIndex}`} style={styles.gridRow}>
+              {row.map((item) => (
+                <View
+                  key={item.key}
+                  style={[
+                    styles.card,
+                    {
+                      width: cardWidth,
+                    },
+                  ]}
+                >
+                  <Pressable
+                    style={styles.cardPressable}
+                    onPress={() => handleCardPress(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${item.name}, rating: ${item.rating}`}
+                  >
+                    {/* 1. Star Rating Row: ⭐ 4.9 (48.3K) at Top Left */}
+                    <View style={styles.ratingRow}>
+                      <Ionicons name="star" size={11} color="#F59E0B" />
+                      <Text style={styles.ratingScore}>{item.rating}</Text>
+                      <Text style={styles.ratingCount}>{item.ratingCount}</Text>
                     </View>
-                  )}
-                </View>
 
-                {/* 3. Bottom Row: Service Title on Left + Circular (+) Button on Right */}
-                <View style={styles.bottomRow}>
-                  <Text style={styles.serviceName} numberOfLines={2} ellipsizeMode="tail">
-                    {item.displayName || item.name}
-                  </Text>
+                    {/* 2. Centered Service Image */}
+                    <View style={styles.imageContainer}>
+                      {item.localImage ? (
+                        <Image
+                          source={item.localImage}
+                          style={styles.cardImage}
+                          contentFit="contain"
+                          transition={100}
+                        />
+                      ) : item.imageUrl ? (
+                        <Image
+                          source={{ uri: item.imageUrl }}
+                          style={styles.cardImage}
+                          contentFit="contain"
+                          transition={100}
+                        />
+                      ) : (
+                        <View style={styles.imageFallback}>
+                          <Ionicons name="sparkles" size={24} color="#0052FF" />
+                        </View>
+                      )}
+                    </View>
 
-                  <View style={styles.plusCircle}>
-                    <Ionicons name="add" size={15} color="#0052FF" />
-                  </View>
+                    {/* 3. Bottom Row: Service Title & Optional Price on Left + Circular (+) Button on Right */}
+                    <View style={styles.bottomRow}>
+                      <View style={styles.titleCol}>
+                        <Text style={styles.serviceName} numberOfLines={2} ellipsizeMode="tail">
+                          {item.displayName || item.name}
+                        </Text>
+                        {item.price ? (
+                          <View style={styles.priceRow}>
+                            <Text style={styles.priceCurrent}>₹{item.price}</Text>
+                            {item.originalPrice ? (
+                              <Text style={styles.priceOriginal}>₹{item.originalPrice}</Text>
+                            ) : null}
+                          </View>
+                        ) : null}
+                      </View>
+
+                      <View style={styles.plusCircle}>
+                        <Ionicons name="add" size={15} color="#0052FF" />
+                      </View>
+                    </View>
+                  </Pressable>
                 </View>
-              </Pressable>
-            );
-          })}
+              ))}
+
+              {/* Pad row if it has fewer than 3 items to preserve column widths */}
+              {row.length < 3 &&
+                Array.from({ length: 3 - row.length }).map((_, padIndex) => (
+                  <View
+                    key={`pad-${rowIndex}-${padIndex}`}
+                    style={[styles.cardPlaceholder, { width: cardWidth }]}
+                  />
+                ))}
+            </View>
+          ))}
         </View>
       )}
     </View>
@@ -411,7 +450,7 @@ export function ExploreServicesGrid({
 const styles = StyleSheet.create({
   container: {
     marginTop: 14,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   headerRow: {
     flexDirection: 'row',
@@ -443,29 +482,38 @@ const styles = StyleSheet.create({
     color: '#0052FF',
   },
   gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     paddingHorizontal: 16,
+  },
+  gridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#EEF2F6',
+    borderColor: '#E2E8F0',
+    minHeight: 148,
+    flexShrink: 0,
+    elevation: 2,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    overflow: 'hidden',
+  },
+  cardPlaceholder: {
+    backgroundColor: 'transparent',
+    minHeight: 148,
+    flexShrink: 0,
+  },
+  cardPressable: {
+    flex: 1,
     paddingTop: 8,
     paddingBottom: 10,
     paddingHorizontal: 8,
-    minHeight: 148,
     justifyContent: 'space-between',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 5,
-    elevation: 2,
-  },
-  cardPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.97 }],
   },
   ratingRow: {
     flexDirection: 'row',
@@ -491,12 +539,12 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   cardImage: {
-    width: 58,
-    height: 58,
+    width: 60,
+    height: 60,
   },
   imageFallback: {
-    width: 58,
-    height: 58,
+    width: 60,
+    height: 60,
     borderRadius: 10,
     backgroundColor: '#EFF6FF',
     alignItems: 'center',
@@ -506,16 +554,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 32,
+    minHeight: 34,
     marginTop: 2,
   },
-  serviceName: {
+  titleCol: {
     flex: 1,
+    paddingRight: 4,
+  },
+  serviceName: {
     fontSize: 11.5,
     fontWeight: '700',
     color: '#0F172A',
     lineHeight: 15,
-    paddingRight: 4,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  priceCurrent: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#0052FF',
+  },
+  priceOriginal: {
+    fontSize: 9.5,
+    fontWeight: '500',
+    color: '#94A3B8',
+    textDecorationLine: 'line-through',
   },
   plusCircle: {
     width: 24,
@@ -526,11 +593,11 @@ const styles = StyleSheet.create({
     borderColor: '#3B82F6',
     alignItems: 'center',
     justifyContent: 'center',
+    elevation: 1,
     shadowColor: '#0052FF',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 2,
-    elevation: 1,
   },
   loadingContainer: {
     paddingVertical: 28,

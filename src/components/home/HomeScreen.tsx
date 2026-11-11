@@ -104,7 +104,7 @@ export function HomeScreen() {
       <View
         style={[
           styles.statusBarShield,
-          { height: insets.top, backgroundColor: '#0047D0' },
+          { height: insets.top, backgroundColor: '#0052FF' },
         ]}
       />
 
