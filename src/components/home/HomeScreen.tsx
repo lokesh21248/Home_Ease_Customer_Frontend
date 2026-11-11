@@ -104,7 +104,7 @@ export function HomeScreen() {
       <View
         style={[
           styles.statusBarShield,
-          { height: insets.top, backgroundColor: '#004BE4' },
+          { height: insets.top, backgroundColor: '#0047D0' },
         ]}
       />
 
@@ -149,7 +149,7 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
   },
   statusBarShield: {
     position: 'absolute',
@@ -163,6 +163,5 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 24,
-    backgroundColor: '#FFFFFF',
   },
 });
