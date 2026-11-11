@@ -38,19 +38,35 @@ interface MenuItemProps {
 function MenuItem({ iconName, IconComponent, label, desc, onPress, hideChevron }: MenuItemProps) {
   return (
     <Pressable
-      style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <View style={styles.menuIconContainer}>
-        <IconComponent name={iconName} size={20} color={PRIMARY_BLUE} />
+      <View style={styles.menuItem}>
+        {/* Left: Icon circle */}
+        <View style={styles.menuIconContainer}>
+          <IconComponent name={iconName} size={20} color={PRIMARY_BLUE} />
+        </View>
+
+        {/* Middle: Title & Description */}
+        <View style={styles.menuContent}>
+          <Text style={styles.menuLabel} numberOfLines={1}>
+            {label}
+          </Text>
+          {desc ? (
+            <Text style={styles.menuDesc} numberOfLines={1}>
+              {desc}
+            </Text>
+          ) : null}
+        </View>
+
+        {/* Right: Chevron Arrow */}
+        {!hideChevron && (
+          <View style={styles.menuChevronWrap}>
+            <Feather name="chevron-right" size={19} color="#94A3B8" />
+          </View>
+        )}
       </View>
-      <View style={styles.menuContent}>
-        <Text style={styles.menuLabel} numberOfLines={1}>{label}</Text>
-        {desc ? <Text style={styles.menuDesc} numberOfLines={1}>{desc}</Text> : null}
-      </View>
-      {!hideChevron && <Feather name="chevron-right" size={18} color="#94A3B8" />}
     </Pressable>
   );
 }
@@ -87,7 +103,7 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      {/* Top Blue StatusBar filler for seamless background on stretch/bounce */}
+      {/* Top Blue StatusBar filler for seamless background */}
       <View style={[styles.topBarFill, { height: insets.top, backgroundColor: PRIMARY_BLUE }]} />
 
       <ScrollView
@@ -121,54 +137,61 @@ export default function ProfileScreen() {
 
             {/* Edit Button */}
             <Pressable
-              style={styles.editButton}
               onPress={() => router.push('/profile/edit')}
               accessibilityRole="button"
               accessibilityLabel="Edit Profile"
             >
-              <Text style={styles.editButtonText}>Edit</Text>
+              <View style={styles.editButton}>
+                <Text style={styles.editButtonText}>Edit</Text>
+              </View>
             </Pressable>
           </View>
         </View>
 
-        {/* ─── Quick Stats Card (3 Equal Columns with Zero Overlap Glitch) ─── */}
+        {/* ─── Quick Stats Card (3 Equal Columns) ─── */}
         <View style={styles.statsCardWrapper}>
           <View style={styles.statsCard}>
             <Pressable
-              style={styles.statItem}
+              style={styles.statPressable}
               onPress={() => router.push('/(tabs)/bookings')}
               accessibilityRole="button"
               accessibilityLabel={`Total Bookings: ${bookingCount}`}
             >
-              <Ionicons name="calendar-outline" size={22} color={PRIMARY_BLUE} />
-              <Text style={styles.statValue}>{bookingCount}</Text>
-              <Text style={styles.statLabel}>Bookings</Text>
+              <View style={styles.statItem}>
+                <Ionicons name="calendar-outline" size={22} color={PRIMARY_BLUE} />
+                <Text style={styles.statValue}>{bookingCount}</Text>
+                <Text style={styles.statLabel}>Bookings</Text>
+              </View>
             </Pressable>
 
             <View style={styles.statDivider} />
 
             <Pressable
-              style={styles.statItem}
+              style={styles.statPressable}
               onPress={() => router.push('/(tabs)/wishlist')}
               accessibilityRole="button"
               accessibilityLabel="Wishlist"
             >
-              <Ionicons name="heart-outline" size={22} color="#EF4444" />
-              <Text style={styles.statValue}>0</Text>
-              <Text style={styles.statLabel}>Wishlist</Text>
+              <View style={styles.statItem}>
+                <Ionicons name="heart-outline" size={22} color="#EF4444" />
+                <Text style={styles.statValue}>0</Text>
+                <Text style={styles.statLabel}>Wishlist</Text>
+              </View>
             </Pressable>
 
             <View style={styles.statDivider} />
 
             <Pressable
-              style={styles.statItem}
+              style={styles.statPressable}
               onPress={() => router.push('/profile/addresses')}
               accessibilityRole="button"
               accessibilityLabel={`Saved Addresses: ${addressCount}`}
             >
-              <Ionicons name="location-outline" size={22} color="#10B981" />
-              <Text style={styles.statValue}>{addressCount}</Text>
-              <Text style={styles.statLabel}>Addresses</Text>
+              <View style={styles.statItem}>
+                <Ionicons name="location-outline" size={22} color="#10B981" />
+                <Text style={styles.statValue}>{addressCount}</Text>
+                <Text style={styles.statLabel}>Addresses</Text>
+              </View>
             </Pressable>
           </View>
         </View>
@@ -176,32 +199,34 @@ export default function ProfileScreen() {
         {/* ─── HomeEase Wallet Overview Card ─── */}
         <View style={styles.walletCardWrapper}>
           <Pressable
-            style={styles.profileWalletCard}
             onPress={() => router.push('/profile/wallet')}
             accessibilityRole="button"
             accessibilityLabel={`Wallet Balance: ₹${balance}`}
           >
-            <View style={styles.profileWalletLeft}>
-              <View style={styles.profileWalletIconWrap}>
-                <Ionicons name="wallet" size={22} color={PRIMARY_BLUE} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={styles.profileWalletTitle}>HomeEase Wallet</Text>
-                  <View style={styles.walletActiveBadge}>
-                    <Text style={styles.walletActiveText}>Active</Text>
-                  </View>
+            <View style={styles.profileWalletCard}>
+              <View style={styles.profileWalletLeft}>
+                <View style={styles.profileWalletIconWrap}>
+                  <Ionicons name="wallet" size={22} color={PRIMARY_BLUE} />
                 </View>
-                <Text style={styles.profileWalletBalance}>
-                  ₹{balance.toLocaleString('en-IN')}
-                </Text>
-                <Text style={styles.profileWalletSub} numberOfLines={1}>
-                  Instant 1-click checkout & cashbacks
-                </Text>
+                <View style={styles.profileWalletInfo}>
+                  <View style={styles.profileWalletTitleRow}>
+                    <Text style={styles.profileWalletTitle}>HomeEase Wallet</Text>
+                    <View style={styles.walletActiveBadge}>
+                      <Text style={styles.walletActiveText}>Active</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.profileWalletBalance}>
+                    ₹{balance.toLocaleString('en-IN')}
+                  </Text>
+                  <Text style={styles.profileWalletSub} numberOfLines={1}>
+                    Instant 1-click checkout & cashbacks
+                  </Text>
+                </View>
               </View>
-            </View>
-            <View style={styles.profileWalletBtn}>
-              <Text style={styles.profileWalletBtnText}>+ Top Up</Text>
+
+              <View style={styles.profileWalletBtn}>
+                <Text style={styles.profileWalletBtnText}>+ Top Up</Text>
+              </View>
             </View>
           </Pressable>
         </View>
@@ -294,13 +319,14 @@ export default function ProfileScreen() {
 
           {/* ─── Logout Button ─── */}
           <Pressable
-            style={({ pressed }) => [styles.logoutButton, pressed && styles.logoutButtonPressed]}
             onPress={handleLogout}
             accessibilityRole="button"
             accessibilityLabel="Log Out"
           >
-            <Ionicons name="log-out-outline" size={20} color="#DC2626" style={{ marginRight: 8 }} />
-            <Text style={styles.logoutButtonText}>Log Out</Text>
+            <View style={styles.logoutButton}>
+              <Ionicons name="log-out-outline" size={20} color="#DC2626" style={{ marginRight: 8 }} />
+              <Text style={styles.logoutButtonText}>Log Out</Text>
+            </View>
           </Pressable>
         </View>
       </ScrollView>
@@ -311,7 +337,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FC',
+    backgroundColor: '#F8FAFC',
   },
   topBarFill: {
     position: 'absolute',
@@ -333,9 +359,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -350,6 +376,7 @@ const styles = StyleSheet.create({
   userName: {
     fontFamily: Typography.fontFamily.bold,
     fontSize: 18,
+    fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: -0.3,
   },
@@ -376,6 +403,7 @@ const styles = StyleSheet.create({
   editButtonText: {
     fontFamily: Typography.fontFamily.semiBold,
     fontSize: 12.5,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
 
@@ -412,15 +440,18 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  statPressable: {
+    flex: 1,
+  },
   statItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
     paddingVertical: 4,
   },
   statValue: {
     fontFamily: Typography.fontFamily.bold,
     fontSize: 16,
+    fontWeight: '800',
     color: '#111827',
     marginTop: 6,
     marginBottom: 2,
@@ -452,7 +483,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: '#EEF2F6',
-    ...Shadows.sm,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
   },
   profileWalletLeft: {
     flexDirection: 'row',
@@ -469,9 +504,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
+  profileWalletInfo: {
+    flex: 1,
+  },
+  profileWalletTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   profileWalletTitle: {
     fontFamily: Typography.fontFamily.bold,
     fontSize: 14,
+    fontWeight: '800',
     color: '#111827',
   },
   walletActiveBadge: {
@@ -483,11 +527,13 @@ const styles = StyleSheet.create({
   walletActiveText: {
     fontFamily: Typography.fontFamily.semiBold,
     fontSize: 10,
+    fontWeight: '700',
     color: '#059669',
   },
   profileWalletBalance: {
     fontFamily: Typography.fontFamily.bold,
     fontSize: 17,
+    fontWeight: '800',
     color: PRIMARY_BLUE,
     marginTop: 2,
   },
@@ -506,10 +552,11 @@ const styles = StyleSheet.create({
   profileWalletBtnText: {
     fontFamily: Typography.fontFamily.semiBold,
     fontSize: 12,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
 
-  // ─── Menu ───
+  // ─── Menu List ───
   menuContainer: {
     paddingHorizontal: LayoutConstants.HORIZONTAL_PADDING,
     marginTop: 14,
@@ -517,20 +564,22 @@ const styles = StyleSheet.create({
   menuCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    paddingVertical: 6,
+    paddingVertical: 4,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#EEF2F6',
-    ...Shadows.sm,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    justifyContent: 'space-between',
+    paddingVertical: 13,
     paddingHorizontal: 14,
-  },
-  menuItemPressed: {
-    backgroundColor: '#F9FAFB',
   },
   menuIconContainer: {
     width: 36,
@@ -539,25 +588,33 @@ const styles = StyleSheet.create({
     backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 12,
   },
   menuContent: {
     flex: 1,
-    paddingHorizontal: 12,
+    justifyContent: 'center',
+    paddingRight: 8,
   },
   menuLabel: {
     fontFamily: Typography.fontFamily.semiBold,
     fontSize: 14,
-    color: '#111827',
+    fontWeight: '700',
+    color: '#0F172A',
   },
   menuDesc: {
     fontFamily: Typography.fontFamily.regular,
     fontSize: 11.5,
-    color: '#6B7280',
-    marginTop: 1,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  menuChevronWrap: {
+    width: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   menuDivider: {
     height: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F1F5F9',
     marginHorizontal: 14,
     marginVertical: 4,
   },
@@ -572,12 +629,10 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     backgroundColor: '#FEF2F2',
   },
-  logoutButtonPressed: {
-    backgroundColor: '#FEE2E2',
-  },
   logoutButtonText: {
     fontFamily: Typography.fontFamily.bold,
     fontSize: 14.5,
+    fontWeight: '700',
     color: '#DC2626',
   },
 });
