@@ -407,7 +407,8 @@ async function request<T>(
       } catch {
         // ignore JSON parse errors
       }
-      if (!isSilent) {
+      // Do not log 401/403 as console warnings — they are expected auth lifecycle states (e.g. guest or expired session)
+      if (!isSilent && response.status !== 401 && response.status !== 403) {
         console.warn(`[API Error] ${endpoint} -> ${response.status}: ${message}`);
         if (response.status === 400) {
           console.warn(`[API Error Details] ${endpoint} -> ${message}`);
@@ -577,9 +578,9 @@ export const authApi = {
 export const userApi = {
   getProfile: async (): Promise<UserProfile> => {
     try {
-      return await request('/user/me');
+      return await request('/user/me', { silent: true } as any);
     } catch {
-      return await request('/user/profile');
+      return await request('/user/profile', { silent: true } as any);
     }
   },
 
@@ -625,13 +626,13 @@ export const userApi = {
       return [];
     }
     try {
-      return await request('/user/addresses');
+      return await request('/user/addresses', { silent: true } as any);
     } catch (err: any) {
       if (err?.status === 401 || err?.status === 403) {
         return [];
       }
       try {
-        return await request('/users/me/addresses');
+        return await request('/users/me/addresses', { silent: true } as any);
       } catch {
         return [];
       }
@@ -1194,7 +1195,7 @@ export const bookingApi = {
       return [];
     }
     try {
-      return await request('/bookings/my-bookings');
+      return await request('/bookings/my-bookings', { silent: true } as any);
     } catch (err: any) {
       if (err?.status === 401 || err?.status === 403) {
         return [];
