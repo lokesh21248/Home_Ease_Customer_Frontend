@@ -207,6 +207,20 @@ export default function DateTimeScreen() {
     try {
       const pincode = (cart.selectedAddress?.pincode || userLoc.address?.pincode || '').replace(/\D/g, '');
       if (pincode.length === 6) {
+        // Release previous hold if switching to a different slot
+        if (
+          cart.activeHold?.holdId &&
+          cart.activeHold?.lockToken &&
+          cart.activeHold?.startTime !== slotTime.split(/[-–]/)[0].trim()
+        ) {
+          bookingApi
+            .releaseHold(cart.activeHold.holdId, cart.activeHold.lockToken)
+            .catch(() => {
+              // Best-effort release — backend sweeper handles cleanup if this fails
+            });
+          setActiveHold(null);
+        }
+
         const hold = await bookingApi.holdSlot(serviceId, selectedDateStr, slotTime, pincode);
         if (hold && hold.holdId) {
           setActiveHold(hold);
