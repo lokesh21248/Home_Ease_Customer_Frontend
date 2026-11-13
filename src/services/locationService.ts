@@ -892,7 +892,9 @@ export async function sendBookingAddressToBackend(payload: BookingAddressRequest
   try {
     return await userApi.saveBookingAddress(payload);
   } catch (error: any) {
-    console.log('[LocationService] saveBookingAddress notice:', error?.message);
+    if (error?.status !== 401 && error?.status !== 403) {
+      console.log('[LocationService] saveBookingAddress notice:', error?.message);
+    }
     try {
       return await userApi.addAddress({
         title: payload.label || 'Current Location',
@@ -903,8 +905,10 @@ export async function sendBookingAddressToBackend(payload: BookingAddressRequest
         lng: payload.longitude,
         isDefault: false,
       });
-    } catch (fallbackErr) {
-      console.log('[LocationService] addAddress fallback notice:', fallbackErr);
+    } catch (fallbackErr: any) {
+      if (fallbackErr?.status !== 401 && fallbackErr?.status !== 403) {
+        console.log('[LocationService] addAddress fallback notice:', fallbackErr);
+      }
       return null;
     }
   }

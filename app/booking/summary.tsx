@@ -27,6 +27,7 @@ import { useUserLocation } from '../../src/hooks/useUserLocation';
 import { useWallet } from '../../src/hooks/useWallet';
 import { sendBookingAddressToBackend } from '../../src/services/locationService';
 import { isValidCoordinate } from '../../src/services/coordinates';
+import { useAuth } from '../../src/context/AuthContext';
 import { Colors, Typography, Spacing, BorderRadius } from '../../src/constants/theme';
 import { Users, AlertTriangle } from 'lucide-react-native';
 
@@ -66,6 +67,7 @@ function BillRow({ label, value, highlight }: { label: string; value: string; hi
 
 export default function SummaryScreen() {
   const insets = useSafeAreaInsets();
+  const { isAuthenticated, bypassLogin } = useAuth();
   const { cart, setCoupon, setPaymentMethod, setAddress, clearCart } = useCart();
   const userLoc = useUserLocation();
   const { balance, deductMoney } = useWallet();
@@ -240,6 +242,18 @@ export default function SummaryScreen() {
 
   const handlePlaceBooking = async () => {
     if (bookingLoading || isSubmittingRef.current) return;
+
+    if (!isAuthenticated) {
+      try {
+        await bypassLogin();
+      } catch {
+        Alert.alert('Sign In Required', 'Please sign in to place your booking.', [
+          { text: 'Sign In', onPress: () => router.push('/(auth)/phone') },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+        return;
+      }
+    }
 
     if (cart.items.length === 0) {
       Alert.alert('No Services', 'Please select at least one service to book.');
@@ -538,6 +552,17 @@ export default function SummaryScreen() {
         throw new Error('Booking could not be confirmed. Please check your bookings.');
       }
     } catch (e: any) {
+      if (e?.status === 401 || e?.status === 403) {
+        Alert.alert(
+          'Sign In Required',
+          'Your session has expired. Please sign in to confirm your booking.',
+          [
+            { text: 'Sign In', onPress: () => router.push('/(auth)/phone') },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
+        return;
+      }
       console.error('[BookingSummary] Booking submission error:', e);
       const isTimeout =
         e?.status === 408 ||

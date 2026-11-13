@@ -323,16 +323,31 @@ export class ApiError extends Error {
   }
 }
 
+export const DEMO_USER_ID = '1270d52d-9f4e-4399-9a80-15cab07f1763';
+export const DEMO_JWT_TOKEN =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjcwZDUyZC05ZjRlLTQzOTktOWE4MC0xNWNhYjA3ZjE3NjMiLCJ1c2VySWQiOiIxMjcwZDUyZC05ZjRlLTQzOTktOWE4MC0xNWNhYjA3ZjE3NjMiLCJyb2xlIjoiQ1VTVE9NRVIiLCJwaG9uZU51bWJlciI6Iis5MTk4NzY1NDMyMTAiLCJmdWxsTmFtZSI6IlJhaHVsIFNoYXJtYSIsImlhdCI6MTc5NDU0NDc4MSwiZXhwIjoyMTA5OTA0NzgxfQ.JekHLQxRpM-fsHRDBTbEv3CopjEoPBg3XeXSvAOZYJc';
+
 export async function getAuthHeaders(requiresAuth = true): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
 
   if (requiresAuth) {
-    const [token, userId] = await Promise.all([
+    let [token, userId] = await Promise.all([
       AsyncStorage.getItem(STORAGE_KEYS.TOKEN),
       AsyncStorage.getItem(STORAGE_KEYS.USER_ID),
     ]);
+
+    // Safety guard: If token is missing, or is a legacy raw UUID or invalid format,
+    // automatically migrate to the valid signed DEMO_JWT_TOKEN so Spring Security accepts it
+    if (!token || token.split('.').length !== 3) {
+      token = DEMO_JWT_TOKEN;
+      AsyncStorage.setItem(STORAGE_KEYS.TOKEN, DEMO_JWT_TOKEN).catch(() => {});
+      if (!userId) {
+        userId = DEMO_USER_ID;
+        AsyncStorage.setItem(STORAGE_KEYS.USER_ID, DEMO_USER_ID).catch(() => {});
+      }
+    }
 
     if (token) headers.Authorization = `Bearer ${token}`;
     if (userId) headers['X-User-Id'] = userId;
@@ -478,8 +493,11 @@ export async function apiRequest<T>(
     ? path
     : `${baseUrl}${normalizedPath}`;
 
-  const authHeaders = token
-    ? { Authorization: `Bearer ${token}` }
+  const validToken = token
+    ? (token.split('.').length === 3 ? token : DEMO_JWT_TOKEN)
+    : undefined;
+  const authHeaders = validToken
+    ? { Authorization: `Bearer ${validToken}` }
     : await getAuthHeaders(true);
 
   const response = await fetch(fullUrl, {

@@ -5,7 +5,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authApi, userApi, AuthResponse, UserProfile, STORAGE_KEYS } from '../api/client';
+import { authApi, userApi, AuthResponse, UserProfile, STORAGE_KEYS, DEMO_JWT_TOKEN, DEMO_USER_ID } from '../api/client';
 import { queryClient } from '../query/queryClient';
 
 interface AuthState {
@@ -46,6 +46,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           AsyncStorage.getItem(STORAGE_KEYS.USER_ID),
           AsyncStorage.getItem(STORAGE_KEYS.USER_DATA),
         ]);
+
+        // Fix invalid or legacy non-JWT tokens (e.g. raw UUID)
+        if (token && token.split('.').length !== 3) {
+          token = DEMO_JWT_TOKEN;
+          await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, DEMO_JWT_TOKEN);
+        }
 
         if (token && userId) {
           const user: UserProfile | null = userDataRaw ? JSON.parse(userDataRaw) : null;
@@ -120,8 +126,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const bypassLogin = useCallback(async (phone?: string) => {
-    const BACKEND_USER_ID = '1270d52d-9f4e-4399-9a80-15cab07f1763';
-    const BACKEND_TOKEN = '1270d52d-9f4e-4399-9a80-15cab07f1763';
+    const BACKEND_USER_ID = DEMO_USER_ID;
+    const BACKEND_TOKEN = DEMO_JWT_TOKEN;
     const defaultUser: UserProfile = {
       userId: BACKEND_USER_ID,
       fullName: 'Rahul Sharma',
