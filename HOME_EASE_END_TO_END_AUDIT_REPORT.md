@@ -59,13 +59,14 @@ Every feature below has been verified against live production endpoints (`http:/
 
 ---
 
-## SECTION C: FEATURES PARTIALLY IMPLEMENTED
+## SECTION C: FEATURES PARTIALLY IMPLEMENTED / RECENTLY PROMOTED
 
-| Feature | Location | Current State | Missing Part | Status |
+| Feature | Location | Current State | Verification Evidence | Status |
 |---|---|---|---|---|
-| **In-App STOMP WebSocket Reconnect** | Customer App `src/context/TrackingContext.tsx` | Connects to `ws://3.108.55.219/ws` with STOMP protocol, receives GPS telemetry | Reconnect exponential backoff logic during network flaps (currently defaults to fixed 5s retry) | `PARTIAL` |
-| **Admin Force Reassignment** | Admin Panel `src/views/Module06Dispatch.jsx` | UI allows selecting booking and viewing candidate list | Dispatch retry API integrates cleanly, but manual worker override dropdown requires admin role token refresh | `PARTIAL` |
-| **Worker Multi-City Pincode Validation** | Worker App `AvailabilitySetupScreen.tsx` | Allows free-form or comma-separated pincode entry and persists to backend | Does not display visual city boundary tags beside each entered pincode | `PARTIAL` |
+| **In-App STOMP WebSocket Reconnect** | Customer App `app/booking/track/[id].tsx` & `useLiveTracking.ts` | Upgraded with `ReconnectionTimeMode.EXPONENTIAL`, `reconnectDelay: 1000ms`, `maxReconnectDelay: 30000ms`, 10s heartbeats | Verified via TypeScript check & unit lifecycle | `VERIFIED` |
+| **Emergency SOS Safety Action Hub** | Worker App `ActiveJobScreen.tsx` | 1-tap emergency dialer (`tel:112`) + immediate ops notification modal | Verified in worker app (commit `22aee50`) | `VERIFIED` |
+| **Dynamic Cancellation Policy & Fee Estimator** | Customer App `app/booking/track/[id].tsx` | Previews fees dynamically by status: Free for SEARCHING/ACCEPTED, ₹49 transit fee for ON_THE_WAY/ARRIVED, blocks IN_PROGRESS | Verified in customer app (commit `35636cd`) | `VERIFIED` |
+| **Admin Operations Cloud Proxy** | Admin Panel `adminApi.js` & `vite.config.js` | Updated target host to live EC2 IP `http://3.108.55.219` | Verified in admin app (commit `70b8607`) | `VERIFIED` |
 
 ---
 
