@@ -32,7 +32,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { Client } from '@stomp/stompjs';
+import { Client, ReconnectionTimeMode } from '@stomp/stompjs';
 import { bookingApi, Booking, getAuthHeaders, TRACKING_WS_URL } from '../../../src/api/client';
 import { GoogleMapTracker } from '../../../src/components/map/GoogleMapTracker';
 import { GoogleMapHandle } from '../../../src/components/map/GoogleMapView';
@@ -177,7 +177,11 @@ export default function TrackingScreen() {
         client = new Client({
           brokerURL: TRACKING_WS_URL,
           connectHeaders: headers,
-          reconnectDelay: 2000,
+          reconnectDelay: 1000,
+          reconnectTimeMode: ReconnectionTimeMode.EXPONENTIAL,
+          maxReconnectDelay: 30000,
+          heartbeatIncoming: 10000,
+          heartbeatOutgoing: 10000,
           onConnect: () => {
             if (cancelled || !client) return;
 
@@ -419,9 +423,30 @@ export default function TrackingScreen() {
 
   const handleCancelBooking = () => {
     if (!id) return;
+
+    if (booking?.status === 'IN_PROGRESS') {
+      Alert.alert(
+        'Service In Progress',
+        'Your service partner has already started the service. In-progress services cannot be cancelled from the app. Please contact support if you need immediate assistance.'
+      );
+      return;
+    }
+
+    if (booking?.status === 'COMPLETED') {
+      Alert.alert('Booking Completed', 'This booking has already been marked completed.');
+      return;
+    }
+
+    let policyNotice = 'Free cancellation applies. No charges will be deducted.';
+    if (booking?.status === 'ON_THE_WAY' || booking?.status === 'ARRIVED') {
+      policyNotice = 'Your service partner has already dispatched or arrived. A partner transit compensation fee of ₹49 may apply.';
+    } else if (booking?.status === 'ACCEPTED') {
+      policyNotice = 'Your partner was just assigned. Free cancellation within the initial dispatch window.';
+    }
+
     Alert.alert(
       'Cancel Booking',
-      'Are you sure you want to cancel this booking request?',
+      `${policyNotice}\n\nAre you sure you want to proceed with cancelling this booking?`,
       [
         { text: 'Keep Booking', style: 'cancel' },
         {
@@ -429,7 +454,7 @@ export default function TrackingScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await bookingApi.cancelBooking(id, 'Customer cancelled due to partner unavailable');
+              await bookingApi.cancelBooking(id, 'Customer cancelled request from tracking screen');
               await fetchBooking();
             } catch (err: any) {
               Alert.alert('Cancellation Error', err?.message || 'Could not cancel booking.');
