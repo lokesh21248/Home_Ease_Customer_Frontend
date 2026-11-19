@@ -1,19 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, View, Text, StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { AnimatedRegion, Marker } from 'react-native-maps';
+import { isValidCoordinate } from '../../services/coordinates';
 
 export interface WorkerGPS {
   latitude: number;
   longitude: number;
   heading?: number | null;
-  timestampMs?: number; // UNIX milliseconds
+  timestampMs?: number; // UNIX milliseconds or seconds
 }
 
 export interface MovingWorker3DMarkerProps {
   worker: WorkerGPS;
   staleAfterMs?: number;
   name?: string;
-  serviceCategory?: string;
   zIndex?: number;
 }
 
@@ -40,18 +40,6 @@ function headingBetween(a: Position, b: Position) {
   return normalize(Math.atan2(y, x) / deg);
 }
 
-function getCategoryIcon(serviceName?: string): string {
-  if (!serviceName) return '🛠️';
-  const lower = serviceName.toLowerCase();
-  if (lower.includes('electr')) return '⚡';
-  if (lower.includes('plumb')) return '💧';
-  if (lower.includes('ac') || lower.includes('air') || lower.includes('cool')) return '❄️';
-  if (lower.includes('clean')) return '✨';
-  if (lower.includes('paint') || lower.includes('carpent')) return '🔨';
-  if (lower.includes('salon') || lower.includes('massage') || lower.includes('wellness')) return '💆';
-  return '🛠️';
-}
-
 /**
  * MovingWorker3DMarker — Native-rendered 3D-style worker on scooter.
  *
@@ -61,13 +49,11 @@ function getCategoryIcon(serviceName?: string): string {
  * - Layered ambient and contact ground shadows
  * - Hardware-accelerated native marker rendering (avoids Android custom view snapshotting bugs)
  * - Native smooth coordinate animation & shortest-angle bearing rotation
- * - Floating companion upright identity badge displaying worker name, service category icon, and online status
+ * - Zero extra layers or duplicate markers: 100% native image performance on Android & iOS
  */
 export const MovingWorker3DMarker: React.FC<MovingWorker3DMarkerProps> = ({
   worker,
-  staleAfterMs = 45_000,
   name = 'Service Partner',
-  serviceCategory,
   zIndex = 999,
 }) => {
   const animated = useRef(
@@ -121,17 +107,29 @@ export const MovingWorker3DMarker: React.FC<MovingWorker3DMarkerProps> = ({
       return;
     }
 
-    const currentTimestamp = worker.timestampMs ?? Date.now();
-    const prevTimestamp = previous.current.timestampMs ?? (currentTimestamp - 1000);
-
-    // Stale check
-    if (Date.now() - currentTimestamp > staleAfterMs) return;
+    const rawTs = worker.timestampMs;
+    const currentTimestamp =
+      typeof rawTs === 'number' && Number.isFinite(rawTs)
+        ? rawTs < 1e12
+          ? rawTs * 1000
+          : rawTs
+        : Date.now();
 
     const last = previous.current;
     const next: Position = { latitude: worker.latitude, longitude: worker.longitude };
     const meters = distanceMeters(last, next);
 
-    // Anti-jitter: movements < 2m ignored to prevent micro-oscillation when stationary
+    // Initial positioning if previous was 0 or invalid
+    if (!isValidCoordinate(last.latitude, last.longitude)) {
+      animated.setValue({ ...next, latitudeDelta: 0, longitudeDelta: 0 });
+      previous.current = { ...worker, timestampMs: currentTimestamp };
+      if (worker.heading !== undefined && worker.heading !== null && Number.isFinite(worker.heading)) {
+        smoothRotation(worker.heading);
+      }
+      return;
+    }
+
+    // Anti-jitter: ignore micro-movements < 2m to prevent twitching when stationary
     if (meters < 2) {
       previous.current = { ...worker, timestampMs: currentTimestamp };
       if (worker.heading !== undefined && worker.heading !== null && Number.isFinite(worker.heading)) {
@@ -140,16 +138,26 @@ export const MovingWorker3DMarker: React.FC<MovingWorker3DMarkerProps> = ({
       return;
     }
 
-    const elapsed = Math.max(1000, currentTimestamp - prevTimestamp);
+    const prevRawTs = last.timestampMs;
+    const prevTimestamp =
+      typeof prevRawTs === 'number' && Number.isFinite(prevRawTs)
+        ? prevRawTs < 1e12
+          ? prevRawTs * 1000
+          : prevRawTs
+        : currentTimestamp - 1000;
+
+    const elapsed = Math.max(500, currentTimestamp - prevTimestamp);
     const duration = Math.max(450, Math.min(2500, elapsed * 0.75));
-    const canAnimate = elapsed < 35_000 && meters < 500;
+    // Animate smoothly if update is within realistic GPS reporting cadence (< 30s) and distance (< 300m)
+    const canAnimate = elapsed < 30_000 && meters < 300;
 
     if (!canAnimate) {
       animated.setValue({ ...next, latitudeDelta: 0, longitudeDelta: 0 });
-    } else if (Platform.OS === 'android' && markerRef.current?.animateMarkerToCoordinate) {
-      markerRef.current.animateMarkerToCoordinate(next, duration);
     } else {
       (animated as any).timing({ ...next, duration, useNativeDriver: false }).start();
+      if (Platform.OS === 'android' && markerRef.current?.animateMarkerToCoordinate) {
+        markerRef.current.animateMarkerToCoordinate(next, duration);
+      }
     }
 
     const targetHeading =
@@ -159,74 +167,28 @@ export const MovingWorker3DMarker: React.FC<MovingWorker3DMarkerProps> = ({
 
     smoothRotation(targetHeading);
     previous.current = { ...worker, timestampMs: currentTimestamp };
-  }, [worker, staleAfterMs, animated, smoothRotation]);
-
-  const categoryIcon = getCategoryIcon(serviceCategory);
+  }, [worker, animated, smoothRotation]);
 
   return (
-    <>
-      <AnimatedMarker
-        ref={markerRef}
-        coordinate={animated}
-        image={require('../../../assets/worker-scooter-3d.png')}
-        anchor={{ x: 0.5, y: 0.9 }}
-        rotation={bearing}
-        flat={true}
-        zIndex={zIndex}
-        title={name}
-        identifier="homeease-assigned-worker"
-      />
-      <AnimatedMarker
-        coordinate={animated}
-        anchor={{ x: 0.5, y: 2.1 }}
-        flat={false}
-        zIndex={zIndex + 1}
-        tracksViewChanges={false}
-      >
-        <View style={styles.badgeContainer}>
-          <View style={styles.onlineDot} />
-          <Text style={styles.categoryIcon}>{categoryIcon}</Text>
-          <Text style={styles.badgeText} numberOfLines={1}>
-            {name}
-          </Text>
-        </View>
-      </AnimatedMarker>
-    </>
+    <AnimatedMarker
+      ref={markerRef}
+      coordinate={animated}
+      image={require('../../../assets/worker-scooter-3d.png')}
+      style={styles.markerImage}
+      anchor={{ x: 0.5, y: 0.90 }}
+      rotation={bearing}
+      flat={true}
+      zIndex={zIndex}
+      title={name}
+      identifier="homeease-assigned-worker"
+    />
   );
 };
 
 const styles = StyleSheet.create({
-  badgeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  onlineDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10B981',
-    marginRight: 4,
-  },
-  categoryIcon: {
-    fontSize: 11,
-    marginRight: 4,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#0F172A',
-    maxWidth: 100,
+  markerImage: {
+    width: 54,
+    height: 68,
   },
 });
 

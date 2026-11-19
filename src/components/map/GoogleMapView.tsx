@@ -647,7 +647,6 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
                   timestampMs: lastUpdateTimestamp || Date.now(),
                 }}
                 name={partnerName}
-                serviceCategory={serviceCategory}
                 zIndex={999}
               />
             )}
