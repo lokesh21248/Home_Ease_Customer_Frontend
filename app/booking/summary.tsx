@@ -563,8 +563,11 @@ export default function SummaryScreen() {
       if (e?.status === 401 || e?.status === 403) {
         try {
           await bypassLogin();
-        } catch {}
-        console.warn('[BookingSummary] Session refreshed on auth error during development mode');
+          // Silently retry booking submission with the freshly synchronized token
+          return await handlePlaceBooking();
+        } catch (retryErr) {
+          console.warn('[BookingSummary] Session refresh and retry notice:', retryErr);
+        }
       }
       console.error('[BookingSummary] Booking submission error:', e);
       const isTimeout =

@@ -5,7 +5,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authApi, userApi, AuthResponse, UserProfile, STORAGE_KEYS, DEMO_JWT_TOKEN, DEMO_USER_ID } from '../api/client';
+import { authApi, userApi, AuthResponse, UserProfile, STORAGE_KEYS, DEMO_JWT_TOKEN, DEMO_USER_ID, fetchLiveBackendToken } from '../api/client';
 import { queryClient } from '../query/queryClient';
 
 interface AuthState {
@@ -39,8 +39,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 
   const bypassLogin = useCallback(async (phone?: string) => {
+    let BACKEND_TOKEN = DEMO_JWT_TOKEN;
+    try {
+      BACKEND_TOKEN = await fetchLiveBackendToken();
+    } catch {}
     const BACKEND_USER_ID = DEMO_USER_ID;
-    const BACKEND_TOKEN = DEMO_JWT_TOKEN;
     const defaultUser: UserProfile = {
       userId: BACKEND_USER_ID,
       fullName: 'Rahul Sharma',

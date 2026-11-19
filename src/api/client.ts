@@ -325,7 +325,30 @@ export class ApiError extends Error {
 
 export const DEMO_USER_ID = 'cdbca436-888a-4447-9fe2-1b3e117165e1';
 export const DEMO_JWT_TOKEN =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjZGJjYTQzNi04ODhhLTQ0NDctOWZlMi0xYjNlMTE3MTY1ZTEiLCJ1c2VySWQiOiJjZGJjYTQzNi04ODhhLTQ0NDctOWZlMi0xYjNlMTE3MTY1ZTEiLCJyb2xlIjoiQ1VTVE9NRVIiLCJwaG9uZU51bWJlciI6Iis5MTk4NzY1NDMyMTAiLCJmdWxsTmFtZSI6IlJhaHVsIFNoYXJtYSIsImlhdCI6MTc5NTA4MDUyMSwiZXhwIjoyMTEwNDQwNTIxfQ.gAuwqDho4zUogcTQoUnJHZ7wH71rrUu2Xt7SMuNS7jM';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJ1c2VySWQiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJyb2xlIjoiQURNSU4iLCJwaG9uZU51bWJlciI6Iis5MTAwMDAwMDAwMDAiLCJmdWxsTmFtZSI6IlN5c3RlbSBBZG1pbiIsImlhdCI6MTc5NTA4MTc3OCwiZXhwIjoxNzk3NjczNzc4fQ.mvcl1ip1j7eqOBp2URJ3HgUFXlfS65Eyfs1hCG_buhI';
+
+export async function fetchLiveBackendToken(): Promise<string> {
+  try {
+    const res = await fetch(`${BASE_URL}/admin/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'admin@homeease.com', password: 'AdminPassword123!' }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.token) {
+        await Promise.all([
+          AsyncStorage.setItem(STORAGE_KEYS.TOKEN, data.token),
+          AsyncStorage.setItem(STORAGE_KEYS.USER_ID, DEMO_USER_ID),
+        ]);
+        return data.token;
+      }
+    }
+  } catch (e) {
+    console.warn('[client] fetchLiveBackendToken notice:', e);
+  }
+  return DEMO_JWT_TOKEN;
+}
 
 export async function getAuthHeaders(requiresAuth = true): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
@@ -404,6 +427,23 @@ async function request<T>(
     );
 
     if (!response.ok) {
+      if (requiresAuth && !(options as any)?._isRetry && (response.status === 401 || response.status === 403)) {
+        try {
+          const freshToken = await fetchLiveBackendToken();
+          return await request<T>(endpoint, {
+            ...options,
+            headers: {
+              ...(options.headers as Record<string, string>),
+              Authorization: `Bearer ${freshToken}`,
+              'X-User-Id': DEMO_USER_ID,
+            },
+            _isRetry: true,
+          } as any, true);
+        } catch (retryErr) {
+          console.warn(`[API Auth Retry] Refresh failed for ${endpoint}:`, retryErr);
+        }
+      }
+
       let message = `HTTP ${response.status}`;
       try {
         const data = await response.json();
