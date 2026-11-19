@@ -1379,10 +1379,20 @@ export interface TrackingDistanceResponse {
 
 export interface TrackingRouteResponse {
   found?: boolean;
+  provider?: string;
+  polyline?: string;
+  leafletCoordinates?: [latitude: number, longitude: number][];
+  coordinates?: [longitude: number, latitude: number][] | [latitude: number, longitude: number][];
+  distanceMeters?: number;
+  durationSeconds?: number;
   distanceKm?: number;
   durationMin?: number;
-  coordinates?: [latitude: number, longitude: number][];
+  distanceText?: string;
+  durationText?: string;
   message?: string;
+  bookingId?: string;
+  workerId?: string;
+  timestamp?: number;
 }
 
 export interface TrackingLocationUpdateRequest {
@@ -1461,6 +1471,34 @@ export const trackingApi = {
     });
     if (!res.ok) {
       throw new ApiError(res.status, `Unable to calculate road route (HTTP ${res.status})`);
+    }
+    const data: TrackingRouteResponse = await res.json();
+    return data.found === false ? null : data;
+  },
+
+  /**
+   * Phase 2: Fetches the road-following route from assigned worker's current GPS to booking service address
+   * GET /api/v1/tracking/{bookingId}/route
+   */
+  getBookingRoute: async (
+    bookingId: string,
+    destLat?: number,
+    destLng?: number,
+    signal?: AbortSignal,
+  ): Promise<TrackingRouteResponse | null> => {
+    const query = new URLSearchParams();
+    if (destLat !== undefined) query.set('destLat', String(destLat));
+    if (destLng !== undefined) query.set('destLng', String(destLng));
+    const qs = query.toString() ? `?${query.toString()}` : '';
+
+    const headers = await getAuthHeaders();
+    const res = await fetchWithTimeout(
+      `${TRACKING_BASE_URL}/tracking/${encodeURIComponent(bookingId)}/route${qs}`,
+      { headers, signal },
+    );
+    if (!res.ok) {
+      if (res.status === 404 || res.status === 400) return null;
+      throw new ApiError(res.status, `Unable to calculate booking road route (HTTP ${res.status})`);
     }
     const data: TrackingRouteResponse = await res.json();
     return data.found === false ? null : data;

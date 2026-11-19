@@ -491,6 +491,7 @@ export function useLiveTracking({
           customerLat,
           customerLng,
           controller.signal,
+          bookingId,
         );
         if (
           requestId !== routeRequestIdRef.current ||
@@ -591,7 +592,7 @@ export function useLiveTracking({
     isLiveConnected,
     connectionStatus,
     trackingError,
-    routeCoordinates: route?.coordinates || [],
+    routeCoordinates: (route?.polylineCoordinates || route?.coordinates || []) as any,
     routeLoading,
     routeError,
     distanceText,

@@ -660,6 +660,15 @@ export default function TrackingScreen() {
             </Text>
           </View>
         ) : null}
+
+        {/* Floating Recenter / Fit Route Overview Control */}
+        <Pressable
+          style={styles.floatingRecenterBtn}
+          onPress={() => mapRef.current?.fitRouteBounds()}
+          accessibilityLabel="Recenter map overview"
+        >
+          <Ionicons name="scan-outline" size={18} color="#1E293B" />
+        </Pressable>
       </View>
 
       {/* Live Status Pill */}
@@ -1055,6 +1064,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: BorderRadius.full,
+    ...Shadows.md,
+    zIndex: 20,
+  },
+  floatingRecenterBtn: {
+    position: 'absolute',
+    right: 14,
+    bottom: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
     ...Shadows.md,
     zIndex: 20,
   },

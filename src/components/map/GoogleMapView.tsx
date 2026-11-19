@@ -187,6 +187,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
     const isUserInteractingRef = useRef(false);
     const userInteractionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastCameraFollowTimeRef = useRef<number>(0);
+    const hasFittedInitialBoundsRef = useRef(false);
 
     const handlePanDrag = useCallback(() => {
       isUserInteractingRef.current = true;
@@ -364,11 +365,11 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
         },
         fitRouteBounds: () => {
           const points: LatLngCoordinate[] = [];
-          if (isValidCoordinate(customerLat ?? NaN, customerLng ?? NaN)) {
-            points.push({ latitude: customerLat!, longitude: customerLng! });
+          if (isValidCoordinate(effCustomerLat ?? NaN, effCustomerLng ?? NaN)) {
+            points.push({ latitude: effCustomerLat!, longitude: effCustomerLng! });
           }
-          if (hasPartnerLocation && isValidCoordinate(partnerLat ?? NaN, partnerLng ?? NaN)) {
-            points.push({ latitude: partnerLat!, longitude: partnerLng! });
+          if (effHasPartnerLocation && isValidCoordinate(effPartnerLat ?? NaN, effPartnerLng ?? NaN)) {
+            points.push({ latitude: effPartnerLat!, longitude: effPartnerLng! });
           }
           if (polylineCoords.length > 0) {
             points.push(...polylineCoords);
@@ -376,7 +377,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
 
           if (points.length >= 2) {
             mapRef.current?.fitToCoordinates(points, {
-              edgePadding: { top: 70, right: 70, bottom: 70, left: 70 },
+              edgePadding: { top: 90, right: 60, bottom: 200, left: 60 },
               animated: true,
             });
           } else if (points.length === 1) {
@@ -438,6 +439,11 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
         partnerLng,
         polylineCoords,
         currentRegion,
+        effCustomerLat,
+        effCustomerLng,
+        effHasPartnerLocation,
+        effPartnerLat,
+        effPartnerLng,
       ]
     );
 
@@ -467,30 +473,69 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
       }
     }, [customerLat, customerLng, initialLat, initialLng, deltas, isMapReady, isMoving, mode]);
 
-    // Explicit camera-follow behavior for tracking mode
+    // Automatic initial route fitting when polyline or partner coordinates first become available
+    useEffect(() => {
+      if (!isMapReady || mode !== 'tracking') return;
+      if (hasFittedInitialBoundsRef.current) return;
+
+      const points: LatLngCoordinate[] = [];
+      if (isValidCoordinate(effCustomerLat ?? NaN, effCustomerLng ?? NaN)) {
+        points.push({ latitude: effCustomerLat!, longitude: effCustomerLng! });
+      }
+      if (effHasPartnerLocation && isValidCoordinate(effPartnerLat ?? NaN, effPartnerLng ?? NaN)) {
+        points.push({ latitude: effPartnerLat!, longitude: effPartnerLng! });
+      }
+      if (polylineCoords.length >= 2) {
+        points.push(...polylineCoords);
+      }
+
+      if (points.length >= 2) {
+        hasFittedInitialBoundsRef.current = true;
+        const timer = setTimeout(() => {
+          mapRef.current?.fitToCoordinates(points, {
+            edgePadding: { top: 90, right: 60, bottom: 200, left: 60 },
+            animated: true,
+          });
+        }, 350);
+        return () => clearTimeout(timer);
+      }
+    }, [
+      isMapReady,
+      mode,
+      polylineCoords,
+      effCustomerLat,
+      effCustomerLng,
+      effHasPartnerLocation,
+      effPartnerLat,
+      effPartnerLng,
+    ]);
+
+    // Explicit camera-follow behavior for tracking mode (only when full route is not active or user is not interacting)
     useEffect(() => {
       if (!isMapReady || mode !== 'tracking') return;
       if (isUserInteractingRef.current) return;
+      // When a road route is rendered, preserve the route overview so customer can see both markers
+      if (polylineCoords.length >= 2) return;
 
       const pLat = effPartnerLat;
       const pLng = effPartnerLng;
       if (!isValidCoordinate(pLat ?? NaN, pLng ?? NaN)) return;
 
       const now = Date.now();
-      // Throttle automatic camera following to at most once every 3.5 seconds
-      if (now - lastCameraFollowTimeRef.current < 3500) return;
+      // Throttle automatic camera following to at most once every 6 seconds
+      if (now - lastCameraFollowTimeRef.current < 6000) return;
       lastCameraFollowTimeRef.current = now;
 
       mapRef.current?.animateToRegion(
         {
           latitude: pLat!,
           longitude: pLng!,
-          latitudeDelta: 0.007,
-          longitudeDelta: 0.007,
+          latitudeDelta: 0.012,
+          longitudeDelta: 0.012,
         },
         700
       );
-    }, [effPartnerLat, effPartnerLng, isMapReady, mode]);
+    }, [effPartnerLat, effPartnerLng, isMapReady, mode, polylineCoords.length]);
 
     const handleMapReady = useCallback(() => {
       setIsMapReady(true);
@@ -597,21 +642,23 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
               />
             )}
 
-          {/* 4. Turn-by-Turn Road Route Polyline */}
+          {/* 4. Turn-by-Turn Road Route Polyline (High-fidelity Google Road Route) */}
           {polylineCoords.length >= 2 && (
             <>
+              {/* Outer route casing / shadow for road contrast */}
               <Polyline
                 coordinates={polylineCoords}
-                strokeColor="rgba(30, 64, 175, 0.4)"
-                strokeWidth={7}
+                strokeColor="rgba(30, 64, 175, 0.35)"
+                strokeWidth={9}
                 lineCap="round"
                 lineJoin="round"
                 zIndex={20}
               />
+              {/* Primary navigation blue road polyline */}
               <Polyline
                 coordinates={polylineCoords}
-                strokeColor={Colors.primary || '#2563EB'}
-                strokeWidth={4}
+                strokeColor="#2563EB"
+                strokeWidth={6}
                 lineCap="round"
                 lineJoin="round"
                 zIndex={21}

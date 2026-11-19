@@ -14,6 +14,7 @@
 import React, { forwardRef } from 'react';
 import { StyleProp, ViewStyle } from 'react-native';
 import { GoogleMapView, GoogleMapHandle } from './GoogleMapView';
+import { LatLngCoordinate } from '../../services/coordinates';
 
 export interface GoogleMapTrackerProps {
   partnerLat?: number;
@@ -28,7 +29,7 @@ export interface GoogleMapTrackerProps {
   destAddress?: string;
   customerGpsLat?: number;
   customerGpsLng?: number;
-  routeCoordinates?: [number, number][]; // GeoJSON [lng, lat]
+  routeCoordinates?: [number, number][] | LatLngCoordinate[];
   status?: string;
   etaText?: string;
   distanceText?: string;
