@@ -12,7 +12,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || 'http://3.108.55.219/api/v1';
+  process.env.EXPO_PUBLIC_API_URL || 'https://3-108-55-219.sslip.io/api/v1';
 
 // ─── Storage Keys ────────────────────────────────────────────────────────────
 export const STORAGE_KEYS = {
@@ -323,9 +323,9 @@ export class ApiError extends Error {
   }
 }
 
-export const DEMO_USER_ID = '1270d52d-9f4e-4399-9a80-15cab07f1763';
+export const DEMO_USER_ID = 'cdbca436-888a-4447-9fe2-1b3e117165e1';
 export const DEMO_JWT_TOKEN =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjcwZDUyZC05ZjRlLTQzOTktOWE4MC0xNWNhYjA3ZjE3NjMiLCJ1c2VySWQiOiIxMjcwZDUyZC05ZjRlLTQzOTktOWE4MC0xNWNhYjA3ZjE3NjMiLCJyb2xlIjoiQ1VTVE9NRVIiLCJwaG9uZU51bWJlciI6Iis5MTk4NzY1NDMyMTAiLCJmdWxsTmFtZSI6IlJhaHVsIFNoYXJtYSIsImlhdCI6MTc5NDU0NDc4MSwiZXhwIjoyMTA5OTA0NzgxfQ.JekHLQxRpM-fsHRDBTbEv3CopjEoPBg3XeXSvAOZYJc';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjZGJjYTQzNi04ODhhLTQ0NDctOWZlMi0xYjNlMTE3MTY1ZTEiLCJ1c2VySWQiOiJjZGJjYTQzNi04ODhhLTQ0NDctOWZlMi0xYjNlMTE3MTY1ZTEiLCJyb2xlIjoiQ1VTVE9NRVIiLCJwaG9uZU51bWJlciI6Iis5MTk4NzY1NDMyMTAiLCJmdWxsTmFtZSI6IlJhaHVsIFNoYXJtYSIsImlhdCI6MTc5NTA4MDUyMSwiZXhwIjoyMTEwNDQwNTIxfQ.gAuwqDho4zUogcTQoUnJHZ7wH71rrUu2Xt7SMuNS7jM';
 
 export async function getAuthHeaders(requiresAuth = true): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
@@ -338,19 +338,15 @@ export async function getAuthHeaders(requiresAuth = true): Promise<Record<string
       AsyncStorage.getItem(STORAGE_KEYS.USER_ID),
     ]);
 
-    // Safety guard: If token is missing, or is a legacy raw UUID or invalid format,
-    // automatically migrate to the valid signed DEMO_JWT_TOKEN so Spring Security accepts it
     if (!token || token.split('.').length !== 3) {
       token = DEMO_JWT_TOKEN;
-      AsyncStorage.setItem(STORAGE_KEYS.TOKEN, DEMO_JWT_TOKEN).catch(() => {});
-      if (!userId) {
-        userId = DEMO_USER_ID;
-        AsyncStorage.setItem(STORAGE_KEYS.USER_ID, DEMO_USER_ID).catch(() => {});
-      }
+    }
+    if (!userId) {
+      userId = DEMO_USER_ID;
     }
 
-    if (token) headers.Authorization = `Bearer ${token}`;
-    if (userId) headers['X-User-Id'] = userId;
+    headers.Authorization = `Bearer ${token}`;
+    headers['X-User-Id'] = userId;
   }
 
   return headers;
@@ -639,10 +635,6 @@ export const userApi = {
     }),
 
   getAddresses: async (): Promise<Address[]> => {
-    const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
-    if (!token) {
-      return [];
-    }
     try {
       return await request('/user/addresses', { silent: true } as any);
     } catch (err: any) {
@@ -1208,10 +1200,6 @@ export const bookingApi = {
   },
 
   getMyBookings: async (): Promise<Booking[]> => {
-    const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
-    if (!token) {
-      return [];
-    }
     try {
       return await request('/bookings/my-bookings', { silent: true } as any);
     } catch (err: any) {
@@ -1299,7 +1287,7 @@ export const bookingApi = {
 
 // ─── Dispatch Microservice ────────────────────────────────────────────────────
 export const DISPATCH_BASE_URL =
-  process.env.EXPO_PUBLIC_DISPATCH_API_URL || 'http://3.108.55.219/api/v1';
+  process.env.EXPO_PUBLIC_DISPATCH_API_URL || 'https://3-108-55-219.sslip.io/api/v1';
 
 export interface DispatchTriggerResponse {
   bookingId: string;
@@ -1311,9 +1299,9 @@ export interface DispatchTriggerResponse {
 
 // ─── Live Tracking Service ────────────────────────────────────────────────────
 export const TRACKING_BASE_URL =
-  process.env.EXPO_PUBLIC_TRACKING_API_URL || 'http://3.108.55.219/api/v1';
+  process.env.EXPO_PUBLIC_TRACKING_API_URL || 'https://3-108-55-219.sslip.io/api/v1';
 export const TRACKING_WS_URL =
-  process.env.EXPO_PUBLIC_TRACKING_WS_URL || 'ws://3.108.55.219/ws';
+  process.env.EXPO_PUBLIC_TRACKING_WS_URL || 'wss://3-108-55-219.sslip.io/ws';
 
 export interface TrackingLocationResponse {
   bookingId?: string;

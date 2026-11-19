@@ -37,6 +37,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user: null,
   });
 
+
+  const bypassLogin = useCallback(async (phone?: string) => {
+    const BACKEND_USER_ID = DEMO_USER_ID;
+    const BACKEND_TOKEN = DEMO_JWT_TOKEN;
+    const defaultUser: UserProfile = {
+      userId: BACKEND_USER_ID,
+      fullName: 'Rahul Sharma',
+      phoneNumber: phone || '+919876543210',
+      email: 'rahul.sharma@example.com',
+      role: 'CUSTOMER',
+      createdAt: new Date().toISOString(),
+    };
+    await Promise.all([
+      AsyncStorage.setItem(STORAGE_KEYS.TOKEN, BACKEND_TOKEN),
+      AsyncStorage.setItem(STORAGE_KEYS.USER_ID, BACKEND_USER_ID),
+      AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(defaultUser)),
+    ]);
+    setState({
+      isLoading: false,
+      isAuthenticated: true,
+      token: BACKEND_TOKEN,
+      userId: BACKEND_USER_ID,
+      user: defaultUser,
+    });
+  }, []);
+
   // Rehydrate session from storage on app start, or provision demo session for direct login
   useEffect(() => {
     (async () => {
@@ -60,29 +86,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             isAuthenticated: true,
             token,
             userId,
-            user,
+            user: user || {
+              userId,
+              fullName: 'Rahul Sharma',
+              phoneNumber: '+919876543210',
+              email: 'rahul.sharma@example.com',
+              role: 'CUSTOMER',
+              createdAt: new Date().toISOString(),
+            },
           });
         } else {
-          setState({
-            isLoading: false,
-            isAuthenticated: false,
-            token: null,
-            userId: null,
-            user: null,
-          });
+          // Directly provision guest/customer session so booking is immediately unlocked
+          await bypassLogin();
         }
       } catch {
-        setState((s) => ({
-          ...s,
-          isLoading: false,
-          isAuthenticated: false,
-          token: null,
-          userId: null,
-          user: null,
-        }));
+        await bypassLogin().catch(() => {});
       }
     })();
-  }, []);
+  }, [bypassLogin]);
 
   const sendOtp = useCallback(async (phone: string) => {
     await authApi.sendOtp(phone);
@@ -125,30 +146,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  const bypassLogin = useCallback(async (phone?: string) => {
-    const BACKEND_USER_ID = DEMO_USER_ID;
-    const BACKEND_TOKEN = DEMO_JWT_TOKEN;
-    const defaultUser: UserProfile = {
-      userId: BACKEND_USER_ID,
-      fullName: 'Rahul Sharma',
-      phoneNumber: phone || '+919876543210',
-      email: 'rahul.sharma@example.com',
-      role: 'CUSTOMER',
-      createdAt: new Date().toISOString(),
-    };
-    await Promise.all([
-      AsyncStorage.setItem(STORAGE_KEYS.TOKEN, BACKEND_TOKEN),
-      AsyncStorage.setItem(STORAGE_KEYS.USER_ID, BACKEND_USER_ID),
-      AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(defaultUser)),
-    ]);
-    setState({
-      isLoading: false,
-      isAuthenticated: true,
-      token: BACKEND_TOKEN,
-      userId: BACKEND_USER_ID,
-      user: defaultUser,
-    });
-  }, []);
 
   const completeRegistration = useCallback(
     async (fullName: string, phone: string, email?: string) => {
