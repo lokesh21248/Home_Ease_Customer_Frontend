@@ -30,6 +30,7 @@ export interface GoogleMapTrackerProps {
   customerGpsLat?: number;
   customerGpsLng?: number;
   routeCoordinates?: [number, number][] | LatLngCoordinate[];
+  lastUpdateTimestamp?: number | null;
   status?: string;
   etaText?: string;
   distanceText?: string;
@@ -56,6 +57,7 @@ export const GoogleMapTracker = forwardRef<GoogleMapHandle, GoogleMapTrackerProp
       customerGpsLat,
       customerGpsLng,
       routeCoordinates = [],
+      lastUpdateTimestamp,
       status = 'ACCEPTED',
       etaText,
       distanceText,
@@ -91,6 +93,7 @@ export const GoogleMapTracker = forwardRef<GoogleMapHandle, GoogleMapTrackerProp
         distanceText={distanceText}
         isLiveConnected={isLiveConnected}
         isGpsStale={isGpsStale}
+        lastUpdateTimestamp={lastUpdateTimestamp}
         showControls={showControls}
         showEtaBadge={showEtaBadge}
         onRecenterPress={onRecenterPress}

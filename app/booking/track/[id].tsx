@@ -641,6 +641,7 @@ export default function TrackingScreen() {
           partnerBearing={partnerPos?.bearing ?? 0}
           partnerName={booking?.workerName || 'Service Partner'}
           routeCoordinates={routeCoordinates}
+          lastUpdateTimestamp={lastUpdateTimestamp}
           status={booking?.status || 'SEARCHING'}
           etaText={etaText}
           distanceText={distanceText}

@@ -44,7 +44,7 @@ import {
   toGoogleMapCoordinates,
   LatLngCoordinate,
 } from '../../services/coordinates';
-import { WorkerNavigationMarker } from './WorkerNavigationMarker';
+import { MovingWorker3DMarker } from './MovingWorker3DMarker';
 
 export interface Coordinates {
   latitude: number;
@@ -109,6 +109,7 @@ export interface GoogleMapViewProps {
   distanceText?: string;
   isLiveConnected?: boolean;
   isGpsStale?: boolean;
+  lastUpdateTimestamp?: number | null;
 
   /** Map control buttons */
   showControls?: boolean;
@@ -167,6 +168,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
       distanceText,
       isLiveConnected = true,
       isGpsStale = false,
+      lastUpdateTimestamp,
       showControls = false,
       showEtaBadge = false,
       isDetectingGps = false,
@@ -434,9 +436,6 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
         customerLng,
         centerLat,
         centerLng,
-        hasPartnerLocation,
-        partnerLat,
-        partnerLng,
         polylineCoords,
         currentRegion,
         effCustomerLat,
@@ -630,15 +629,18 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
             </>
           )}
 
-          {/* 3. Partner / Professional Live Directional Marker */}
+          {/* 3. 3D-Style HomeEase Worker-on-Scooter Moving Navigation Marker */}
           {effHasPartnerLocation &&
             isValidCoordinate(effPartnerLat ?? NaN, effPartnerLng ?? NaN) && (
-              <WorkerNavigationMarker
-                coordinate={{ latitude: effPartnerLat!, longitude: effPartnerLng! }}
-                heading={partnerBearing}
+              <MovingWorker3DMarker
+                worker={{
+                  latitude: effPartnerLat!,
+                  longitude: effPartnerLng!,
+                  heading: partnerBearing,
+                  timestampMs: lastUpdateTimestamp || Date.now(),
+                }}
                 name={partnerName}
-                isLive={isLiveConnected}
-                zIndex={32}
+                zIndex={999}
               />
             )}
 
