@@ -24,6 +24,7 @@ export interface GoogleMapTrackerProps {
   isGpsStale?: boolean;
   partnerBearing?: number;
   partnerName?: string;
+  serviceCategory?: string;
   destLat: number;
   destLng: number;
   destAddress?: string;
@@ -51,6 +52,7 @@ export const GoogleMapTracker = forwardRef<GoogleMapHandle, GoogleMapTrackerProp
       isGpsStale = false,
       partnerBearing = 0,
       partnerName = 'Service Partner',
+      serviceCategory,
       destLat,
       destLng,
       destAddress = 'Your Location',
@@ -85,6 +87,7 @@ export const GoogleMapTracker = forwardRef<GoogleMapHandle, GoogleMapTrackerProp
         partnerLng={partnerLng}
         partnerBearing={partnerBearing}
         partnerName={partnerName}
+        serviceCategory={serviceCategory}
         hasPartnerLocation={hasPartnerLocation}
         routeCoordinates={routeCoordinates}
         coordinateFormat="geojson"

@@ -5,7 +5,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authApi, userApi, AuthResponse, UserProfile, STORAGE_KEYS, DEMO_JWT_TOKEN, DEMO_USER_ID, fetchLiveBackendToken } from '../api/client';
+import { authApi, userApi, AuthResponse, UserProfile, STORAGE_KEYS, DEMO_JWT_TOKEN, DEMO_USER_ID, fetchLiveBackendToken, isJwtTokenExpired } from '../api/client';
 import { queryClient } from '../query/queryClient';
 
 interface AuthState {
@@ -76,32 +76,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           AsyncStorage.getItem(STORAGE_KEYS.USER_DATA),
         ]);
 
-        // Fix invalid or legacy non-JWT tokens (e.g. raw UUID)
-        if (token && token.split('.').length !== 3) {
-          token = DEMO_JWT_TOKEN;
-          await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, DEMO_JWT_TOKEN);
+        const isExpired = isJwtTokenExpired(token);
+        if (!token || token.split('.').length !== 3 || isExpired || !userId) {
+          await bypassLogin();
+          return;
         }
 
-        if (token && userId) {
-          const user: UserProfile | null = userDataRaw ? JSON.parse(userDataRaw) : null;
-          setState({
-            isLoading: false,
-            isAuthenticated: true,
-            token,
+        const user: UserProfile | null = userDataRaw ? JSON.parse(userDataRaw) : null;
+        setState({
+          isLoading: false,
+          isAuthenticated: true,
+          token,
+          userId,
+          user: user || {
             userId,
-            user: user || {
-              userId,
-              fullName: 'Rahul Sharma',
-              phoneNumber: '+919876543210',
-              email: 'rahul.sharma@example.com',
-              role: 'CUSTOMER',
-              createdAt: new Date().toISOString(),
-            },
-          });
-        } else {
-          // Directly provision guest/customer session so booking is immediately unlocked
-          await bypassLogin();
-        }
+            fullName: 'Rahul Sharma',
+            phoneNumber: '+919876543210',
+            email: 'rahul.sharma@example.com',
+            role: 'CUSTOMER',
+            createdAt: new Date().toISOString(),
+          },
+        });
       } catch {
         await bypassLogin().catch(() => {});
       }

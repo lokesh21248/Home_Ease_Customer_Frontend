@@ -73,6 +73,7 @@ export default function SummaryScreen() {
   const { balance, deductMoney } = useWallet();
 
   const isSubmittingRef = useRef(false);
+  const isRetryRef = useRef(false);
   const idempotencyKeyRef = useRef<string>(generateUUID());
 
   const [couponCode, setCouponCode] = useState(cart.coupon?.code || '');
@@ -560,13 +561,18 @@ export default function SummaryScreen() {
         throw new Error('Booking could not be confirmed. Please check your bookings.');
       }
     } catch (e: any) {
-      if (e?.status === 401 || e?.status === 403) {
+      if ((e?.status === 401 || e?.status === 403) && !isRetryRef.current) {
+        isRetryRef.current = true;
+        isSubmittingRef.current = false;
+        setBookingLoading(false);
         try {
           await bypassLogin();
           // Silently retry booking submission with the freshly synchronized token
           return await handlePlaceBooking();
         } catch (retryErr) {
           console.warn('[BookingSummary] Session refresh and retry notice:', retryErr);
+        } finally {
+          isRetryRef.current = false;
         }
       }
       console.error('[BookingSummary] Booking submission error:', e);

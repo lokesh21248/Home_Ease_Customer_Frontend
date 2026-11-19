@@ -90,6 +90,7 @@ export interface GoogleMapViewProps {
   partnerLng?: number;
   partnerBearing?: number;
   partnerName?: string;
+  serviceCategory?: string;
   hasPartnerLocation?: boolean;
   providerLocation?: MapPoint;
 
@@ -155,6 +156,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
       partnerLng,
       partnerBearing = 0,
       partnerName = 'Service Partner',
+      serviceCategory,
       hasPartnerLocation = false,
       providerLocation,
       routeCoordinates,
@@ -596,6 +598,11 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
               tracksViewChanges={false}
             >
               <View style={styles.destinationMarkerWrap}>
+                <View style={styles.destinationBadge}>
+                  <Text style={styles.destinationBadgeText} numberOfLines={1}>
+                    {customerTitle || 'Your Service Location'}
+                  </Text>
+                </View>
                 <View style={styles.destinationMarkerPin}>
                   <Ionicons name="home" size={16} color="#FFFFFF" />
                 </View>
@@ -640,6 +647,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
                   timestampMs: lastUpdateTimestamp || Date.now(),
                 }}
                 name={partnerName}
+                serviceCategory={serviceCategory}
                 zIndex={999}
               />
             )}
@@ -789,6 +797,19 @@ const styles = StyleSheet.create({
   destinationMarkerWrap: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  destinationBadge: {
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    marginBottom: 4,
+    ...Shadows.sm,
+  },
+  destinationBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: Typography.fontFamily.bold,
   },
   destinationMarkerPin: {
     width: 34,

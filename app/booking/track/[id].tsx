@@ -64,6 +64,7 @@ export default function TrackingScreen() {
   const [pinFetchError, setPinFetchError] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [isRetryingSearch, setIsRetryingSearch] = useState(false);
+  const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [isRatingModalVisible, setIsRatingModalVisible] = useState(false);
   const [hasShownRating, setHasShownRating] = useState(false);
 
@@ -625,7 +626,7 @@ export default function TrackingScreen() {
       )}
 
       {/* Map Viewport Area */}
-      <View style={styles.mapContainer}>
+      <View style={[styles.mapContainer, isMapExpanded && styles.mapContainerExpanded]}>
         <GoogleMapTracker
           ref={mapRef}
           destLat={destLat}
@@ -640,6 +641,7 @@ export default function TrackingScreen() {
           isGpsStale={isGpsStale}
           partnerBearing={partnerPos?.bearing ?? 0}
           partnerName={booking?.workerName || 'Service Partner'}
+          serviceCategory={booking?.serviceName}
           routeCoordinates={routeCoordinates}
           lastUpdateTimestamp={lastUpdateTimestamp}
           status={booking?.status || 'SEARCHING'}
@@ -662,6 +664,22 @@ export default function TrackingScreen() {
           </View>
         ) : null}
 
+        {/* Floating Map Expand / Collapse Control */}
+        <Pressable
+          style={styles.floatingExpandMapBtn}
+          onPress={() => {
+            setIsMapExpanded((prev) => !prev);
+            setTimeout(() => mapRef.current?.fitRouteBounds(), 150);
+          }}
+          accessibilityLabel={isMapExpanded ? 'Collapse map' : 'Expand map full screen'}
+        >
+          <Ionicons
+            name={isMapExpanded ? 'contract-outline' : 'expand-outline'}
+            size={18}
+            color="#1E293B"
+          />
+        </Pressable>
+
         {/* Floating Recenter / Fit Route Overview Control */}
         <Pressable
           style={styles.floatingRecenterBtn}
@@ -672,54 +690,78 @@ export default function TrackingScreen() {
         </Pressable>
       </View>
 
-      {/* Live Status Pill */}
-      <View style={styles.statusCard}>
-        <View style={styles.statusHeaderRow}>
-          <View style={[styles.statusIndicatorDot, { backgroundColor: statusSummary.badgeColor }]} />
-          <Text style={styles.statusCardTitle}>{statusSummary.title}</Text>
-          {isLiveConnected && (
-            <View style={styles.liveIndicatorBadge}>
-              <View style={styles.liveBlinkingDot} />
-              <Text style={styles.liveIndicatorText}>LIVE</Text>
+      {/* When Map is Expanded: Render Compact Floating Bottom Bar */}
+      {isMapExpanded ? (
+        <View style={[styles.compactFloatingBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <View style={styles.compactPartnerInfo}>
+            <Text style={styles.compactPartnerName} numberOfLines={1}>
+              {booking?.workerName || 'Service Partner'}
+            </Text>
+            <Text style={styles.compactEtaText}>
+              {etaText ? `ETA: ${etaText}` : 'En route'}{distanceText ? ` • ${distanceText}` : ''}
+            </Text>
+          </View>
+          <Pressable
+            style={styles.compactExpandBtn}
+            onPress={() => {
+              setIsMapExpanded(false);
+              setTimeout(() => mapRef.current?.fitRouteBounds(), 150);
+            }}
+          >
+            <Ionicons name="chevron-up" size={16} color="#FFFFFF" />
+            <Text style={styles.compactExpandBtnText}>Details</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <>
+          {/* Live Status Pill */}
+          <View style={styles.statusCard}>
+            <View style={styles.statusHeaderRow}>
+              <View style={[styles.statusIndicatorDot, { backgroundColor: statusSummary.badgeColor }]} />
+              <Text style={styles.statusCardTitle}>{statusSummary.title}</Text>
+              {isLiveConnected && (
+                <View style={styles.liveIndicatorBadge}>
+                  <View style={styles.liveBlinkingDot} />
+                  <Text style={styles.liveIndicatorText}>LIVE</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.statusCardDesc}>{statusSummary.desc}</Text>
+
+            {/* WORKER_NOT_FOUND Action Buttons */}
+            {booking?.status === 'WORKER_NOT_FOUND' && (
+              <View style={styles.workerNotFoundActions}>
+                <Pressable
+                  style={styles.retrySearchBtn}
+                  onPress={handleRetrySearch}
+                  disabled={isRetryingSearch}
+                >
+                  {isRetryingSearch ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="refresh" size={15} color="#FFFFFF" />
+                      <Text style={styles.retrySearchBtnText}>Retry Matching</Text>
+                    </>
+                  )}
+                </Pressable>
+                <Pressable style={styles.cancelRequestBtn} onPress={handleCancelBooking}>
+                  <Text style={styles.cancelRequestBtnText}>Cancel Booking</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+
+          {booking?.status === 'ARRIVED' && (
+            <View style={styles.arrivedBanner}>
+              <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+              <Text style={styles.arrivedBannerText}>Partner Has Arrived! Share your PIN to begin.</Text>
             </View>
           )}
-        </View>
-        <Text style={styles.statusCardDesc}>{statusSummary.desc}</Text>
 
-        {/* WORKER_NOT_FOUND Action Buttons */}
-        {booking?.status === 'WORKER_NOT_FOUND' && (
-          <View style={styles.workerNotFoundActions}>
-            <Pressable
-              style={styles.retrySearchBtn}
-              onPress={handleRetrySearch}
-              disabled={isRetryingSearch}
-            >
-              {isRetryingSearch ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Ionicons name="refresh" size={15} color="#FFFFFF" />
-                  <Text style={styles.retrySearchBtnText}>Retry Matching</Text>
-                </>
-              )}
-            </Pressable>
-            <Pressable style={styles.cancelRequestBtn} onPress={handleCancelBooking}>
-              <Text style={styles.cancelRequestBtnText}>Cancel Booking</Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
-
-      {booking?.status === 'ARRIVED' && (
-        <View style={styles.arrivedBanner}>
-          <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
-          <Text style={styles.arrivedBannerText}>Partner Has Arrived! Share your PIN to begin.</Text>
-        </View>
-      )}
-
-      {/* Bottom Booking & Partner Sheet */}
-      <View style={[styles.bottomSheet, { paddingBottom: Math.max(insets.bottom, 14) }]}>
-        <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+          {/* Bottom Booking & Partner Sheet */}
+          <View style={[styles.bottomSheet, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+            <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
           {/* 1. Dedicated Service Start PIN Card (Displayed ONLY when ARRIVED) */}
           {booking?.status === 'ARRIVED' && (
             <View style={styles.securePinCard}>
@@ -927,6 +969,8 @@ export default function TrackingScreen() {
           </View>
         </ScrollView>
       </View>
+      </>
+      )}
 
       {/* Completion Rating Modal (Phase 4) */}
       <RatingModal
@@ -1038,6 +1082,10 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
   },
+  mapContainerExpanded: {
+    flex: 1,
+    minHeight: '100%',
+  },
   mapUnavailable: {
     flex: 1,
     alignItems: 'center',
@@ -1068,6 +1116,19 @@ const styles = StyleSheet.create({
     ...Shadows.md,
     zIndex: 20,
   },
+  floatingExpandMapBtn: {
+    position: 'absolute',
+    right: 14,
+    bottom: 64,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.md,
+    zIndex: 20,
+  },
   floatingRecenterBtn: {
     position: 'absolute',
     right: 14,
@@ -1092,6 +1153,53 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontFamily.bold,
     fontSize: 12,
     color: '#FFFFFF',
+  },
+
+  // Compact Floating Bar for Expanded Map View
+  compactFloatingBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: Spacing.base,
+    paddingTop: 14,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    ...Shadows.lg,
+    zIndex: 30,
+  },
+  compactPartnerInfo: {
+    flex: 1,
+    marginRight: Spacing.base,
+  },
+  compactPartnerName: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 15,
+    color: '#0F172A',
+  },
+  compactEtaText: {
+    fontFamily: Typography.fontFamily.medium,
+    fontSize: 12,
+    color: '#10B981',
+    marginTop: 2,
+  },
+  compactExpandBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  compactExpandBtnText: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 12,
+    color: '#FFFFFF',
+    marginLeft: 4,
   },
 
   // Status Card

@@ -328,26 +328,75 @@ export const DEMO_JWT_TOKEN =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJ1c2VySWQiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJyb2xlIjoiQURNSU4iLCJwaG9uZU51bWJlciI6Iis5MTAwMDAwMDAwMDAiLCJmdWxsTmFtZSI6IlN5c3RlbSBBZG1pbiIsImlhdCI6MTc5NTA4MTc3OCwiZXhwIjoxNzk3NjczNzc4fQ.mvcl1ip1j7eqOBp2URJ3HgUFXlfS65Eyfs1hCG_buhI';
 
 export async function fetchLiveBackendToken(): Promise<string> {
-  try {
-    const res = await fetch(`${BASE_URL}/admin/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@homeease.com', password: 'AdminPassword123!' }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.token) {
-        await Promise.all([
-          AsyncStorage.setItem(STORAGE_KEYS.TOKEN, data.token),
-          AsyncStorage.setItem(STORAGE_KEYS.USER_ID, DEMO_USER_ID),
-        ]);
-        return data.token;
+  const tryEndpoints = [
+    `${BASE_URL}/admin/auth/login`,
+    'https://3-108-55-219.sslip.io/api/v1/admin/auth/login',
+    'http://3.108.55.219/api/v1/admin/auth/login',
+  ];
+
+  for (const url of tryEndpoints) {
+    try {
+      const res = await fetchWithTimeout(
+        url,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'admin@homeease.com', password: 'AdminPassword123!' }),
+        },
+        5000,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.token) {
+          await Promise.all([
+            AsyncStorage.setItem(STORAGE_KEYS.TOKEN, data.token),
+            AsyncStorage.setItem(STORAGE_KEYS.USER_ID, DEMO_USER_ID),
+          ]);
+          return data.token;
+        }
       }
+    } catch (e) {
+      console.warn(`[client] fetchLiveBackendToken fallback warning for ${url}:`, e);
     }
-  } catch (e) {
-    console.warn('[client] fetchLiveBackendToken notice:', e);
   }
+
+  await Promise.all([
+    AsyncStorage.setItem(STORAGE_KEYS.TOKEN, DEMO_JWT_TOKEN),
+    AsyncStorage.setItem(STORAGE_KEYS.USER_ID, DEMO_USER_ID),
+  ]);
   return DEMO_JWT_TOKEN;
+}
+
+function decodeBase64(input: string): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  const str = input.replace(/=+$/, '');
+  let output = '';
+  for (let bc = 0, bs = 0, idx = 0; idx < str.length; idx++) {
+    const charIndex = chars.indexOf(str.charAt(idx));
+    if (charIndex === -1) continue;
+    bs = bc % 4 ? bs * 64 + charIndex : charIndex;
+    if (bc++ % 4) {
+      output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)));
+    }
+  }
+  return output;
+}
+
+export function isJwtTokenExpired(token: string | null | undefined): boolean {
+  if (!token) return true;
+  const parts = token.split('.');
+  if (parts.length !== 3) return true;
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const jsonStr = typeof atob === 'function' ? atob(base64) : decodeBase64(base64);
+    const json = JSON.parse(jsonStr);
+    if (json.exp && json.exp * 1000 < Date.now()) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 export async function getAuthHeaders(requiresAuth = true): Promise<Record<string, string>> {
@@ -361,11 +410,14 @@ export async function getAuthHeaders(requiresAuth = true): Promise<Record<string
       AsyncStorage.getItem(STORAGE_KEYS.USER_ID),
     ]);
 
-    if (!token || token.split('.').length !== 3) {
+    const isExpired = isJwtTokenExpired(token);
+    if (!token || token.split('.').length !== 3 || isExpired) {
       token = DEMO_JWT_TOKEN;
+      await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, DEMO_JWT_TOKEN).catch(() => {});
     }
     if (!userId) {
       userId = DEMO_USER_ID;
+      await AsyncStorage.setItem(STORAGE_KEYS.USER_ID, DEMO_USER_ID).catch(() => {});
     }
 
     headers.Authorization = `Bearer ${token}`;

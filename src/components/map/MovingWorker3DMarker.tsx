@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { Platform, View, Text, StyleSheet } from 'react-native';
 import { AnimatedRegion, Marker } from 'react-native-maps';
 
 export interface WorkerGPS {
@@ -13,6 +13,7 @@ export interface MovingWorker3DMarkerProps {
   worker: WorkerGPS;
   staleAfterMs?: number;
   name?: string;
+  serviceCategory?: string;
   zIndex?: number;
 }
 
@@ -39,6 +40,18 @@ function headingBetween(a: Position, b: Position) {
   return normalize(Math.atan2(y, x) / deg);
 }
 
+function getCategoryIcon(serviceName?: string): string {
+  if (!serviceName) return '🛠️';
+  const lower = serviceName.toLowerCase();
+  if (lower.includes('electr')) return '⚡';
+  if (lower.includes('plumb')) return '💧';
+  if (lower.includes('ac') || lower.includes('air') || lower.includes('cool')) return '❄️';
+  if (lower.includes('clean')) return '✨';
+  if (lower.includes('paint') || lower.includes('carpent')) return '🔨';
+  if (lower.includes('salon') || lower.includes('massage') || lower.includes('wellness')) return '💆';
+  return '🛠️';
+}
+
 /**
  * MovingWorker3DMarker — Native-rendered 3D-style worker on scooter.
  *
@@ -48,11 +61,13 @@ function headingBetween(a: Position, b: Position) {
  * - Layered ambient and contact ground shadows
  * - Hardware-accelerated native marker rendering (avoids Android custom view snapshotting bugs)
  * - Native smooth coordinate animation & shortest-angle bearing rotation
+ * - Floating companion upright identity badge displaying worker name, service category icon, and online status
  */
 export const MovingWorker3DMarker: React.FC<MovingWorker3DMarkerProps> = ({
   worker,
   staleAfterMs = 45_000,
   name = 'Service Partner',
+  serviceCategory,
   zIndex = 999,
 }) => {
   const animated = useRef(
@@ -146,20 +161,74 @@ export const MovingWorker3DMarker: React.FC<MovingWorker3DMarkerProps> = ({
     previous.current = { ...worker, timestampMs: currentTimestamp };
   }, [worker, staleAfterMs, animated, smoothRotation]);
 
+  const categoryIcon = getCategoryIcon(serviceCategory);
+
   return (
-    <AnimatedMarker
-      ref={markerRef}
-      coordinate={animated}
-      image={require('../../../assets/worker-scooter-3d.png')}
-      anchor={{ x: 0.5, y: 0.9 }}
-      rotation={bearing}
-      flat={true}
-      zIndex={zIndex}
-      title={name}
-      identifier="homeease-assigned-worker"
-    />
+    <>
+      <AnimatedMarker
+        ref={markerRef}
+        coordinate={animated}
+        image={require('../../../assets/worker-scooter-3d.png')}
+        anchor={{ x: 0.5, y: 0.9 }}
+        rotation={bearing}
+        flat={true}
+        zIndex={zIndex}
+        title={name}
+        identifier="homeease-assigned-worker"
+      />
+      <AnimatedMarker
+        coordinate={animated}
+        anchor={{ x: 0.5, y: 2.1 }}
+        flat={false}
+        zIndex={zIndex + 1}
+        tracksViewChanges={false}
+      >
+        <View style={styles.badgeContainer}>
+          <View style={styles.onlineDot} />
+          <Text style={styles.categoryIcon}>{categoryIcon}</Text>
+          <Text style={styles.badgeText} numberOfLines={1}>
+            {name}
+          </Text>
+        </View>
+      </AnimatedMarker>
+    </>
   );
 };
+
+const styles = StyleSheet.create({
+  badgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  onlineDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+    marginRight: 4,
+  },
+  categoryIcon: {
+    fontSize: 11,
+    marginRight: 4,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0F172A',
+    maxWidth: 100,
+  },
+});
 
 const AnimatedMarker = Marker.Animated as any;
 
