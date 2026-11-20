@@ -32,15 +32,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { Client, ReconnectionTimeMode } from '@stomp/stompjs';
-import { bookingApi, Booking, getAuthHeaders, TRACKING_WS_URL } from '../../../src/api/client';
+import { bookingApi, Booking } from '../../../src/api/client';
 import { GoogleMapTracker } from '../../../src/components/map/GoogleMapTracker';
 import { GoogleMapHandle } from '../../../src/components/map/GoogleMapView';
 import { useLiveTracking } from '../../../src/hooks/useLiveTracking';
 import { useCustomerLocation } from '../../../src/hooks/useCustomerLocation';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../../src/constants/theme';
 import { isValidCoordinate } from '../../../src/services/coordinates';
-import { getCentroidForPincode } from '../../../src/services/locationService';
 import { RatingModal, RadarSearchingView } from '../../../src/components/common';
 
 const { width } = Dimensions.get('window');
@@ -165,143 +163,52 @@ export default function TrackingScreen() {
     }
   }, [booking?.status, servicePin, isFetchingPin, fetchServicePin]);
 
-  // Real-time listener for booking lifecycle events (ASSIGNED, ARRIVED, IN_PROGRESS, COMPLETED)
-  useEffect(() => {
-    if (!id || booking?.status === 'COMPLETED' || booking?.status === 'CANCELLED') return;
-    let client: Client | null = null;
-    let cancelled = false;
-
-    const connectLifecycleListener = async () => {
-      try {
-        const headers = await getAuthHeaders();
-        if (cancelled) return;
-        client = new Client({
-          brokerURL: TRACKING_WS_URL,
-          connectHeaders: headers,
-          reconnectDelay: 1000,
-          reconnectTimeMode: ReconnectionTimeMode.EXPONENTIAL,
-          maxReconnectDelay: 30000,
-          heartbeatIncoming: 10000,
-          heartbeatOutgoing: 10000,
-          onConnect: () => {
-            if (cancelled || !client) return;
-
-            const handleStatusEvent = (bodyStr: string) => {
-              try {
-                const event = JSON.parse(bodyStr);
-                const eventStatus = event.status || event.type;
-                if (eventStatus === 'ARRIVED' || eventStatus === 'WORKER_ARRIVED') {
-                  void fetchServicePin();
-                } else if (eventStatus === 'IN_PROGRESS' || eventStatus === 'SERVICE_STARTED') {
-                  setServicePin(null);
-                }
-              } catch (_) {}
-              void fetchBooking();
-            };
-
-            // 1. Partner live GPS & status tracking topic
-            client.subscribe(`/topic/tracking/${id}`, (message) => {
-              handleStatusEvent(message.body);
-            });
-
-            // 2. Booking execution topic
-            client.subscribe(`/topic/track/${id}`, (message) => {
-              handleStatusEvent(message.body);
-            });
-
-            // 3. General booking events topic
-            client.subscribe(`/topic/booking/${id}`, (message) => {
-              handleStatusEvent(message.body);
-            });
-          },
-        });
-        client.activate();
-      } catch (err) {
-        // Fallback polling continues seamlessly
+  // Booking lifecycle events (ARRIVED, SERVICE_STARTED, ...) arrive on the SINGLE socket owned by
+  // useLiveTracking. This screen used to open a second STOMP client on three topics and re-fetch the booking
+  // over HTTP on every GPS frame; location frames are no longer forwarded here, only lifecycle events.
+  const handleBookingEvent = useCallback(
+    (event: Record<string, any>) => {
+      const eventStatus = event.status || event.type;
+      if (eventStatus === 'ARRIVED' || eventStatus === 'WORKER_ARRIVED') {
+        void fetchServicePin();
+      } else if (eventStatus === 'IN_PROGRESS' || eventStatus === 'SERVICE_STARTED') {
+        setServicePin(null);
       }
-    };
-
-    void connectLifecycleListener();
-
-    return () => {
-      cancelled = true;
-      if (client) void client.deactivate();
-    };
-  }, [id, booking?.status, fetchBooking, fetchServicePin]);
+      void fetchBooking();
+    },
+    [fetchBooking, fetchServicePin],
+  );
 
   useEffect(() => {
     setBooking(null);
     setBookingError(null);
   }, [id]);
 
-  // Destination coordinates from booking address or fallback to live GPS or default city center
-  const DEFAULT_MAP_LAT = 17.4485;
-  const DEFAULT_MAP_LNG = 78.3748;
-
-  const rawBookingLat =
-    booking?.userLat ??
-    (booking as any)?.latitude ??
-    (booking as any)?.lat ??
-    (booking as any)?.address?.latitude ??
-    (booking as any)?.address?.lat;
-
-  const rawBookingLng =
-    booking?.userLng ??
-    (booking as any)?.longitude ??
-    (booking as any)?.lng ??
-    (booking as any)?.address?.longitude ??
-    (booking as any)?.address?.lng;
-
-  const numBookingLat =
-    rawBookingLat !== undefined && rawBookingLat !== null && rawBookingLat !== ''
-      ? Number(rawBookingLat)
-      : undefined;
-  const numBookingLng =
-    rawBookingLng !== undefined && rawBookingLng !== null && rawBookingLng !== ''
-      ? Number(rawBookingLng)
-      : undefined;
-
+  // DESTINATION = the booking's PERSISTED service address (userLat/userLng from GET /bookings/{id}), and
+  // nothing else. It is deliberately NOT replaced by a pincode centroid, the customer's current GPS, a default
+  // city, or an "override" for particular pincodes: a wrong destination is worse than no destination.
+  // The route itself never uses this value - the server derives the destination from the booking.
+  const bookingLat = booking ? Number(booking.userLat) : NaN;
+  const bookingLng = booking ? Number(booking.userLng) : NaN;
   const hasValidBookingCoords =
-    numBookingLat !== undefined &&
-    numBookingLng !== undefined &&
-    isValidCoordinate(numBookingLat, numBookingLng);
+    isValidCoordinate(bookingLat, bookingLng) && !(bookingLat === 0 && bookingLng === 0);
+  const destLat: number | undefined = hasValidBookingCoords ? bookingLat : undefined;
+  const destLng: number | undefined = hasValidBookingCoords ? bookingLng : undefined;
+  const destinationMissing = Boolean(booking) && !hasValidBookingCoords;
 
   const bookingPin = (booking as any)?.servicePincode || (booking as any)?.pincode;
-  const pinCentroid = bookingPin ? getCentroidForPincode(bookingPin) : null;
-
-  // Safeguard: If booking is for 500010 (Alwal/Bolarum) but carries old stale KPHB coordinates (17.4947, 78.3996),
-  // correct to genuine Alwal centroid coordinates so the tracking map never displays KPHB.
-  const isStaleKphbCoord =
-    numBookingLat !== undefined &&
-    numBookingLng !== undefined &&
-    Math.abs(numBookingLat - 17.4947) < 0.005 &&
-    Math.abs(numBookingLng - 78.3996) < 0.005;
-
-  const destLat =
-    isStaleKphbCoord && pinCentroid && (bookingPin?.includes('500010') || bookingPin === '500010')
-      ? pinCentroid.latitude
-      : hasValidBookingCoords
-    ? numBookingLat!
-    : pinCentroid?.latitude ??
-    (customerGps?.latitude !== undefined && isValidCoordinate(customerGps.latitude, customerGps.longitude ?? 0)
-      ? customerGps.latitude
-      : DEFAULT_MAP_LAT);
-
-  const destLng =
-    isStaleKphbCoord && pinCentroid && (bookingPin?.includes('500010') || bookingPin === '500010')
-      ? pinCentroid.longitude
-      : hasValidBookingCoords
-        ? numBookingLng!
-        : pinCentroid?.longitude ??
-        (customerGps?.longitude !== undefined && isValidCoordinate(customerGps.latitude ?? 0, customerGps.longitude)
-          ? customerGps.longitude
-          : DEFAULT_MAP_LNG);
-
   const customerAddress =
     (booking as any)?.customerAddress ||
     booking?.userLocation ||
     (bookingPin ? `Service Address — ${bookingPin}` : undefined) ||
     'Your Service Location';
+
+  // Keeps the worker, destination and road above the bottom panel when the map is fitted. Memoised so the map
+  // does not see a "new" padding object (and re-run its camera effect) on every render.
+  const mapFitPadding = useMemo(
+    () => ({ top: 90, right: 56, bottom: isMapExpanded ? 150 : 110, left: 56 }),
+    [isMapExpanded],
+  );
 
   // 3. Live Partner Travel Tracking (ONLY active while partner is moving/travelling to customer)
   // Automatically stops upon ARRIVED, IN_PROGRESS, COMPLETED, or CANCELLED
@@ -315,22 +222,19 @@ export default function TrackingScreen() {
     partnerPos,
     hasPartnerLocation,
     isLiveConnected,
-    connectionStatus,
     trackingError,
     isGpsStale,
     routeCoordinates,
-    routeLoading,
-    routeError,
+    routeNotice,
     distanceText,
     etaText,
-    trackingEnded,
+    etaSeconds,
     lastUpdateTimestamp,
   } = useLiveTracking({
     bookingId: id,
-    customerLat: destLat,
-    customerLng: destLng,
     status: booking?.status,
     enabled: trackingEnabled,
+    onBookingEvent: handleBookingEvent,
   });
 
   const handleCall = () => {
@@ -533,7 +437,11 @@ export default function TrackingScreen() {
         }
         return {
           title: 'Partner En Route',
-          desc: etaText ? `Arriving in approximately ${etaText}` : 'Live tracking active',
+          // Only a real, route-derived ETA is ever shown; otherwise say why it is missing.
+          desc:
+            etaSeconds !== null
+              ? `Arriving in approximately ${etaText}`
+              : routeNotice || 'Live tracking active',
           badgeColor: '#10B981',
         };
       case 'ARRIVED':
@@ -567,7 +475,574 @@ export default function TrackingScreen() {
           badgeColor: '#3B82F6',
         };
     }
-  }, [booking, bookingError, hasPartnerLocation, isGpsStale, etaText]);
+  }, [booking, bookingError, hasPartnerLocation, isGpsStale, etaText, etaSeconds, routeNotice]);
+
+  // =========================================================================
+  // 1. CANCELLED STATE: No live tracking map. Clean status with refund info.
+  // =========================================================================
+  if (booking?.status === 'CANCELLED') {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar style="dark" />
+        <View style={styles.header}>
+          <Pressable
+            style={styles.backBtn}
+            onPress={() => router.replace('/(tabs)/bookings')}
+            accessibilityLabel="Go back"
+            hitSlop={8}
+          >
+            <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
+          </Pressable>
+
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Booking Cancelled</Text>
+            <Text style={styles.headerSub} numberOfLines={1}>
+              {booking?.serviceName ? `${booking.serviceName} • ` : ''}
+              #{id?.substring(0, 8).toUpperCase()}
+            </Text>
+          </View>
+
+          <View style={{ width: 36 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.terminalStateScroll} showsVerticalScrollIndicator={false}>
+          {/* Hero Banner */}
+          <View style={styles.cancelledHeroWrap}>
+            <View style={styles.cancelledHeroIcon}>
+              <Ionicons name="close-circle" size={54} color="#DC2626" />
+            </View>
+            <Text style={styles.cancelledHeroTitle}>Booking Cancelled</Text>
+            <Text style={styles.cancelledHeroDesc}>
+              This booking has been cancelled. Road tracking is closed and no technician will visit.
+            </Text>
+          </View>
+
+          {/* Details Card */}
+          <View style={styles.terminalDetailsCard}>
+            <Text style={styles.terminalCardHeader}>Booking Summary</Text>
+            
+            <View style={styles.terminalDetailRow}>
+              <Text style={styles.terminalDetailLabel}>Service</Text>
+              <Text style={styles.terminalDetailValue}>{booking?.serviceName || 'HomeEase Service'}</Text>
+            </View>
+            
+            <View style={styles.terminalDetailRow}>
+              <Text style={styles.terminalDetailLabel}>Booking ID</Text>
+              <Text style={styles.terminalDetailValue}>#{id?.substring(0, 8).toUpperCase()}</Text>
+            </View>
+
+            <View style={styles.terminalDetailRow}>
+              <Text style={styles.terminalDetailLabel}>Reason</Text>
+              <Text style={[styles.terminalDetailValue, { color: '#DC2626' }]}>
+                {booking?.cancellationReason || 'Cancelled by customer'}
+              </Text>
+            </View>
+
+            <View style={styles.terminalDetailRow}>
+              <Text style={styles.terminalDetailLabel}>Service Location</Text>
+              <Text style={styles.terminalDetailValue} numberOfLines={2}>
+                {customerAddress}
+              </Text>
+            </View>
+          </View>
+
+          {/* Refund Guarantee Card */}
+          <View style={styles.refundNoticeCard}>
+            <View style={styles.refundIconWrap}>
+              <Ionicons name="shield-checkmark" size={22} color="#059669" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.refundNoticeTitle}>100% Refund Assurance</Text>
+              <Text style={styles.refundNoticeDesc}>
+                If any payment was deducted, a full refund has been automatically initiated to your original payment method (3–5 business days).
+              </Text>
+            </View>
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.terminalActionsWrap}>
+            <Pressable
+              style={styles.primaryActionButton}
+              onPress={() => router.replace('/(tabs)')}
+              accessibilityRole="button"
+            >
+              <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+              <Text style={styles.primaryActionText}>Book Another Service</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.secondaryActionButton}
+              onPress={() => router.replace('/(tabs)/bookings')}
+              accessibilityRole="button"
+            >
+              <Ionicons name="list" size={18} color="#2563EB" />
+              <Text style={styles.secondaryActionText}>View All Bookings</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.textHelpButton}
+              onPress={() => Linking.openURL('tel:1800123456')}
+            >
+              <Ionicons name="headset-outline" size={16} color="#64748B" />
+              <Text style={styles.textHelpButtonText}>Need Help? Call 24/7 Support</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // =========================================================================
+  // 2. COMPLETED STATE: No live tracking map. Receipt summary & ratings.
+  // =========================================================================
+  if (booking?.status === 'COMPLETED') {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar style="dark" />
+        <View style={styles.header}>
+          <Pressable
+            style={styles.backBtn}
+            onPress={() => router.replace('/(tabs)/bookings')}
+            accessibilityLabel="Go back"
+            hitSlop={8}
+          >
+            <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
+          </Pressable>
+
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Service Completed</Text>
+            <Text style={styles.headerSub} numberOfLines={1}>
+              {booking?.serviceName ? `${booking.serviceName} • ` : ''}
+              #{id?.substring(0, 8).toUpperCase()}
+            </Text>
+          </View>
+
+          <View style={{ width: 36 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.terminalStateScroll} showsVerticalScrollIndicator={false}>
+          {/* Hero Celebration */}
+          <View style={styles.completedHeroWrap}>
+            <View style={styles.completedHeroIcon}>
+              <Ionicons name="checkmark-done-circle" size={54} color="#10B981" />
+            </View>
+            <Text style={styles.completedHeroTitle}>Service Completed!</Text>
+            <Text style={styles.completedHeroDesc}>
+              Your service has been delivered successfully. Thank you for choosing HomeEase.
+            </Text>
+          </View>
+
+          {/* Partner Card */}
+          {booking?.workerName && (
+            <View style={styles.completedPartnerCard}>
+              <View style={styles.workerAvatar}>
+                <Text style={styles.workerAvatarText}>
+                  {booking.workerName.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.completedPartnerName}>{booking.workerName}</Text>
+                <View style={styles.ratingRow}>
+                  <Ionicons name="star" size={13} color="#F59E0B" />
+                  <Text style={styles.ratingText}>
+                    {booking.workerRating != null ? booking.workerRating.toFixed(1) : '5.0'} • Verified Pro
+                  </Text>
+                </View>
+                <Text style={styles.completedPartnerRole}>
+                  {booking.serviceName ? `${booking.serviceName} Specialist` : 'Service Professional'}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Rate Partner Prompt */}
+          <View style={styles.ratePartnerPromptCard}>
+            <Text style={styles.ratePromptTitle}>How was your experience?</Text>
+            <Text style={styles.ratePromptSub}>Help us maintain high quality service standards on HomeEase</Text>
+            <Pressable
+              style={styles.openRatingButton}
+              onPress={() => setIsRatingModalVisible(true)}
+            >
+              <Ionicons name="star" size={18} color="#FFFFFF" />
+              <Text style={styles.openRatingButtonText}>Rate Your Experience</Text>
+            </Pressable>
+          </View>
+
+          {/* Invoice Summary Card */}
+          <View style={styles.terminalDetailsCard}>
+            <Text style={styles.terminalCardHeader}>Service & Payment Receipt</Text>
+            <View style={styles.terminalDetailRow}>
+              <Text style={styles.terminalDetailLabel}>Service</Text>
+              <Text style={styles.terminalDetailValue}>{booking?.serviceName || 'HomeEase Service'}</Text>
+            </View>
+            <View style={styles.terminalDetailRow}>
+              <Text style={styles.terminalDetailLabel}>Total Paid</Text>
+              <Text style={[styles.terminalDetailValue, { color: '#059669', fontFamily: Typography.fontFamily.bold }]}>
+                ₹{booking?.totalAmount || (booking as any)?.finalPrice || '0'}
+              </Text>
+            </View>
+            <View style={styles.terminalDetailRow}>
+              <Text style={styles.terminalDetailLabel}>Payment Status</Text>
+              <Text style={[styles.terminalDetailValue, { color: '#059669' }]}>Paid</Text>
+            </View>
+            <View style={styles.terminalDetailRow}>
+              <Text style={styles.terminalDetailLabel}>Service Address</Text>
+              <Text style={styles.terminalDetailValue} numberOfLines={2}>
+                {customerAddress}
+              </Text>
+            </View>
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.terminalActionsWrap}>
+            <Pressable
+              style={styles.primaryActionButton}
+              onPress={() => router.replace('/(tabs)')}
+              accessibilityRole="button"
+            >
+              <Ionicons name="home" size={18} color="#FFFFFF" />
+              <Text style={styles.primaryActionText}>Back to Home</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.secondaryActionButton}
+              onPress={() => router.replace('/(tabs)/bookings')}
+              accessibilityRole="button"
+            >
+              <Ionicons name="list" size={18} color="#2563EB" />
+              <Text style={styles.secondaryActionText}>View All Bookings</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+
+        <RatingModal
+          visible={isRatingModalVisible}
+          bookingId={id || ''}
+          workerName={booking?.workerName}
+          serviceName={booking?.serviceName}
+          onClose={() => setIsRatingModalVisible(false)}
+          onSubmitSuccess={() => {
+            Alert.alert('Review Submitted', 'Thank you for rating your service experience!');
+          }}
+        />
+      </View>
+    );
+  }
+
+  // =========================================================================
+  // 3. ARRIVED STATE: Partner reached doorstep! Travel route finished.
+  //    Display prominent 4-digit Service Start PIN for customer to give partner.
+  // =========================================================================
+  if (booking?.status === 'ARRIVED') {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar style="dark" />
+        <View style={styles.header}>
+          <Pressable
+            style={styles.backBtn}
+            onPress={() => router.back()}
+            accessibilityLabel="Go back"
+            hitSlop={8}
+          >
+            <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
+          </Pressable>
+
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Partner At Doorstep</Text>
+            <Text style={styles.headerSub} numberOfLines={1}>
+              {booking?.serviceName ? `${booking.serviceName} • ` : ''}
+              #{id?.substring(0, 8).toUpperCase()}
+            </Text>
+          </View>
+
+          <Pressable
+            style={styles.sosBtn}
+            onPress={handleEmergencySOS}
+            accessibilityLabel="Emergency SOS"
+            hitSlop={8}
+          >
+            <Text style={styles.sosBtnText}>SOS</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.terminalStateScroll} showsVerticalScrollIndicator={false}>
+          {/* Arrived Doorstep Banner */}
+          <View style={styles.arrivedDoorstepHero}>
+            <View style={styles.arrivedHeroIcon}>
+              <Ionicons name="checkmark-circle" size={38} color="#10B981" />
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.arrivedHeroTitle}>Partner Has Arrived!</Text>
+              <Text style={styles.arrivedHeroDesc}>
+                Your verified service partner is at your doorstep. Share your 4-digit PIN below to begin.
+              </Text>
+            </View>
+          </View>
+
+          {/* Dedicated 4-Digit Service Start PIN Card */}
+          <View style={styles.securePinCardLarge}>
+            <View style={styles.securePinHeader}>
+              <View style={styles.securePinBadge}>
+                <Ionicons name="shield-checkmark" size={15} color="#1D4ED8" />
+                <Text style={styles.securePinBadgeText}>SERVICE START PIN</Text>
+              </View>
+              <Pressable
+                style={({ pressed }) => [styles.copyPinBtn, pressed && { opacity: 0.8 }]}
+                onPress={handleCopyPin}
+                accessibilityRole="button"
+                accessibilityLabel="Copy PIN"
+              >
+                <Feather name={pinCopied ? 'check' : 'copy'} size={14} color="#1D4ED8" />
+                <Text style={styles.copyPinBtnText}>{pinCopied ? 'Copied' : 'Copy PIN'}</Text>
+              </Pressable>
+            </View>
+
+            {/* 4 Digit Display Boxes */}
+            {isFetchingPin ? (
+              <View style={styles.pinLoadingRow}>
+                <ActivityIndicator size="small" color="#1D4ED8" />
+                <Text style={styles.pinLoadingText}>Retrieving secure start PIN...</Text>
+              </View>
+            ) : (
+              <View style={styles.pinDigitsRow}>
+                {(servicePin || (booking?.pinCode && booking.pinCode !== '****' && booking.pinCode !== '0000' ? booking.pinCode : '----'))
+                  .slice(0, 4)
+                  .split('')
+                  .map((digit, idx) => (
+                    <View key={idx} style={styles.pinDigitBoxLarge}>
+                      <Text style={styles.pinDigitTextLarge}>{digit}</Text>
+                    </View>
+                  ))}
+              </View>
+            )}
+
+            {pinFetchError && !servicePin && (
+              <Pressable style={styles.retryPinBtn} onPress={fetchServicePin}>
+                <Ionicons name="refresh" size={14} color="#DC2626" />
+                <Text style={styles.retryPinText}>Could not load PIN. Tap to retry.</Text>
+              </Pressable>
+            )}
+
+            <View style={styles.pinInstructionRow}>
+              <Ionicons name="information-circle-outline" size={16} color="#1E40AF" />
+              <Text style={styles.securePinMessage}>
+                Share this PIN with your service partner to verify and start the service.
+              </Text>
+            </View>
+            <Text style={styles.securePinHint}>
+              For your safety, only share this 4-digit code when your service partner is present at your doorstep.
+            </Text>
+          </View>
+
+          {/* Assigned Partner Card */}
+          {booking?.workerName && (
+            <View style={styles.arrivedPartnerCard}>
+              <View style={styles.workerAvatar}>
+                <Text style={styles.workerAvatarText}>
+                  {booking.workerName.charAt(0).toUpperCase()}
+                </Text>
+                <View style={styles.onlineBadge} />
+              </View>
+
+              <View style={styles.workerMeta}>
+                <Text style={styles.workerName}>{booking.workerName}</Text>
+                <View style={styles.ratingRow}>
+                  <Ionicons name="star" size={13} color="#F59E0B" />
+                  <Text style={styles.ratingText}>
+                    {booking.workerRating != null ? booking.workerRating.toFixed(1) : '5.0'} • Verified Pro
+                  </Text>
+                </View>
+                <Text style={styles.workerRole}>
+                  {booking.serviceName ? `${booking.serviceName} Specialist` : 'Service Partner'}
+                </Text>
+              </View>
+
+              <View style={styles.actionsRow}>
+                <Pressable
+                  style={[styles.actionCircle, styles.callBtn, !booking.workerPhone && { opacity: 0.5 }]}
+                  onPress={handleCall}
+                  accessibilityLabel="Call partner"
+                >
+                  <Ionicons name="call" size={18} color="#FFFFFF" />
+                </Pressable>
+                <Pressable
+                  style={[styles.actionCircle, styles.chatBtn]}
+                  onPress={handleChat}
+                  accessibilityLabel="Chat with partner"
+                >
+                  <Ionicons name="chatbubble-ellipses" size={18} color="#1D4ED8" />
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          {/* Service Location Card */}
+          <View style={styles.terminalDetailsCard}>
+            <Text style={styles.terminalCardHeader}>Doorstep Service Location</Text>
+            <View style={styles.terminalDetailRow}>
+              <Ionicons name="location-sharp" size={18} color="#2563EB" style={{ marginRight: 8 }} />
+              <Text style={[styles.terminalDetailValue, { flex: 1 }]}>{customerAddress}</Text>
+            </View>
+          </View>
+
+          {/* Doorstep Verification Checklist */}
+          <View style={styles.doorstepChecklistCard}>
+            <Text style={styles.checklistTitle}>Doorstep Safety Checklist</Text>
+            <View style={styles.checkItemRow}>
+              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+              <Text style={styles.checkItemText}>Verify partner ID and HomeEase uniform</Text>
+            </View>
+            <View style={styles.checkItemRow}>
+              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+              <Text style={styles.checkItemText}>Give 4-digit PIN to officially begin service</Text>
+            </View>
+            <View style={styles.checkItemRow}>
+              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+              <Text style={styles.checkItemText}>Never share PIN before partner is at your door</Text>
+            </View>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // =========================================================================
+  // 4. IN_PROGRESS STATE: Service is underway inside customer premises.
+  // =========================================================================
+  if (booking?.status === 'IN_PROGRESS') {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar style="dark" />
+        <View style={styles.header}>
+          <Pressable
+            style={styles.backBtn}
+            onPress={() => router.back()}
+            accessibilityLabel="Go back"
+            hitSlop={8}
+          >
+            <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
+          </Pressable>
+
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Service In Progress</Text>
+            <Text style={styles.headerSub} numberOfLines={1}>
+              {booking?.serviceName ? `${booking.serviceName} • ` : ''}
+              #{id?.substring(0, 8).toUpperCase()}
+            </Text>
+          </View>
+
+          <Pressable
+            style={styles.sosBtn}
+            onPress={handleEmergencySOS}
+            accessibilityLabel="Emergency SOS"
+            hitSlop={8}
+          >
+            <Text style={styles.sosBtnText}>SOS</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.terminalStateScroll} showsVerticalScrollIndicator={false}>
+          {/* Active Service Hero Banner */}
+          <View style={styles.inProgressHeroCard}>
+            <View style={styles.inProgressHeroIcon}>
+              <Ionicons name="hammer" size={28} color="#2563EB" />
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <View style={styles.inProgressStatusTag}>
+                <View style={styles.inProgressBlinkDot} />
+                <Text style={styles.inProgressStatusTagText}>ACTIVE SERVICE</Text>
+              </View>
+              <Text style={styles.inProgressHeroTitle}>Service In Progress</Text>
+              <Text style={styles.inProgressHeroDesc}>
+                Doorstep PIN verified. Your partner {booking?.workerName ? `${booking.workerName} ` : ''}is completing your service request.
+              </Text>
+            </View>
+          </View>
+
+          {/* Partner Card */}
+          {booking?.workerName && (
+            <View style={styles.arrivedPartnerCard}>
+              <View style={styles.workerAvatar}>
+                <Text style={styles.workerAvatarText}>
+                  {booking.workerName.charAt(0).toUpperCase()}
+                </Text>
+                <View style={styles.onlineBadge} />
+              </View>
+
+              <View style={styles.workerMeta}>
+                <Text style={styles.workerName}>{booking.workerName}</Text>
+                <View style={styles.ratingRow}>
+                  <Ionicons name="star" size={13} color="#F59E0B" />
+                  <Text style={styles.ratingText}>
+                    {booking.workerRating != null ? booking.workerRating.toFixed(1) : '5.0'} • Verified Pro
+                  </Text>
+                </View>
+                <Text style={styles.workerRole}>
+                  {booking.serviceName ? `${booking.serviceName} Specialist` : 'Service Partner'}
+                </Text>
+              </View>
+
+              <View style={styles.actionsRow}>
+                <Pressable
+                  style={[styles.actionCircle, styles.callBtn, !booking.workerPhone && { opacity: 0.5 }]}
+                  onPress={handleCall}
+                  accessibilityLabel="Call partner"
+                >
+                  <Ionicons name="call" size={18} color="#FFFFFF" />
+                </Pressable>
+                <Pressable
+                  style={[styles.actionCircle, styles.chatBtn]}
+                  onPress={handleChat}
+                  accessibilityLabel="Chat with partner"
+                >
+                  <Ionicons name="chatbubble-ellipses" size={18} color="#1D4ED8" />
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          {/* Service Details Card */}
+          <View style={styles.terminalDetailsCard}>
+            <Text style={styles.terminalCardHeader}>Service Details</Text>
+            <View style={styles.terminalDetailRow}>
+              <Text style={styles.terminalDetailLabel}>Service</Text>
+              <Text style={styles.terminalDetailValue}>{booking?.serviceName || 'HomeEase Service'}</Text>
+            </View>
+            <View style={styles.terminalDetailRow}>
+              <Text style={styles.terminalDetailLabel}>Booking ID</Text>
+              <Text style={styles.terminalDetailValue}>#{id?.substring(0, 8).toUpperCase()}</Text>
+            </View>
+            <View style={styles.terminalDetailRow}>
+              <Text style={styles.terminalDetailLabel}>Address</Text>
+              <Text style={styles.terminalDetailValue} numberOfLines={2}>{customerAddress}</Text>
+            </View>
+          </View>
+
+          {/* Quality Assurance Card */}
+          <View style={styles.doorstepChecklistCard}>
+            <Text style={styles.checklistTitle}>HomeEase Service Guarantee</Text>
+            <View style={styles.checkItemRow}>
+              <Ionicons name="shield-checkmark" size={16} color="#10B981" />
+              <Text style={styles.checkItemText}>Standardized pricing & genuine parts</Text>
+            </View>
+            <View style={styles.checkItemRow}>
+              <Ionicons name="shield-checkmark" size={16} color="#10B981" />
+              <Text style={styles.checkItemText}>Pre-service inspection & post-work cleanup</Text>
+            </View>
+            <View style={styles.checkItemRow}>
+              <Ionicons name="shield-checkmark" size={16} color="#10B981" />
+              <Text style={styles.checkItemText}>30-day HomeEase service protection</Text>
+            </View>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // =========================================================================
+  // 5. TRAVEL & SEARCHING STATES (ON_THE_WAY, ACCEPTED, CONFIRMED, SEARCHING)
+  //    Active Google Maps live tracking with 3D scooter & blue road route.
+  // =========================================================================
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -643,6 +1118,7 @@ export default function TrackingScreen() {
           partnerName={booking?.workerName || 'Service Partner'}
           serviceCategory={booking?.serviceName}
           routeCoordinates={routeCoordinates}
+          fitPadding={mapFitPadding}
           lastUpdateTimestamp={lastUpdateTimestamp}
           status={booking?.status || 'SEARCHING'}
           etaText={etaText}
@@ -652,14 +1128,25 @@ export default function TrackingScreen() {
           style={StyleSheet.absoluteFill}
         />
 
-        {/* Floating ETA & Distance Chip (Shown ONLY when partner location exists) */}
-        {hasPartnerLocation && (etaText || distanceText) ? (
+        {/* Floating ETA chip: ONLY when the ETA/distance come from a real road route. */}
+        {hasPartnerLocation && etaSeconds !== null ? (
           <View style={styles.floatingEtaChip}>
             <View style={styles.etaGreenDot} />
             <Text style={styles.floatingEtaText}>
-              {etaText ? `Arriving in ${etaText}` : ''}
-              {etaText && distanceText ? ' • ' : ''}
-              {distanceText || ''}
+              {`Arriving in ${etaText}`}
+              {distanceText ? ` • ${distanceText}` : ''}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Plain-language fallback when the road route / live location / address is unavailable. */}
+        {destinationMissing || routeNotice || trackingError ? (
+          <View style={styles.routeNoticeBanner} accessibilityLiveRegion="polite">
+            <Ionicons name="information-circle-outline" size={14} color="#92400E" />
+            <Text style={styles.routeNoticeText} numberOfLines={3}>
+              {destinationMissing
+                ? "This booking's service address has no map location, so no route can be shown. Please contact support."
+                : routeNotice || trackingError}
             </Text>
           </View>
         ) : null}
@@ -698,7 +1185,9 @@ export default function TrackingScreen() {
               {booking?.workerName || 'Service Partner'}
             </Text>
             <Text style={styles.compactEtaText}>
-              {etaText ? `ETA: ${etaText}` : 'En route'}{distanceText ? ` • ${distanceText}` : ''}
+              {etaSeconds !== null
+                ? `ETA: ${etaText}${distanceText ? ` • ${distanceText}` : ''}`
+                : routeNotice || 'En route'}
             </Text>
           </View>
           <Pressable
@@ -752,73 +1241,9 @@ export default function TrackingScreen() {
             )}
           </View>
 
-          {booking?.status === 'ARRIVED' && (
-            <View style={styles.arrivedBanner}>
-              <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
-              <Text style={styles.arrivedBannerText}>Partner Has Arrived! Share your PIN to begin.</Text>
-            </View>
-          )}
-
           {/* Bottom Booking & Partner Sheet */}
           <View style={[styles.bottomSheet, { paddingBottom: Math.max(insets.bottom, 14) }]}>
             <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-          {/* 1. Dedicated Service Start PIN Card (Displayed ONLY when ARRIVED) */}
-          {booking?.status === 'ARRIVED' && (
-            <View style={styles.securePinCard}>
-              <View style={styles.securePinHeader}>
-                <View style={styles.securePinBadge}>
-                  <Ionicons name="shield-checkmark" size={14} color="#1D4ED8" />
-                  <Text style={styles.securePinBadgeText}>SERVICE START PIN</Text>
-                </View>
-                <Pressable
-                  style={({ pressed }) => [styles.copyPinBtn, pressed && { opacity: 0.8 }]}
-                  onPress={handleCopyPin}
-                  accessibilityRole="button"
-                  accessibilityLabel="Copy PIN"
-                >
-                  <Feather name={pinCopied ? 'check' : 'copy'} size={14} color="#1D4ED8" />
-                  <Text style={styles.copyPinBtnText}>{pinCopied ? 'Copied' : 'Copy PIN'}</Text>
-                </Pressable>
-              </View>
-
-              {/* 4 Digit Display Boxes */}
-              {isFetchingPin ? (
-                <View style={styles.pinLoadingRow}>
-                  <ActivityIndicator size="small" color="#1D4ED8" />
-                  <Text style={styles.pinLoadingText}>Retrieving secure start PIN...</Text>
-                </View>
-              ) : (
-                <View style={styles.pinDigitsRow}>
-                  {(servicePin || (booking.pinCode && booking.pinCode !== '****' && booking.pinCode !== '0000' ? booking.pinCode : '----'))
-                    .slice(0, 4)
-                    .split('')
-                    .map((digit, idx) => (
-                      <View key={idx} style={styles.pinDigitBox}>
-                        <Text style={styles.pinDigitText}>{digit}</Text>
-                      </View>
-                    ))}
-                </View>
-              )}
-
-              {pinFetchError && !servicePin && (
-                <Pressable style={styles.retryPinBtn} onPress={fetchServicePin}>
-                  <Ionicons name="refresh" size={14} color="#DC2626" />
-                  <Text style={styles.retryPinText}>Could not load PIN. Tap to retry.</Text>
-                </Pressable>
-              )}
-
-              <View style={styles.pinInstructionRow}>
-                <Ionicons name="information-circle-outline" size={16} color="#1E40AF" />
-                <Text style={styles.securePinMessage}>
-                  Share this PIN with your service partner to start the service.
-                </Text>
-              </View>
-              <Text style={styles.securePinHint}>
-                Your service partner will enter this 4-digit code on their device to begin work.
-              </Text>
-            </View>
-          )}
-
           {/* Pending PIN Notice — When Assigned / Travelling (PIN hidden for security) */}
           {(booking?.status === 'ACCEPTED' ||
             booking?.status === 'CONFIRMED' ||
@@ -831,19 +1256,6 @@ export default function TrackingScreen() {
                 <Text style={styles.pinPendingTitle}>Doorstep PIN Security</Text>
                 <Text style={styles.pinPendingText}>
                   Your 4-digit Service Start PIN will appear here once your partner arrives.
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {/* In Progress Notice */}
-          {booking?.status === 'IN_PROGRESS' && (
-            <View style={styles.inProgressCard}>
-              <View style={styles.inProgressPulse} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.inProgressTitle}>Service In Progress</Text>
-                <Text style={styles.inProgressSub}>
-                  Doorstep PIN verified. Your partner is currently completing your service.
                 </Text>
               </View>
             </View>
@@ -913,19 +1325,6 @@ export default function TrackingScreen() {
                 </Pressable>
               )}
             </>
-          )}
-
-          {booking?.status === 'COMPLETED' && (
-            <View style={styles.completionCard}>
-              <Ionicons name="shield-checkmark" size={24} color="#10B981" />
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.completionTitle}>Service Completed Successfully</Text>
-                <Text style={styles.completionDesc}>Thank you for using HomeEase. How was your experience?</Text>
-              </View>
-              <Pressable onPress={() => setIsRatingModalVisible(true)} style={styles.rateNowBtn}>
-                <Text style={styles.rateNowBtnText}>Rate</Text>
-              </Pressable>
-            </View>
           )}
 
           {/* 3. Horizontal Booking Timeline */}
@@ -1115,6 +1514,28 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full,
     ...Shadows.md,
     zIndex: 20,
+  },
+  routeNoticeBanner: {
+    position: 'absolute',
+    top: 56,
+    left: 14,
+    right: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(254, 243, 199, 0.96)',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    zIndex: 19,
+  },
+  routeNoticeText: {
+    flex: 1,
+    color: '#92400E',
+    fontSize: 11.5,
+    fontFamily: Typography.fontFamily.medium,
   },
   floatingExpandMapBtn: {
     position: 'absolute',
@@ -1735,5 +2156,392 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 13,
+  },
+
+  // Terminal and Arrival View Styles
+  terminalStateScroll: {
+    flexGrow: 1,
+    paddingHorizontal: Spacing.base,
+    paddingBottom: 36,
+    paddingTop: 16,
+  },
+  cancelledHeroWrap: {
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    paddingVertical: 26,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    marginBottom: 16,
+  },
+  cancelledHeroIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  cancelledHeroTitle: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 20,
+    color: '#991B1B',
+    marginBottom: 4,
+  },
+  cancelledHeroDesc: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 13,
+    color: '#B91C1C',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  terminalDetailsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 16,
+    ...Shadows.sm,
+  },
+  terminalCardHeader: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 14,
+    color: '#0F172A',
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 8,
+  },
+  terminalDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#F8FAFC',
+  },
+  terminalDetailLabel: {
+    fontFamily: Typography.fontFamily.medium,
+    fontSize: 12,
+    color: '#64748B',
+  },
+  terminalDetailValue: {
+    fontFamily: Typography.fontFamily.semiBold,
+    fontSize: 13,
+    color: '#0F172A',
+    textAlign: 'right',
+    flexShrink: 1,
+    maxWidth: '65%',
+  },
+  refundNoticeCard: {
+    flexDirection: 'row',
+    backgroundColor: '#ECFDF5',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    marginBottom: 20,
+    gap: 12,
+    alignItems: 'center',
+  },
+  refundIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#D1FAE5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refundNoticeTitle: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 13,
+    color: '#065F46',
+  },
+  refundNoticeDesc: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 11.5,
+    color: '#047857',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  terminalActionsWrap: {
+    gap: 10,
+    marginTop: 4,
+  },
+  primaryActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2563EB',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+    ...Shadows.sm,
+  },
+  primaryActionText: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+  secondaryActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    paddingVertical: 13,
+    borderRadius: 12,
+    gap: 8,
+  },
+  secondaryActionText: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 14,
+    color: '#2563EB',
+  },
+  textHelpButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    gap: 6,
+    marginTop: 4,
+  },
+  textHelpButtonText: {
+    fontFamily: Typography.fontFamily.medium,
+    fontSize: 12,
+    color: '#64748B',
+  },
+  completedHeroWrap: {
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    paddingVertical: 26,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+    marginBottom: 16,
+  },
+  completedHeroIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  completedHeroTitle: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 20,
+    color: '#166534',
+    marginBottom: 4,
+  },
+  completedHeroDesc: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 13,
+    color: '#15803D',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  completedPartnerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 16,
+    gap: 12,
+    ...Shadows.sm,
+  },
+  completedPartnerName: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 15,
+    color: '#0F172A',
+  },
+  completedPartnerRole: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  ratePartnerPromptCard: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  ratePromptTitle: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 15,
+    color: '#1E3A8A',
+  },
+  ratePromptSub: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 12,
+    color: '#3B82F6',
+    marginTop: 2,
+    marginBottom: 12,
+  },
+  openRatingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    gap: 6,
+  },
+  openRatingButtonText: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 13,
+    color: '#FFFFFF',
+  },
+  arrivedDoorstepHero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    marginBottom: 16,
+  },
+  arrivedHeroIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#D1FAE5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrivedHeroTitle: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 17,
+    color: '#065F46',
+  },
+  arrivedHeroDesc: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 12,
+    color: '#047857',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  securePinCardLarge: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#3B82F6',
+    padding: 18,
+    marginBottom: 16,
+    ...Shadows.sm,
+  },
+  pinDigitBoxLarge: {
+    width: 54,
+    height: 62,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.sm,
+  },
+  pinDigitTextLarge: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 32,
+    color: '#1E3A8A',
+  },
+  arrivedPartnerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 16,
+    ...Shadows.sm,
+  },
+  doorstepChecklistCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 16,
+  },
+  checklistTitle: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 13,
+    color: '#0F172A',
+    marginBottom: 10,
+  },
+  checkItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  checkItemText: {
+    fontFamily: Typography.fontFamily.medium,
+    fontSize: 12,
+    color: '#475569',
+  },
+  inProgressHeroCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
+    marginBottom: 16,
+  },
+  inProgressHeroIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inProgressStatusTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  inProgressBlinkDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#2563EB',
+  },
+  inProgressStatusTagText: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 10,
+    color: '#2563EB',
+    letterSpacing: 0.5,
+  },
+  inProgressHeroTitle: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 17,
+    color: '#1E3A8A',
+  },
+  inProgressHeroDesc: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 12,
+    color: '#1E40AF',
+    marginTop: 2,
+    lineHeight: 16,
   },
 });

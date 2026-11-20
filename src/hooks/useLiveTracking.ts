@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Client, ReconnectionTimeMode } from '@stomp/stompjs';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
+import { Client, ReconnectionTimeMode, type StompSubscription } from '@stomp/stompjs';
 import {
   trackingApi,
   TRACKING_WS_URL,
@@ -8,18 +9,30 @@ import {
   type TrackingLocationResponse,
 } from '../api/client';
 import {
+  RouteRequestError,
   calculateBearing,
-  fetchDrivingRoute,
+  fetchBookingRoute,
   formatDistance,
   formatDuration,
-  type RouteResult,
+  type BookingRoute,
 } from '../services/routing';
 import {
   isAcceptableLocationTimestamp,
+  isSensibleGpsJump,
   parseLocationTimestamp,
-  shouldRecalculateRoute,
 } from '../services/trackingMath';
-import { isValidCoordinate } from '../services/coordinates';
+import { isValidCoordinate, type LatLngCoordinate } from '../services/coordinates';
+import { computeRemaining, projectOntoRoute } from '../services/routeGeometry';
+import {
+  ROUTE_POLICY,
+  backoffMs,
+  classifyRouteFailure,
+  decideRouteFetch,
+  initialRoutePolicyState,
+  nextOffRouteStrikes,
+  type RouteFailure,
+  type RouteFetchReason,
+} from '../services/routePolicy';
 import { trackingLifecycleManager } from '../services/TrackingLifecycleManager';
 
 export interface PartnerCoordinate {
@@ -28,107 +41,195 @@ export interface PartnerCoordinate {
   bearing: number;
 }
 
-interface TrackingLocationEvent extends TrackingLocationResponse {
-  distanceText?: string;
-  etaText?: string;
-  distanceKm?: number;
-  etaMinutes?: number;
-}
+type ConnectionStatus = 'CONNECTING' | 'CONNECTED' | 'DISCONNECTED' | 'AUTH_ERROR';
 
 interface UseLiveTrackingProps {
   bookingId?: string;
-  customerLat?: number;
-  customerLng?: number;
   status?: string;
+  /** Booking has an assigned worker and is in a travel status. */
   enabled?: boolean;
+  /** HTTP fallback poll interval, used ONLY while the WebSocket is disconnected. */
   pollIntervalMs?: number;
+  /**
+   * Called for booking lifecycle events (accepted / arrived / started / completed / cancelled) received on the
+   * single shared socket. Location frames are not forwarded.
+   */
+  onBookingEvent?: (event: Record<string, unknown>) => void;
 }
+
+const GPS_STALE_MS = 45_000;
+const isFinalStatus = (s?: string) => s === 'COMPLETED' || s === 'CANCELLED';
+const isTerminalForTravel = (s?: string) =>
+  s === 'COMPLETED' || s === 'CANCELLED' || s === 'ARRIVED' || s === 'IN_PROGRESS';
 
 export function useLiveTracking({
   bookingId,
-  customerLat,
-  customerLng,
   status,
   enabled = true,
-  pollIntervalMs = 5000,
+  pollIntervalMs = 10_000,
+  onBookingEvent,
 }: UseLiveTrackingProps) {
   const [partnerPos, setPartnerPos] = useState<PartnerCoordinate | null>(null);
   const [hasPartnerLocation, setHasPartnerLocation] = useState(false);
-  const [isLiveConnected, setIsLiveConnected] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<
-    'CONNECTING' | 'CONNECTED' | 'DISCONNECTED' | 'AUTH_ERROR'
-  >('DISCONNECTED');
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('DISCONNECTED');
   const [trackingError, setTrackingError] = useState<string | null>(null);
-  const [route, setRoute] = useState<RouteResult | null>(null);
+  const [route, setRoute] = useState<BookingRoute | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
-  const [routeError, setRouteError] = useState<string | null>(null);
-  const [routeRetryCount, setRouteRetryCount] = useState(0);
-  const [serverEta, setServerEta] = useState<string | null>(null);
-  const [serverDistance, setServerDistance] = useState<string | null>(null);
+  const [routeFailure, setRouteFailure] = useState<RouteFailure | null>(null);
   const [trackingEnded, setTrackingEnded] = useState(false);
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState<number | null>(null);
   const [isGpsStale, setIsGpsStale] = useState(false);
+  // Wall clock for display-only derivations (route age). Updated by the 5 s staleness timer, never in render.
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
-  const stompClientRef = useRef<Client | null>(null);
-  const pollInFlightRef = useRef(false);
-  const pollAbortRef = useRef<AbortController | null>(null);
-  const routeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const routeRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const routeAbortRef = useRef<AbortController | null>(null);
-  const routeRequestRef = useRef<{ lat: number; lng: number; requestedAt: number } | null>(null);
-  const routeRequestIdRef = useRef(0);
-  const processedRouteRetryRef = useRef(0);
-  const routeTargetRef = useRef<string | null>(null);
-  const lastUpdateRef = useRef<number | null>(null);
-  const previousPositionRef = useRef<PartnerCoordinate | null>(null);
+  // ── refs: always-current values for callbacks that must not re-subscribe on every render ──
   const activeBookingIdRef = useRef(bookingId);
   activeBookingIdRef.current = bookingId;
+  const onBookingEventRef = useRef(onBookingEvent);
+  onBookingEventRef.current = onBookingEvent;
+
+  const clientRef = useRef<Client | null>(null);
+  const trackingSubRef = useRef<StompSubscription[]>([]);
+  const bookingSubRef = useRef<StompSubscription[]>([]);
+
+  const partnerRef = useRef<PartnerCoordinate | null>(null);
+  const routeRef = useRef<BookingRoute | null>(null);
+  const lastUpdateRef = useRef<number | null>(null);
+
+  const policyRef = useRef(initialRoutePolicyState());
+  const failuresRef = useRef(0);
+  const routeSeqRef = useRef(0);
+  const routeAbortRef = useRef<AbortController | null>(null);
+
+  const pollInFlightRef = useRef(false);
+  const pollAbortRef = useRef<AbortController | null>(null);
+  const authBlockedRef = useRef(false);
+  // Latest-callback holders (synced in effects below) so the long-lived socket never captures stale closures.
+  const handleFrameRef = useRef<(body: string, id: string) => void>(() => {});
+  const refreshLocationRef = useRef<() => Promise<void>>(async () => {});
+
   const isTravelStage = trackingLifecycleManager.isTravelTrackingAuthorized(bookingId, status);
-  const terminal =
-    status === 'COMPLETED' ||
-    status === 'CANCELLED' ||
-    status === 'ARRIVED' ||
-    status === 'IN_PROGRESS';
-  const hasDestination =
-    customerLat !== undefined &&
-    customerLng !== undefined &&
-    isValidCoordinate(customerLat, customerLng);
   const trackingActive = Boolean(
-    bookingId && enabled && isTravelStage && !terminal && !trackingEnded,
+    bookingId && enabled && isTravelStage && !isTerminalForTravel(status) && !trackingEnded,
   );
+  const trackingActiveRef = useRef(trackingActive);
+  trackingActiveRef.current = trackingActive;
+  const socketWanted = Boolean(bookingId) && !isFinalStatus(status);
+
+  // ───────────────────────── route (policy-driven, stale-safe) ─────────────────────────
+
+  const cancelRouteWork = useCallback(() => {
+    routeSeqRef.current += 1; // invalidates any response still in flight
+    routeAbortRef.current?.abort();
+    routeAbortRef.current = null;
+    setRouteLoading(false);
+  }, []);
+
+  const runRouteFetch = useCallback(async (id: string, reason: RouteFetchReason) => {
+    const policy = policyRef.current;
+    policy.inFlight = true;
+    policy.lastAttemptAt = Date.now();
+    routeAbortRef.current?.abort();
+    const controller = new AbortController();
+    routeAbortRef.current = controller;
+    const seq = ++routeSeqRef.current;
+    setRouteLoading(true);
+
+    // A response is only applied if nothing newer started and the booking/policy has not been reset.
+    const isCurrent = () =>
+      seq === routeSeqRef.current &&
+      policy === policyRef.current &&
+      id === activeBookingIdRef.current &&
+      !controller.signal.aborted;
+
+    try {
+      const result = await fetchBookingRoute(id, reason, controller.signal);
+      if (!isCurrent()) return;
+      routeRef.current = result;
+      setRoute(result);
+      setRouteFailure(null);
+      failuresRef.current = 0;
+      policy.hasRoute = true;
+      policy.lastSuccessAt = Date.now();
+      policy.retryNotBefore = null;
+      policy.offRouteStrikes = 0;
+    } catch (error) {
+      if (!isCurrent()) return;
+      const failure =
+        error instanceof RouteRequestError ? error.failure : classifyRouteFailure({ network: true });
+      failuresRef.current += 1;
+      setRouteFailure(failure);
+      if (failure.fatal) {
+        policy.fatal = true;
+      } else {
+        const wait = backoffMs(failuresRef.current, failure.retryAfterSeconds);
+        policy.retryNotBefore =
+          Date.now() + (failure.slowRetry ? Math.max(ROUTE_POLICY.SLOW_RETRY_MS, wait) : wait);
+      }
+    } finally {
+      if (policy === policyRef.current && seq === routeSeqRef.current) {
+        policy.inFlight = false;
+        setRouteLoading(false);
+      }
+    }
+  }, []);
+
+  const evaluateRoute = useCallback(() => {
+    const id = activeBookingIdRef.current;
+    if (!id || !trackingActiveRef.current || !partnerRef.current) return;
+    const decision = decideRouteFetch(policyRef.current, Date.now());
+    if (decision.fetch) void runRouteFetch(id, decision.reason);
+  }, [runRouteFetch]);
+
+  // ───────────────────────── incoming location ─────────────────────────
+
+  const endTracking = useCallback(() => {
+    setTrackingEnded(true);
+    cancelRouteWork();
+    pollAbortRef.current?.abort();
+    trackingSubRef.current.forEach((sub) => {
+      try { sub.unsubscribe(); } catch {}
+    });
+    trackingSubRef.current = [];
+  }, [cancelRouteWork]);
 
   const applyLocation = useCallback(
-    (payload: TrackingLocationEvent, expectedBookingId: string) => {
+    (payload: TrackingLocationResponse & Record<string, any>, expectedBookingId: string) => {
       if (expectedBookingId !== activeBookingIdRef.current) return;
+      // Cross-booking guard: a frame that names another booking is dropped.
       if (payload.bookingId && payload.bookingId !== expectedBookingId) return;
       if (
         payload.status === 'TRACKING_ENDED' ||
         payload.status === 'ARRIVED' ||
-        (payload as any).type === 'WORKER_ARRIVED' ||
-        (payload as any).type === 'BOOKING_TRACKING_STOPPED' ||
+        payload.type === 'WORKER_ARRIVED' ||
+        payload.type === 'BOOKING_TRACKING_STOPPED' ||
         payload.trackingActive === false
       ) {
-        setTrackingEnded(true);
-        setIsLiveConnected(false);
-        setConnectionStatus('DISCONNECTED');
-        pollAbortRef.current?.abort();
-        routeAbortRef.current?.abort();
-        if (stompClientRef.current) void stompClientRef.current.deactivate();
+        endTracking();
         return;
       }
       const latitude = payload.latitude ?? payload.lat;
       const longitude = payload.longitude ?? payload.lng;
-      if (payload.found === false || !isValidCoordinate(latitude ?? NaN, longitude ?? NaN)) {
-        return;
-      }
+      if (payload.found === false || !isValidCoordinate(latitude ?? NaN, longitude ?? NaN)) return;
 
       const rawTimestamp = payload.timestamp ?? payload.updatedAt;
       const parsedTimestamp = parseLocationTimestamp(rawTimestamp);
       if (rawTimestamp !== undefined && parsedTimestamp === null) return;
       const timestamp = parsedTimestamp ?? Date.now();
+      // Out-of-order / replayed / future-dated frames never overwrite a newer position.
       if (!isAcceptableLocationTimestamp(timestamp, lastUpdateRef.current)) return;
 
-      const previous = previousPositionRef.current;
+      const previous = partnerRef.current;
+      // Physically impossible jumps (GPS teleport) are discarded.
+      if (
+        previous &&
+        lastUpdateRef.current !== null &&
+        !isSensibleGpsJump(previous.lat, previous.lng, latitude!, longitude!, timestamp - lastUpdateRef.current)
+      ) {
+        return;
+      }
+
       const incomingBearing = payload.heading ?? payload.bearing;
       const bearing =
         typeof incomingBearing === 'number' && Number.isFinite(incomingBearing)
@@ -136,42 +237,56 @@ export function useLiveTracking({
           : previous
             ? calculateBearing(previous.lat, previous.lng, latitude!, longitude!)
             : 0;
-      const nextPosition = { lat: latitude!, lng: longitude!, bearing };
+      const next: PartnerCoordinate = { lat: latitude!, lng: longitude!, bearing };
 
-      previousPositionRef.current = nextPosition;
+      partnerRef.current = next;
       lastUpdateRef.current = timestamp;
-      setPartnerPos(nextPosition);
+      setPartnerPos(next);
       setHasPartnerLocation(true);
       setLastUpdateTimestamp(timestamp);
-      setIsGpsStale(Date.now() - timestamp > 45_000);
-      if (payload.distanceText) setServerDistance(payload.distanceText);
-      if (payload.etaText) setServerEta(payload.etaText);
-      if (typeof payload.distanceKm === 'number' && Number.isFinite(payload.distanceKm)) {
-        setServerDistance(formatDistance(payload.distanceKm * 1000));
+      setIsGpsStale(Date.now() - timestamp > GPS_STALE_MS);
+
+      // Off-route detection against the current road polyline (no network involved).
+      const currentRoute = routeRef.current;
+      if (currentRoute) {
+        const progress = projectOntoRoute(
+          { latitude: next.lat, longitude: next.lng },
+          currentRoute.polylineCoordinates,
+        );
+        if (progress) {
+          policyRef.current.offRouteStrikes = nextOffRouteStrikes(
+            policyRef.current.offRouteStrikes,
+            progress.distanceFromRouteMeters,
+          );
+        }
       }
-      if (typeof payload.etaMinutes === 'number' && Number.isFinite(payload.etaMinutes)) {
-        setServerEta(formatDuration(payload.etaMinutes * 60));
-      }
+      evaluateRoute();
     },
-    [],
+    [endTracking, evaluateRoute],
   );
 
+  // ───────────────────────── reset when the booking changes ─────────────────────────
+
   useEffect(() => {
+    cancelRouteWork();
+    policyRef.current = initialRoutePolicyState();
+    failuresRef.current = 0;
+    authBlockedRef.current = false;
+    partnerRef.current = null;
+    routeRef.current = null;
+    lastUpdateRef.current = null;
     setPartnerPos(null);
     setHasPartnerLocation(false);
     setRoute(null);
-    setRouteError(null);
-    setServerEta(null);
-    setServerDistance(null);
+    setRouteFailure(null);
     setTrackingEnded(false);
     setLastUpdateTimestamp(null);
+    setIsGpsStale(false);
     setTrackingError(null);
-    lastUpdateRef.current = null;
-    previousPositionRef.current = null;
-    routeRequestRef.current = null;
-  }, [bookingId]);
+  }, [bookingId, cancelRouteWork]);
 
-  // Handle authoritative lifecycle events from TrackingLifecycleManager
+  // ───────────────────────── booking status -> tracking lifecycle ─────────────────────────
+
   useEffect(() => {
     if (!bookingId) return;
     const unsubscribe = trackingLifecycleManager.subscribe(bookingId, (event) => {
@@ -183,375 +298,326 @@ export function useLiveTracking({
         event.type === 'BOOKING_CANCELLED' ||
         event.trackingActive === false
       ) {
-        setTrackingEnded(true);
-        setIsLiveConnected(false);
-        setConnectionStatus('DISCONNECTED');
-        pollAbortRef.current?.abort();
-        routeAbortRef.current?.abort();
-        if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
-        if (routeRetryTimerRef.current) clearTimeout(routeRetryTimerRef.current);
-        if (stompClientRef.current) void stompClientRef.current.deactivate();
+        endTracking();
       }
     });
+    return unsubscribe;
+  }, [bookingId, endTracking]);
 
-    return () => {
-      unsubscribe();
-    };
-  }, [bookingId]);
-
-  // Synchronize component status prop with authoritative lifecycle
   useEffect(() => {
     if (!bookingId) return;
     if (status === 'ARRIVED') {
       trackingLifecycleManager.markArrived(bookingId);
-      setTrackingEnded(true);
-      setIsLiveConnected(false);
-      setConnectionStatus('DISCONNECTED');
-      pollAbortRef.current?.abort();
-      routeAbortRef.current?.abort();
-      if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
-      if (routeRetryTimerRef.current) clearTimeout(routeRetryTimerRef.current);
-      if (stompClientRef.current) void stompClientRef.current.deactivate();
-    } else if (
-      status === 'IN_PROGRESS' ||
-      status === 'COMPLETED' ||
-      status === 'CANCELLED'
-    ) {
+      endTracking();
+    } else if (status === 'IN_PROGRESS' || status === 'COMPLETED' || status === 'CANCELLED') {
       trackingLifecycleManager.stopTracking(bookingId, status);
-      setTrackingEnded(true);
-      setIsLiveConnected(false);
-      setConnectionStatus('DISCONNECTED');
-      pollAbortRef.current?.abort();
-      routeAbortRef.current?.abort();
-      if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
-      if (routeRetryTimerRef.current) clearTimeout(routeRetryTimerRef.current);
-      if (stompClientRef.current) void stompClientRef.current.deactivate();
-    } else if (
-      status === 'ON_THE_WAY' ||
-      status === 'ACCEPTED' ||
-      status === 'CONFIRMED'
-    ) {
+      endTracking();
+      if (status === 'COMPLETED' || status === 'CANCELLED') {
+        // Stop exposing the worker's location once the booking is over.
+        partnerRef.current = null;
+        routeRef.current = null;
+        setPartnerPos(null);
+        setHasPartnerLocation(false);
+        setRoute(null);
+        setRouteFailure(null);
+      }
+    } else if (status === 'ON_THE_WAY' || status === 'ACCEPTED' || status === 'CONFIRMED') {
       if (trackingLifecycleManager.getState(bookingId) !== 'ARRIVED') {
         setTrackingEnded(false);
+        // A status change may make a previously fatal route answer valid again.
+        policyRef.current.fatal = false;
+        failuresRef.current = 0;
       }
     }
-  }, [bookingId, status]);
+  }, [bookingId, status, endTracking]);
+
+  // Arrived / in-progress: the road route and any ETA are obsolete (the worker marker stays frozen).
+  useEffect(() => {
+    if (!trackingActive) {
+      routeRef.current = null;
+      setRoute(null);
+      setRouteFailure(null);
+      policyRef.current = initialRoutePolicyState();
+      cancelRouteWork();
+    }
+  }, [trackingActive, cancelRouteWork]);
+
+  // ───────────────────────── GPS staleness ─────────────────────────
 
   useEffect(() => {
-    if (!trackingActive || !bookingId) {
+    if (!trackingActive) {
       setIsGpsStale(false);
-      setIsLiveConnected(false);
-      setConnectionStatus('DISCONNECTED');
       return;
     }
     const timer = setInterval(() => {
-      setIsGpsStale(
-        lastUpdateRef.current !== null && Date.now() - lastUpdateRef.current > 45_000,
-      );
+      const now = Date.now();
+      setIsGpsStale(lastUpdateRef.current !== null && now - lastUpdateRef.current > GPS_STALE_MS);
+      setNowMs(now);
     }, 5000);
     return () => clearInterval(timer);
-  }, [trackingActive, bookingId]);
+  }, [trackingActive]);
 
-  useEffect(() => {
-    if (!trackingActive || !bookingId) return;
-    let cancelled = false;
-    let client: Client | null = null;
+  // ───────────────────────── single shared STOMP connection ─────────────────────────
 
-    const connect = async () => {
-      setConnectionStatus('CONNECTING');
-      setTrackingError(null);
-      const headers = await getAuthHeaders();
-      if (cancelled) return;
-      if (!headers.Authorization) {
-        setConnectionStatus('AUTH_ERROR');
-        setTrackingError('Sign in again to view live tracking.');
+  const subscribeTracking = useCallback((client: Client, id: string) => {
+    if (trackingSubRef.current.length > 0) return;
+    const sub1 = client.subscribe(`/topic/tracking/${id}`, (message) => {
+      handleFrameRef.current(message.body, id);
+    });
+    const sub2 = client.subscribe(`/topic/tracking/booking/${id}`, (message) => {
+      handleFrameRef.current(message.body, id);
+    });
+    const sub3 = client.subscribe(`/topic/track/${id}`, (message) => {
+      handleFrameRef.current(message.body, id);
+    });
+    trackingSubRef.current = [sub1, sub2, sub3];
+  }, []);
+
+  const handleFrame = useCallback(
+    (body: string, id: string) => {
+      if (id !== activeBookingIdRef.current) return;
+      let event: Record<string, any>;
+      try {
+        event = JSON.parse(body);
+      } catch (error) {
+        console.warn('[LiveTracking] Ignored malformed frame:', error);
         return;
       }
+      if (!event || typeof event !== 'object') return;
+      if (event.bookingId && event.bookingId !== id) return; // another booking's frame
 
-      client = new Client({
-        brokerURL: TRACKING_WS_URL,
-        connectHeaders: headers,
-        reconnectDelay: 1000,
-        reconnectTimeMode: ReconnectionTimeMode.EXPONENTIAL,
-        maxReconnectDelay: 30000,
-        heartbeatIncoming: 10000,
-        heartbeatOutgoing: 10000,
-        onConnect: () => {
-          if (cancelled || !client) return;
-          setIsLiveConnected(true);
-          setConnectionStatus('CONNECTED');
-          setTrackingError(null);
+      trackingLifecycleManager.processRemoteEvent(id, event);
 
-          const handleIncoming = (messageBody: string) => {
-            try {
-              const event: any = JSON.parse(messageBody);
-              trackingLifecycleManager.processRemoteEvent(bookingId, event);
-              if (
-                event.status === 'ARRIVED' ||
-                event.type === 'WORKER_ARRIVED' ||
-                event.type === 'BOOKING_TRACKING_STOPPED' ||
-                event.trackingActive === false
-              ) {
-                setTrackingEnded(true);
-                setIsLiveConnected(false);
-                setConnectionStatus('DISCONNECTED');
-                pollAbortRef.current?.abort();
-                routeAbortRef.current?.abort();
-                if (client) void client.deactivate();
-                return;
-              }
-              applyLocation(event, bookingId);
-            } catch (error) {
-              console.warn('[LiveTracking] Ignored malformed location event:', error);
-            }
-          };
-
-          client.subscribe(`/topic/tracking/${bookingId}`, (message) => {
-            handleIncoming(message.body);
-          });
-
-          // Also subscribe to broadcast update stream /topic/tracking/update
-          client.subscribe('/topic/tracking/update', (message) => {
-            handleIncoming(message.body);
-          });
-        },
-        onDisconnect: () => {
-          setIsLiveConnected(false);
-          setConnectionStatus('DISCONNECTED');
-        },
-        onStompError: (frame) => {
-          const detail = frame.headers.message || 'Tracking service rejected the connection.';
-          setIsLiveConnected(false);
-          if (/401|403|unauthori[sz]ed|forbidden|expired/i.test(detail)) {
-            setConnectionStatus('AUTH_ERROR');
-            setTrackingError('Your session cannot access this booking. Please sign in again.');
-            void client?.deactivate();
-          } else {
-            setConnectionStatus('DISCONNECTED');
-            setTrackingError(detail);
-          }
-        },
-        onWebSocketError: () => {
-          setIsLiveConnected(false);
-          setConnectionStatus('DISCONNECTED');
-        },
-      });
-      stompClientRef.current = client;
-      client.activate();
-    };
-
-    void connect().catch((error: unknown) => {
-      if (!cancelled) {
-        console.warn('[LiveTracking] WebSocket connection failed:', error);
-        setConnectionStatus('DISCONNECTED');
-        setTrackingError('Unable to connect to live tracking. Retrying when the network is available.');
+      const hasCoords = isValidCoordinate(
+        event.latitude ?? event.lat ?? NaN,
+        event.longitude ?? event.lng ?? NaN,
+      );
+      const isLocationFrame = hasCoords && (!event.type || event.type === 'WORKER_LOCATION_UPDATED');
+      if (isLocationFrame) {
+        if (trackingActiveRef.current) applyLocation(event, id);
+        return;
       }
+      applyLocation(event, id); // stop-type frames end tracking
+      onBookingEventRef.current?.(event);
+    },
+    [applyLocation],
+  );
+  useEffect(() => {
+    handleFrameRef.current = handleFrame;
+  }, [handleFrame]);
+
+  useEffect(() => {
+    if (!socketWanted || !bookingId) return;
+    let cancelled = false;
+    const id = bookingId;
+
+    setConnectionStatus('CONNECTING');
+    setTrackingError(null);
+
+    const client = new Client({
+      brokerURL: TRACKING_WS_URL,
+      reconnectDelay: 1000,
+      reconnectTimeMode: ReconnectionTimeMode.EXPONENTIAL,
+      maxReconnectDelay: 30000,
+      heartbeatIncoming: 10000,
+      heartbeatOutgoing: 10000,
+      // Fresh credentials on EVERY (re)connect, so an expired token is never replayed after a network drop.
+      beforeConnect: async (c) => {
+        const headers = await getAuthHeaders();
+        if (cancelled) return;
+        c.connectHeaders = headers;
+      },
+      onConnect: () => {
+        if (cancelled) return;
+        setSocketConnected(true);
+        setConnectionStatus('CONNECTED');
+        setTrackingError(null);
+        // stompjs drops subscriptions on reconnect: rebuild them from scratch (no duplicates).
+        trackingSubRef.current.forEach((s) => {
+          try { s.unsubscribe(); } catch {}
+        });
+        trackingSubRef.current = [];
+        bookingSubRef.current.forEach((s) => {
+          try { s.unsubscribe(); } catch {}
+        });
+        bookingSubRef.current = [
+          client.subscribe(`/topic/booking/${id}`, (m) => handleFrameRef.current(m.body, id)),
+          client.subscribe(`/topic/booking/${id}/events`, (m) => handleFrameRef.current(m.body, id)),
+        ];
+        if (trackingActiveRef.current) subscribeTracking(client, id);
+        // Fill the gap left by the disconnect without waiting for the worker's next ping.
+        void refreshLocationRef.current();
+      },
+      onDisconnect: () => {
+        setSocketConnected(false);
+        setConnectionStatus('DISCONNECTED');
+      },
+      onWebSocketClose: () => {
+        trackingSubRef.current = [];
+        bookingSubRef.current = [];
+        setSocketConnected(false);
+        if (!cancelled) setConnectionStatus('DISCONNECTED');
+      },
+      onWebSocketError: () => {
+        setSocketConnected(false);
+        if (!cancelled) setConnectionStatus('DISCONNECTED');
+      },
+      onStompError: (frame) => {
+        const detail = frame.headers.message || 'Tracking service rejected the connection.';
+        setSocketConnected(false);
+        if (/401|403|unauthori[sz]ed|forbidden|expired|verified sign-in|not authorized/i.test(detail)) {
+          setConnectionStatus('AUTH_ERROR');
+          setTrackingError('Your session cannot access this booking. Please sign in again.');
+          authBlockedRef.current = true;
+          void client.deactivate();
+        } else {
+          setConnectionStatus('DISCONNECTED');
+          setTrackingError(detail);
+        }
+      },
     });
+    clientRef.current = client;
+    client.activate();
 
     return () => {
       cancelled = true;
-      setIsLiveConnected(false);
-      if (stompClientRef.current === client) stompClientRef.current = null;
-      if (client) void client.deactivate();
+      trackingSubRef.current.forEach((s) => {
+        try { s.unsubscribe(); } catch {}
+      });
+      trackingSubRef.current = [];
+      bookingSubRef.current.forEach((s) => {
+        try { s.unsubscribe(); } catch {}
+      });
+      bookingSubRef.current = [];
+      if (clientRef.current === client) clientRef.current = null;
+      setSocketConnected(false);
+      setConnectionStatus('DISCONNECTED');
+      void client.deactivate();
     };
-  }, [trackingActive, bookingId, applyLocation]);
+  }, [socketWanted, bookingId, subscribeTracking]);
+
+  // Location subscription follows the travel stage on the SAME connection: it is dropped on arrival and
+  // never exists in any other stage, so the customer stops receiving the worker's position.
+  useEffect(() => {
+    const client = clientRef.current;
+    if (!client || !socketConnected || !bookingId) return;
+    if (trackingActive) {
+      subscribeTracking(client, bookingId);
+    } else if (trackingSubRef.current.length > 0) {
+      trackingSubRef.current.forEach((s) => {
+        try { s.unsubscribe(); } catch {}
+      });
+      trackingSubRef.current = [];
+    }
+  }, [trackingActive, socketConnected, bookingId, subscribeTracking]);
+
+  // ───────────────────────── HTTP snapshot / limited fallback ─────────────────────────
 
   const refreshLocation = useCallback(async () => {
-    if (!trackingActive || !bookingId || pollInFlightRef.current) return;
+    const id = activeBookingIdRef.current;
+    if (!id || !trackingActiveRef.current || pollInFlightRef.current || authBlockedRef.current) return;
     pollInFlightRef.current = true;
     const controller = new AbortController();
     pollAbortRef.current = controller;
     try {
-      const location = await trackingApi.getLatestLocation(bookingId, controller.signal);
-      applyLocation(location, bookingId);
-      if (
-        hasDestination &&
-        customerLat !== undefined &&
-        customerLng !== undefined
-      ) {
-        const distance = await trackingApi.getDistanceAndEta(
-          bookingId,
-          customerLat,
-          customerLng,
-          controller.signal,
-        );
-        if (distance.found !== false) {
-          const workerLocation = distance.workerLocation;
-          if (
-            lastUpdateRef.current === null &&
-            isValidCoordinate(
-              workerLocation?.lat ?? NaN,
-              workerLocation?.lng ?? NaN,
-            )
-          ) {
-            applyLocation(
-              {
-                bookingId,
-                latitude: workerLocation?.lat,
-                longitude: workerLocation?.lng,
-              },
-              bookingId,
-            );
-          }
-          if (distance.etaText) setServerEta(distance.etaText);
-          else if (distance.etaMinutes !== undefined && Number.isFinite(distance.etaMinutes)) {
-            setServerEta(formatDuration(distance.etaMinutes * 60));
-          }
-          if (distance.distanceText) setServerDistance(distance.distanceText);
-          else if (distance.distanceMeters !== undefined && Number.isFinite(distance.distanceMeters)) {
-            setServerDistance(formatDistance(distance.distanceMeters));
-          } else if (distance.distanceKm !== undefined && Number.isFinite(distance.distanceKm)) {
-            setServerDistance(formatDistance(distance.distanceKm * 1000));
-          }
-        }
-      }
+      const location = await trackingApi.getLatestLocation(id, controller.signal);
+      if (!controller.signal.aborted) applyLocation(location as any, id);
     } catch (error) {
       if (!(error instanceof Error && error.name === 'AbortError')) {
-        console.warn('[LiveTracking] Latest location request failed:', error);
         if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          authBlockedRef.current = true;
           setConnectionStatus('AUTH_ERROR');
           setTrackingError('Your session cannot access this booking. Please sign in again.');
         }
       }
     } finally {
-      if (pollAbortRef.current === controller) {
-        pollAbortRef.current = null;
-        pollInFlightRef.current = false;
-      }
+      if (pollAbortRef.current === controller) pollAbortRef.current = null;
+      pollInFlightRef.current = false;
     }
-  }, [
-    trackingActive,
-    bookingId,
-    hasDestination,
-    customerLat,
-    customerLng,
-    applyLocation,
-  ]);
+  }, [applyLocation]);
+  useEffect(() => {
+    refreshLocationRef.current = refreshLocation;
+  }, [refreshLocation]);
 
   useEffect(() => {
     if (!trackingActive) return;
+    // One snapshot on activation (screen reopened / status just became travel) ...
     void refreshLocation();
+    // ... then HTTP polling ONLY while the socket is down. With a live socket there is zero polling.
+    if (socketConnected) return;
     const timer = setInterval(() => void refreshLocation(), Math.max(5000, pollIntervalMs));
     return () => {
       clearInterval(timer);
       pollAbortRef.current?.abort();
     };
-  }, [trackingActive, refreshLocation, pollIntervalMs]);
+  }, [trackingActive, socketConnected, refreshLocation, pollIntervalMs]);
 
+  // Re-evaluate the route on a slow timer too (a stationary worker still needs a periodic ETA refresh).
   useEffect(() => {
-    const targetKey = `${bookingId || ''}:${customerLat ?? ''}:${customerLng ?? ''}`;
-    if (routeTargetRef.current !== targetKey) {
-      routeTargetRef.current = targetKey;
-      routeRequestIdRef.current += 1;
-      routeAbortRef.current?.abort();
-      if (routeRetryTimerRef.current) clearTimeout(routeRetryTimerRef.current);
-      routeRequestRef.current = null;
-      processedRouteRetryRef.current = routeRetryCount;
-      setRoute(null);
-    }
+    if (!trackingActive) return;
+    evaluateRoute();
+    const timer = setInterval(evaluateRoute, 5000);
+    return () => clearInterval(timer);
+  }, [trackingActive, evaluateRoute]);
 
-    if (!trackingActive || terminal || !hasDestination || !partnerPos) {
-      setRoute(null);
-      setRouteLoading(false);
-      routeAbortRef.current?.abort();
-      if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
-      if (routeRetryTimerRef.current) clearTimeout(routeRetryTimerRef.current);
-      routeRequestRef.current = null;
-      return;
-    }
-
-    const lastRequest = routeRequestRef.current;
-    const retryDue = routeRetryCount > processedRouteRetryRef.current;
-    if (!retryDue && !shouldRecalculateRoute(lastRequest, partnerPos, Date.now())) return;
-
-    if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
-    const lastRequestedAt = routeRequestRef.current?.requestedAt ?? 0;
-    const waitMs = Math.max(600, 15_000 - (Date.now() - lastRequestedAt));
-    const requestPosition = partnerPos;
-    const requestId = ++routeRequestIdRef.current;
-
-    routeTimerRef.current = setTimeout(async () => {
-      if (customerLat === undefined || customerLng === undefined) return;
-      routeAbortRef.current?.abort();
-      const controller = new AbortController();
-      routeAbortRef.current = controller;
-      routeRequestRef.current = {
-        lat: requestPosition.lat,
-        lng: requestPosition.lng,
-        requestedAt: Date.now(),
-      };
-      processedRouteRetryRef.current = routeRetryCount;
-      if (routeRetryTimerRef.current) clearTimeout(routeRetryTimerRef.current);
-      setRouteLoading(true);
-      setRouteError(null);
-      try {
-        const result = await fetchDrivingRoute(
-          requestPosition.lat,
-          requestPosition.lng,
-          customerLat,
-          customerLng,
-          controller.signal,
-          bookingId,
-        );
-        if (
-          requestId !== routeRequestIdRef.current ||
-          bookingId !== activeBookingIdRef.current ||
-          controller.signal.aborted
-        ) {
-          return;
-        }
-        setRoute(result);
-        if (!result) {
-          setRouteError('A road route is not available right now.');
-          routeRetryTimerRef.current = setTimeout(
-            () => setRouteRetryCount((count) => count + 1),
-            30000,
-          );
-        } else {
-          setRouteError(null);
-        }
-      } catch (error) {
-        if (!controller.signal.aborted && requestId === routeRequestIdRef.current) {
-          console.warn('[LiveTracking] Route request failed:', error);
-          setRouteError('Unable to load the road route. Retrying after the next location update.');
-          routeRetryTimerRef.current = setTimeout(
-            () => setRouteRetryCount((count) => count + 1),
-            30000,
-          );
-        }
-      } finally {
-        if (requestId === routeRequestIdRef.current) setRouteLoading(false);
+  // Customer app returns to the foreground: refresh immediately and make sure the socket is back.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      const client = clientRef.current;
+      if (client && !client.active) client.activate();
+      if (trackingActiveRef.current) {
+        void refreshLocationRef.current();
+        evaluateRoute();
       }
-    }, waitMs);
-
-    return () => {
-      if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
-    };
-  }, [
-    bookingId,
-    trackingActive,
-    terminal,
-    hasDestination,
-    partnerPos,
-    customerLat,
-    customerLng,
-    routeRetryCount,
-  ]);
+    });
+    return () => sub.remove();
+  }, [evaluateRoute]);
 
   useEffect(
     () => () => {
-      if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
-      if (routeRetryTimerRef.current) clearTimeout(routeRetryTimerRef.current);
       routeAbortRef.current?.abort();
       pollAbortRef.current?.abort();
-      if (stompClientRef.current) void stompClientRef.current.deactivate();
+      trackingSubRef.current.forEach((s) => {
+        try { s.unsubscribe(); } catch {}
+      });
+      trackingSubRef.current = [];
+      bookingSubRef.current.forEach((s) => {
+        try { s.unsubscribe(); } catch {}
+      });
+      bookingSubRef.current = [];
+      if (clientRef.current) void clientRef.current.deactivate();
     },
     [],
   );
 
+  // ───────────────────────── derived, display-only values ─────────────────────────
+
+  const routeCoordinates = useMemo<LatLngCoordinate[]>(
+    () => (trackingActive && route ? route.polylineCoordinates : []),
+    [trackingActive, route],
+  );
+
+  const remaining = useMemo(() => {
+    if (!trackingActive || !route || !partnerPos) return null;
+    return computeRemaining(
+      { polyline: route.polylineCoordinates, distanceMeters: route.distanceMeters, durationSeconds: route.durationSeconds },
+      { latitude: partnerPos.lat, longitude: partnerPos.lng },
+      ROUTE_POLICY.OFF_ROUTE_METERS,
+    );
+  }, [trackingActive, route, partnerPos]);
+
+  // A route that keeps failing to refresh stops supporting an ETA after a while.
+  const routeTooOldForEta = Boolean(
+    route && routeFailure && nowMs - route.calculatedAtMs > ROUTE_POLICY.ETA_MAX_AGE_MS,
+  );
+
+  const etaSeconds = remaining?.status === 'ON_ROUTE' && !routeTooOldForEta ? remaining.remainingSeconds : null;
+  const remainingMeters = remaining?.status === 'ON_ROUTE' && !routeTooOldForEta ? remaining.remainingMeters : null;
+  const rerouting = remaining?.status === 'OFF_ROUTE';
+
   let distanceText = '';
   let etaText = '';
-
   if (status === 'COMPLETED') {
     distanceText = 'Arrived at destination';
     etaText = 'Service completed';
@@ -571,36 +637,51 @@ export function useLiveTracking({
     } else if (isGpsStale) {
       distanceText = 'Location update is stale';
       etaText = 'Updating...';
+    } else if (etaSeconds !== null && remainingMeters !== null) {
+      distanceText = `${formatDistance(remainingMeters)} away`;
+      etaText = formatDuration(Math.max(60, etaSeconds)); // never "0 mins" while still travelling
+    } else if (rerouting) {
+      distanceText = 'Updating route…';
+      etaText = 'Rerouting…';
+    } else if (routeLoading && !route) {
+      distanceText = 'Calculating route…';
+      etaText = 'Calculating ETA…';
     } else {
-      distanceText =
-        serverDistance ||
-        (route ? `${formatDistance(route.distanceMeters)} away` : 'Calculating route...');
-      etaText = serverEta || (route ? formatDuration(route.durationSeconds) : 'Calculating ETA...');
+      // No real route: say so. Never substitute an invented distance or ETA.
+      distanceText = 'Route unavailable';
+      etaText = 'ETA unavailable';
     }
   }
 
-  const sendCoordinate = useCallback((lat: number, lng: number): boolean => {
-    if (stompClientRef.current?.connected && bookingId) {
-      return trackingApi.publishStompCoordinate(stompClientRef.current, bookingId, lat, lng);
-    }
-    return false;
-  }, [bookingId]);
+  // One customer-facing sentence explaining why the road line / ETA may be missing (or null if all is well).
+  const routeNotice: string | null =
+    !trackingActive || status === 'ARRIVED'
+      ? null
+      : routeFailure && !(route && !routeFailure.fatal && routeFailure.code.startsWith('WORKER_LOCATION'))
+        ? routeFailure.message
+        : rerouting
+          ? 'Your partner took a different road. Updating the route…'
+          : null;
 
   return {
     partnerPos,
     hasPartnerLocation,
-    isLiveConnected,
+    isLiveConnected: socketConnected && trackingActive,
     connectionStatus,
     trackingError,
-    routeCoordinates: (route?.polylineCoordinates || route?.coordinates || []) as any,
+    routeCoordinates,
+    route,
     routeLoading,
-    routeError,
+    routeFailure,
+    routeNotice,
+    rerouting,
     distanceText,
     etaText,
+    etaSeconds,
+    remainingMeters,
     isGpsStale,
     lastUpdateTimestamp,
     trackingEnded,
     refreshLocation,
-    sendCoordinate,
   };
 }
