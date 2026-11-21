@@ -408,10 +408,35 @@ export default function ServiceDetailsScreen() {
   // Navigating back and forward to this screen within that window costs 0 requests.
   const { data: rawSubServices = [], isLoading: loading, refetch: refetchSubServices } = useSubServices(id as string);
 
-  // Sub-services loaded from backend API
+  // Sub-services loaded from backend API (with primary service fallback when empty)
   const subServices = useMemo<SubService[]>(() => {
-    return rawSubServices.filter((s) => s.isActive);
-  }, [rawSubServices]);
+    const list = rawSubServices.filter((s) => s.isActive);
+    if (list.length > 0) return list;
+    if (!id) return [];
+    const baseP = price
+      ? Number(price)
+      : categoryType === 'ac'
+      ? 499
+      : categoryType === 'cleaning'
+      ? 499
+      : categoryType === 'electrician'
+      ? 149
+      : 599;
+    return [
+      {
+        subServiceId: `${id}-standard-service`,
+        serviceId: id,
+        name: serviceTitle,
+        basePrice: baseP,
+        unitLabel: 'per service',
+        estimatedMins: selectedDuration || 60,
+        imageUrl: activeHeroImage,
+        isActive: true,
+        pricingType: 'FIXED',
+        addons: [],
+      },
+    ];
+  }, [rawSubServices, id, price, categoryType, serviceTitle, selectedDuration, activeHeroImage]);
 
   useEffect(() => {
     if (id) {

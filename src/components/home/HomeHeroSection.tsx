@@ -20,6 +20,7 @@ interface HomeHeroSectionProps {
   onNotificationPress?: () => void;
   onInstantBookPress?: () => void;
   onSchedulePress?: () => void;
+  unreadCount?: number;
 }
 
 export function HomeHeroSection({
@@ -27,17 +28,20 @@ export function HomeHeroSection({
   onNotificationPress,
   onInstantBookPress,
   onSchedulePress,
+  unreadCount,
 }: HomeHeroSectionProps) {
   const insets = useSafeAreaInsets();
-  const { address } = useUserLocation();
+  const { address, loading: isLocationLoading } = useUserLocation();
   const [activeActionDot, setActiveActionDot] = useState(0);
 
-  const areaTitle = address?.area || address?.city || 'Sector 55';
+  const areaTitle = address?.area || address?.city || (isLocationLoading ? 'Detecting...' : 'Select Location');
   const fullAddress =
     address?.formattedAddress ||
     (address?.area && address?.city
       ? `${address.area}, ${address.city}${address.pincode ? ` - ${address.pincode}` : ''}`
-      : 'Sector 55, Gurugram, Haryana, India');
+      : isLocationLoading
+      ? 'Detecting your delivery location...'
+      : 'Tap to select delivery location');
 
   const handleLocation = () => {
     if (onLocationPress) onLocationPress();
@@ -117,17 +121,19 @@ export function HomeHeroSection({
             </View>
           </Pressable>
 
-          {/* Bell with red badge */}
+          {/* Bell with dynamic active badge */}
           <Pressable
             style={styles.bellButton}
             onPress={handleNotification}
             accessibilityRole="button"
-            accessibilityLabel="Notifications"
+            accessibilityLabel={`Notifications${unreadCount ? `, ${unreadCount} active` : ''}`}
           >
             <Ionicons name="notifications" size={20} color="#FFFFFF" />
-            <View style={styles.bellBadge}>
-              <Text style={styles.bellBadgeText}>1</Text>
-            </View>
+            {unreadCount != null && unreadCount > 0 ? (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              </View>
+            ) : null}
           </Pressable>
         </View>
       </View>

@@ -71,7 +71,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         const standardizedRes: ServiceabilityCheckResponse = {
           ...res,
           message: res.serviceable
-            ? res.message || 'Great! FirstDoor services are available in your area.'
+            ? res.message || 'Great! HomeEase services are available in your area.'
             : res.message || 'Location Not Serviceable: We do not currently operate in this PIN code.',
         };
         setServiceability(standardizedRes);

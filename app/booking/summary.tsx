@@ -32,7 +32,7 @@ import { Colors, Typography, Spacing, BorderRadius } from '../../src/constants/t
 import { Users, AlertTriangle } from 'lucide-react-native';
 
 const PAYMENT_METHODS: { id: PaymentMethod; label: string; icon: string }[] = [
-  { id: 'WALLET', label: 'FirstDoor Wallet', icon: '💳' },
+  { id: 'WALLET', label: 'HomeEase Wallet', icon: '💳' },
   { id: 'UPI', label: 'UPI / GPay / PhonePe', icon: '📱' },
   { id: 'CARD', label: 'Credit / Debit Card', icon: '💳' },
   { id: 'NET_BANKING', label: 'Net Banking', icon: '🏦' },
@@ -133,8 +133,8 @@ export default function SummaryScreen() {
             serviceable: res.serviceable,
             pincode: pin,
             message: res.serviceable
-              ? res.message || 'Great! FirstDoor services are available in your area.'
-              : res.message || 'Location Not Serviceable: FirstDoor is not available in this PIN code.',
+              ? res.message || 'Great! HomeEase services are available in your area.'
+              : res.message || 'Location Not Serviceable: HomeEase is not available in this PIN code.',
           });
         }
       } catch {
@@ -393,7 +393,7 @@ export default function SummaryScreen() {
         Alert.alert(
           'Location Not Serviceable',
           serviceCheck.message ||
-            `FirstDoor is not currently active in PIN code ${targetPincode}. Bookings outside supported areas are not permitted.`
+            `HomeEase is not currently active in PIN code ${targetPincode}. Bookings outside supported areas are not permitted.`
         );
         return;
       }

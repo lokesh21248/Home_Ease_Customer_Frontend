@@ -77,7 +77,7 @@ export function LocationHeader({
       {/* Top Branding / User Profile & Notification Row */}
       <View style={styles.topBar}>
         <View style={styles.brandContainer}>
-          <Text style={styles.brandTitle}>FirstDoor</Text>
+          <Text style={styles.brandTitle}>HomeEase</Text>
         </View>
 
         <View style={styles.actionsContainer}>

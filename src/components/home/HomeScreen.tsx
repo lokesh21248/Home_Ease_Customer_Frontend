@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   ScrollView,
@@ -11,7 +11,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HomeHeroSection } from './HomeHeroSection';
 import { HomeEasePassBanner } from './HomeEasePassBanner';
 import { ExploreServicesGrid } from './ExploreServicesGrid';
+import { PromoBanner } from './PromoBanner';
+import { HomeOffersSection } from './HomeOffersSection';
+import { HomeRecentBookings } from './HomeRecentBookings';
 import { useExploreServices } from '../../hooks/useExploreServices';
+import { useBanners } from '../../hooks/useBanners';
+import { useMyBookings } from '../../hooks/useMyBookings';
 import { queryClient } from '../../query/queryClient';
 import { queryKeys } from '../../query/queryKeys';
 import { getScrollBottomPadding } from '../../constants/layout';
@@ -28,6 +33,20 @@ export function HomeScreen() {
     isError: isExploreError,
     refetch: refetchExplore,
   } = useExploreServices();
+
+  const { data: banners = [] } = useBanners();
+  const { data: bookings = [] } = useMyBookings();
+
+  // Calculate active/ongoing bookings for the notification bell badge
+  const ongoingBookingsCount = useMemo(() => {
+    return bookings.filter(
+      (b) =>
+        b.status === 'SEARCHING' ||
+        b.status === 'ACCEPTED' ||
+        b.status === 'ON_THE_WAY' ||
+        b.status === 'IN_PROGRESS'
+    ).length;
+  }, [bookings]);
 
   // ── Pull-to-refresh ────────────────────────────────────────────────────
   const onRefresh = useCallback(async () => {
@@ -70,23 +89,27 @@ export function HomeScreen() {
   };
 
   const handleSelectService = (item: ExploreServiceItem) => {
-    if (item.categoryId) {
-      router.push({
-        pathname: '/category/[id]',
-        params: { id: item.categoryId, name: item.categoryName || item.name },
-      });
-      return;
-    }
-
+    const targetId = item.categoryId || item.id;
     router.push({
       pathname: '/service/[id]',
       params: {
-        id: item.id,
+        id: targetId,
         name: item.name,
         image: item.imageUrl,
         price: item.price ? String(item.price) : undefined,
       },
     });
+  };
+
+  const handleBannerPress = (targetId?: string, title?: string) => {
+    if (targetId) {
+      router.push({
+        pathname: '/service/[id]',
+        params: { id: targetId, name: title },
+      });
+    } else {
+      router.push('/(tabs)/categories');
+    }
   };
 
   const handleViewAllPress = () => {
@@ -100,7 +123,7 @@ export function HomeScreen() {
       {/* 1. Light Status Bar on royal blue top bar */}
       <StatusBar style="light" />
 
-      {/* Persistent Status Bar Shield: Keeps device status indicators (time, battery, WiFi) protected from scrolling content */}
+      {/* Persistent Status Bar Shield: Keeps device status indicators protected from scrolling content */}
       <View
         style={[
           styles.statusBarShield,
@@ -121,18 +144,30 @@ export function HomeScreen() {
           />
         }
       >
-        {/* 1. Top Bar & Hero Section (Location, Earn ₹200, Bell, Hero Title & Quick Action Cards) */}
+        {/* 1. Top Bar & Hero Section (Location, Earn ₹200, Bell with active badge, Hero Title & Quick Action Cards) */}
         <HomeHeroSection
           onLocationPress={handleLocationPress}
           onNotificationPress={handleNotificationPress}
           onInstantBookPress={handleInstantBookPress}
           onSchedulePress={handleSchedulePress}
+          unreadCount={ongoingBookingsCount}
         />
 
-        {/* 2. HomeEase Pass Banner (Buy One Pass Three Visits FREE, 4 dots) */}
+        {/* 2. Recently Booked Services (Active live-tracking or one-tap rebooking) */}
+        <HomeRecentBookings />
+
+        {/* 3. Promotional Banners (Real Festival Cleaning, Summer Heat AC Jet Wash) */}
+        {banners.length > 0 && (
+          <PromoBanner banners={banners} onPress={handleBannerPress} />
+        )}
+
+        {/* 4. HomeEase Pass Banner (Buy One Pass Three Visits FREE) */}
         <HomeEasePassBanner onPress={handlePassPress} />
 
-        {/* 3. Explore Services: 4-Column Grid of 12 Services with Ratings, Thumbnails & Add Buttons */}
+        {/* 5. Exclusive Offers & Active Promo Coupons (WELCOME50, MEGA100) */}
+        <HomeOffersSection />
+
+        {/* 6. Explore Services: Real Backend Explore Services + Categories Grid */}
         <ExploreServicesGrid
           services={exploreServices}
           isLoading={isExploreLoading}

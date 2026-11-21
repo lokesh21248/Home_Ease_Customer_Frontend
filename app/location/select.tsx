@@ -144,7 +144,7 @@ export default function LocationSelectScreen() {
         state: res.state,
         areaName: res.areaName,
         message: res.serviceable
-          ? res.message || 'Great! FirstDoor services are available in your area.'
+          ? res.message || 'Great! HomeEase services are available in your area.'
           : res.message || 'Location Not Serviceable: We do not currently operate in this PIN code.',
       });
     } catch {
@@ -345,7 +345,7 @@ export default function LocationSelectScreen() {
       if (!check.serviceable) {
         Alert.alert(
           'Location Not Serviceable',
-          check.message || `FirstDoor is not currently available in PIN code ${pincode}. Bookings outside supported areas are not allowed.`
+          check.message || `HomeEase is not currently available in PIN code ${pincode}. Bookings outside supported areas are not allowed.`
         );
         return;
       }
@@ -479,7 +479,7 @@ export default function LocationSelectScreen() {
         </Pressable>
         <View style={styles.headerTitleWrap}>
           <Text style={styles.headerTitle}>Select Delivery Location</Text>
-          <Text style={styles.headerSubtitle}>Verified FirstDoor service areas</Text>
+          <Text style={styles.headerSubtitle}>Verified HomeEase service areas</Text>
         </View>
       </View>
 

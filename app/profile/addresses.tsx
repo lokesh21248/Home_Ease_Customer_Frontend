@@ -441,7 +441,7 @@ export default function AddressesScreen() {
         setSaving(false);
         Alert.alert(
           'Location Not Serviceable',
-          check.message || `FirstDoor is not currently active in PIN code ${cleanedPin}. Bookings outside supported areas are not permitted.`
+          check.message || `HomeEase is not currently active in PIN code ${cleanedPin}. Bookings outside supported areas are not permitted.`
         );
         return;
       }
