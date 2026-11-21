@@ -310,6 +310,10 @@ export const API_URL = process.env.EXPO_PUBLIC_API_URL || BASE_URL;
 // ─── HTTP Client & Errors ───────────────────────────────────────────────────
 export class ApiError extends Error {
   public status: number;
+  /** Stable machine-readable server error code (e.g. WORKER_LOCATION_STALE), when the server sent one. */
+  public code?: string;
+  public retryable?: boolean;
+  public retryAfterSeconds?: number;
 
   constructor(messageOrStatus: string | number, statusOrMessage?: number | string) {
     if (typeof messageOrStatus === 'number') {
@@ -325,7 +329,7 @@ export class ApiError extends Error {
 
 export const DEMO_USER_ID = 'cdbca436-888a-4447-9fe2-1b3e117165e1';
 export const DEMO_JWT_TOKEN =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJ1c2VySWQiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJyb2xlIjoiQURNSU4iLCJwaG9uZU51bWJlciI6Iis5MTAwMDAwMDAwMDAiLCJmdWxsTmFtZSI6IlN5c3RlbSBBZG1pbiIsImlhdCI6MTc5NTA4MTc3OCwiZXhwIjoxNzk3NjczNzc4fQ.mvcl1ip1j7eqOBp2URJ3HgUFXlfS65Eyfs1hCG_buhI';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJ1c2VySWQiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJyb2xlIjoiQURNSU4iLCJwaG9uZU51bWJlciI6Iis5MTAwMDAwMDAwMDAiLCJmdWxsTmFtZSI6IlN5c3RlbSBBZG1pbiIsImlhdCI6MTc5NTE2NzQwMCwiZXhwIjoxNzk3NzU5NDAwfQ.rLBRY2oCfcp60lZUvkgpKnpOpm5_3w7C74N5jY7bvBo';
 
 export async function fetchLiveBackendToken(): Promise<string> {
   const tryEndpoints = [
@@ -1447,6 +1451,31 @@ export interface TrackingRouteResponse {
   timestamp?: number;
 }
 
+export type BookingRouteReason = 'INITIAL' | 'PERIODIC' | 'OFF_ROUTE';
+
+/**
+ * Contract of GET /tracking/{bookingId}/route. The destination is the booking's PERSISTED service address and
+ * the origin is the assigned worker's latest GPS fix - the client sends neither. `polyline` is a Google
+ * encoded polyline (precision 1e5, latitude then longitude). Distance and duration are provider data.
+ */
+export interface BookingRouteResponse {
+  bookingId: string;
+  status: string;
+  found: boolean;
+  provider: string;
+  polyline: string;
+  polylineEncoding: string;
+  distanceMeters: number;
+  durationSeconds: number;
+  staticDurationSeconds?: number;
+  origin: { lat: number; lng: number; recordedAtEpochMs?: number };
+  destination: { lat: number; lng: number };
+  calculatedAt: string;
+  calculatedAtEpochMs: number;
+  cached: boolean;
+  refreshAfterSeconds: number;
+}
+
 export interface TrackingLocationUpdateRequest {
   bookingId: string;
   lat: number;
@@ -1529,31 +1558,48 @@ export const trackingApi = {
   },
 
   /**
-   * Phase 2: Fetches the road-following route from assigned worker's current GPS to booking service address
-   * GET /api/v1/tracking/{bookingId}/route
+   * Road route from the assigned worker's latest GPS to the booking's persisted service address.
+   * GET /api/v1/tracking/{bookingId}/route?reason=INITIAL|PERIODIC|OFF_ROUTE
+   *
+   * Sends NO coordinates: the server derives both ends from the booking and the worker's last fix, and only
+   * answers the booking's customer / assigned worker. Failures throw an ApiError carrying the server's stable
+   * `code`, `retryable` and `retryAfterSeconds` so callers can react precisely (never invent a fallback).
    */
   getBookingRoute: async (
     bookingId: string,
-    destLat?: number,
-    destLng?: number,
+    reason: BookingRouteReason,
     signal?: AbortSignal,
-  ): Promise<TrackingRouteResponse | null> => {
-    const query = new URLSearchParams();
-    if (destLat !== undefined) query.set('destLat', String(destLat));
-    if (destLng !== undefined) query.set('destLng', String(destLng));
-    const qs = query.toString() ? `?${query.toString()}` : '';
-
+  ): Promise<BookingRouteResponse> => {
     const headers = await getAuthHeaders();
     const res = await fetchWithTimeout(
-      `${TRACKING_BASE_URL}/tracking/${encodeURIComponent(bookingId)}/route${qs}`,
+      `${TRACKING_BASE_URL}/tracking/${encodeURIComponent(bookingId)}/route?reason=${reason}`,
       { headers, signal },
+      12000,
     );
     if (!res.ok) {
-      if (res.status === 404 || res.status === 400) return null;
-      throw new ApiError(res.status, `Unable to calculate booking road route (HTTP ${res.status})`);
+      let body: any = null;
+      try {
+        body = await res.json();
+      } catch {
+        // non-JSON error bodies (e.g. a proxy 502 page) carry no code
+      }
+      const err = new ApiError(
+        res.status,
+        typeof body?.message === 'string' ? body.message : `Unable to calculate route (HTTP ${res.status})`,
+      );
+      if (typeof body?.code === 'string') err.code = body.code;
+      if (typeof body?.retryable === 'boolean') err.retryable = body.retryable;
+      const headerRetry = Number(res.headers.get('Retry-After'));
+      const retryAfter =
+        typeof body?.retryAfterSeconds === 'number'
+          ? body.retryAfterSeconds
+          : Number.isFinite(headerRetry) && headerRetry > 0
+            ? headerRetry
+            : undefined;
+      if (retryAfter !== undefined) err.retryAfterSeconds = retryAfter;
+      throw err;
     }
-    const data: TrackingRouteResponse = await res.json();
-    return data.found === false ? null : data;
+    return (await res.json()) as BookingRouteResponse;
   },
 
   updateLocation: async (

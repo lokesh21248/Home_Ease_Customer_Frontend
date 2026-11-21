@@ -90,7 +90,7 @@ const svg = String.raw`
  <path d="M73 131 L89 131" stroke="#ffd0d3" stroke-width="1.5" opacity="0.85"/>
 </svg>`;
 
-for (const scale of [1, 2, 3]) {
+for (const scale of [1, 2, 3, 4]) {
   const file = `worker-scooter-3d${scale === 1 ? '' : `@${scale}x`}.png`;
   await sharp(Buffer.from(svg))
     .resize({ width: 80 * scale, height: 100 * scale, fit: 'fill' })

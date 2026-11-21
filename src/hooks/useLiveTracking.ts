@@ -364,13 +364,10 @@ export function useLiveTracking({
     const sub1 = client.subscribe(`/topic/tracking/${id}`, (message) => {
       handleFrameRef.current(message.body, id);
     });
-    const sub2 = client.subscribe(`/topic/tracking/booking/${id}`, (message) => {
+    const sub2 = client.subscribe(`/topic/track/${id}`, (message) => {
       handleFrameRef.current(message.body, id);
     });
-    const sub3 = client.subscribe(`/topic/track/${id}`, (message) => {
-      handleFrameRef.current(message.body, id);
-    });
-    trackingSubRef.current = [sub1, sub2, sub3];
+    trackingSubRef.current = [sub1, sub2];
   }, []);
 
   const handleFrame = useCallback(
@@ -442,7 +439,6 @@ export function useLiveTracking({
         });
         bookingSubRef.current = [
           client.subscribe(`/topic/booking/${id}`, (m) => handleFrameRef.current(m.body, id)),
-          client.subscribe(`/topic/booking/${id}/events`, (m) => handleFrameRef.current(m.body, id)),
         ];
         if (trackingActiveRef.current) subscribeTracking(client, id);
         // Fill the gap left by the disconnect without waiting for the worker's next ping.

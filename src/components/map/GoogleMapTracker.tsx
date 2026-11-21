@@ -25,9 +25,15 @@ export interface GoogleMapTrackerProps {
   partnerBearing?: number;
   partnerName?: string;
   serviceCategory?: string;
-  destLat: number;
-  destLng: number;
+  /**
+   * The booking's persisted service-address coordinates. When absent/invalid NO destination marker is drawn
+   * (the map never substitutes a default or the customer's GPS as the destination).
+   */
+  destLat?: number;
+  destLng?: number;
   destAddress?: string;
+  /** Padding for fitting worker + destination + route (set bottom to the height of any overlapping panel). */
+  fitPadding?: { top: number; right: number; bottom: number; left: number };
   customerGpsLat?: number;
   customerGpsLng?: number;
   routeCoordinates?: [number, number][] | LatLngCoordinate[];
@@ -56,6 +62,7 @@ export const GoogleMapTracker = forwardRef<GoogleMapHandle, GoogleMapTrackerProp
       destLat,
       destLng,
       destAddress = 'Your Location',
+      fitPadding,
       customerGpsLat,
       customerGpsLng,
       routeCoordinates = [],
@@ -79,6 +86,7 @@ export const GoogleMapTracker = forwardRef<GoogleMapHandle, GoogleMapTrackerProp
         initialLng={destLng}
         customerLat={destLat}
         customerLng={destLng}
+        fitPadding={fitPadding}
         customerGpsLat={customerGpsLat}
         customerGpsLng={customerGpsLng}
         customerTitle="Service Destination"

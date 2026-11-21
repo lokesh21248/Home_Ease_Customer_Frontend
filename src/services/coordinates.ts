@@ -26,42 +26,50 @@ export function isValidCoordinate(latitude: unknown, longitude: unknown): boolea
  * Highly efficient standard polyline algorithm with 1e5 precision factor.
  */
 export function decodePolyline(encoded: string): LatLngCoordinate[] {
-  if (!encoded || typeof encoded !== 'string') return [];
+  return decodePolylineStrict(encoded) ?? [];
+}
+
+/**
+ * Strict decoder: returns `null` for ANY malformed input (illegal character, truncated varint, latitude
+ * without longitude, out-of-range coordinate) instead of silently producing a partial or duplicated line.
+ * Points are always (latitude, longitude); the server contract is a precision-1e5 encoded polyline.
+ */
+export function decodePolylineStrict(encoded: unknown): LatLngCoordinate[] | null {
+  if (typeof encoded !== 'string' || encoded.length === 0) return null;
   const points: LatLngCoordinate[] = [];
-  let index = 0;
   const len = encoded.length;
+  let index = 0;
   let lat = 0;
   let lng = 0;
 
-  while (index < len) {
-    let b: number;
-    let shift = 0;
+  // Reads one zig-zag varint; returns null when truncated or when a character is outside '?'..'~'.
+  const readValue = (): number | null => {
     let result = 0;
+    let shift = 0;
+    let b: number;
     do {
+      if (index >= len) return null;
       b = encoded.charCodeAt(index++) - 63;
+      if (b < 0 || b > 63) return null;
       result |= (b & 0x1f) << shift;
       shift += 5;
+      if (shift > 35) return null;
     } while (b >= 0x20);
-    const dlat = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+    return (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+  };
+
+  while (index < len) {
+    const dlat = readValue();
+    if (dlat === null) return null;
+    const dlng = readValue();
+    if (dlng === null) return null;
     lat += dlat;
-
-    shift = 0;
-    result = 0;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    const dlng = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
     lng += dlng;
-
     const finalLat = lat / 1e5;
     const finalLng = lng / 1e5;
-    if (isValidCoordinate(finalLat, finalLng)) {
-      points.push({ latitude: finalLat, longitude: finalLng });
-    }
+    if (!isValidCoordinate(finalLat, finalLng)) return null;
+    points.push({ latitude: finalLat, longitude: finalLng });
   }
-
   return points;
 }
 
@@ -141,23 +149,14 @@ export function toGeoJsonCoordinates(
       continue;
     }
 
-    // Pair array [a, b]
+    // Pair array. The documented input contract is [latitude, longitude] (Leaflet / tracking-route order).
+    // No order-guessing heuristic: guessing is what made [91, 78.4] "valid" as [lng, lat] and silently
+    // mis-ordered real routes. A pair whose first value is not a valid latitude is skipped.
     if (Array.isArray(coord) && coord.length >= 2) {
-      const a = Number(coord[0]);
-      const b = Number(coord[1]);
-      if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
-
-      // Detect if [a, b] is [lng, lat] (GeoJSON) or [lat, lng] (Leaflet)
-      // For India: lng ~78, lat ~17
-      if (a > 50 && a <= 180 && b >= -90 && b <= 40) {
-        // 'a' is longitude, 'b' is latitude -> already GeoJSON!
-        result.push([a, b]);
-      } else if (b > 50 && b <= 180 && a >= -90 && a <= 40) {
-        // 'b' is longitude, 'a' is latitude -> swap to [lng, lat]
-        result.push([b, a]);
-      } else if (isValidCoordinate(b, a)) {
-        // Default assumption: [lng, lat]
-        result.push([a, b]);
+      const lat = Number(coord[0]);
+      const lng = Number(coord[1]);
+      if (isValidCoordinate(lat, lng)) {
+        result.push([lng, lat]);
       }
     }
   }

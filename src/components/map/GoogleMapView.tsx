@@ -112,6 +112,12 @@ export interface GoogleMapViewProps {
   isGpsStale?: boolean;
   lastUpdateTimestamp?: number | null;
 
+  /**
+   * Viewport padding used when fitting worker + destination + route. Set `bottom` to the height of any panel
+   * that overlaps the map so the route stays visible above it.
+   */
+  fitPadding?: { top: number; right: number; bottom: number; left: number };
+
   /** Map control buttons */
   showControls?: boolean;
   showEtaBadge?: boolean;
@@ -126,8 +132,10 @@ export interface GoogleMapViewProps {
   style?: StyleProp<ViewStyle>;
 }
 
+// Camera-only fallback when nothing else is known. It is NEVER used as a destination or marker position.
 const DEFAULT_LAT = 17.4485;
 const DEFAULT_LNG = 78.3748;
+const DEFAULT_FIT_PADDING = { top: 90, right: 60, bottom: 120, left: 60 };
 
 function zoomToDelta(zoom: number = 16) {
   const delta = 360 / Math.pow(2, zoom);
@@ -171,6 +179,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
       isLiveConnected = true,
       isGpsStale = false,
       lastUpdateTimestamp,
+      fitPadding = DEFAULT_FIT_PADDING,
       showControls = false,
       showEtaBadge = false,
       isDetectingGps = false,
@@ -191,7 +200,10 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
     const isUserInteractingRef = useRef(false);
     const userInteractionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastCameraFollowTimeRef = useRef<number>(0);
+    // 1) markers-only fit before any route exists; 2) one fit that includes the whole route once it arrives.
     const hasFittedInitialBoundsRef = useRef(false);
+    const hasFittedRouteRef = useRef(false);
+    const currentRegionRef = useRef<Region | null>(null);
 
     const handlePanDrag = useCallback(() => {
       isUserInteractingRef.current = true;
@@ -296,6 +308,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
     const handleRegionChangeComplete = useCallback(
       (region: Region, details?: { isGesture?: boolean }) => {
         setCurrentRegion(region);
+        currentRegionRef.current = region;
         if (details?.isGesture) {
           isUserInteractingRef.current = true;
           if (userInteractionTimerRef.current) clearTimeout(userInteractionTimerRef.current);
@@ -381,7 +394,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
 
           if (points.length >= 2) {
             mapRef.current?.fitToCoordinates(points, {
-              edgePadding: { top: 90, right: 60, bottom: 200, left: 60 },
+              edgePadding: fitPadding,
               animated: true,
             });
           } else if (points.length === 1) {
@@ -445,6 +458,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
         effHasPartnerLocation,
         effPartnerLat,
         effPartnerLng,
+        fitPadding,
       ]
     );
 
@@ -474,69 +488,87 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
       }
     }, [customerLat, customerLng, initialLat, initialLng, deltas, isMapReady, isMoving, mode]);
 
-    // Automatic initial route fitting when polyline or partner coordinates first become available
+    // A route that disappears (arrival, terminal status, reconnect) is allowed to be framed again next time.
+    // A route that is merely REPLACED (reroute / periodic refresh) keeps the customer's current zoom.
+    const hasRoute = polylineCoords.length >= 2;
+    useEffect(() => {
+      if (!hasRoute) hasFittedRouteRef.current = false;
+    }, [hasRoute]);
+
+    // Camera framing for tracking mode, done at most twice per route lifetime - never on a GPS tick:
+    //   1. markers only, as soon as worker + destination are both known (no route yet);
+    //   2. ONCE when the route first arrives, so worker, destination AND the whole road are inside the
+    //      viewport with the configured padding.
     useEffect(() => {
       if (!isMapReady || mode !== 'tracking') return;
-      if (hasFittedInitialBoundsRef.current) return;
 
-      const points: LatLngCoordinate[] = [];
+      const markers: LatLngCoordinate[] = [];
       if (isValidCoordinate(effCustomerLat ?? NaN, effCustomerLng ?? NaN)) {
-        points.push({ latitude: effCustomerLat!, longitude: effCustomerLng! });
+        markers.push({ latitude: effCustomerLat!, longitude: effCustomerLng! });
       }
       if (effHasPartnerLocation && isValidCoordinate(effPartnerLat ?? NaN, effPartnerLng ?? NaN)) {
-        points.push({ latitude: effPartnerLat!, longitude: effPartnerLng! });
-      }
-      if (polylineCoords.length >= 2) {
-        points.push(...polylineCoords);
+        markers.push({ latitude: effPartnerLat!, longitude: effPartnerLng! });
       }
 
-      if (points.length >= 2) {
-        hasFittedInitialBoundsRef.current = true;
-        const timer = setTimeout(() => {
-          mapRef.current?.fitToCoordinates(points, {
-            edgePadding: { top: 90, right: 60, bottom: 200, left: 60 },
-            animated: true,
-          });
-        }, 350);
-        return () => clearTimeout(timer);
+      let points: LatLngCoordinate[] | null = null;
+      let isRouteFit = false;
+      if (hasRoute && !hasFittedRouteRef.current) {
+        isRouteFit = true;
+        points = [...markers, ...polylineCoords];
+      } else if (!hasFittedInitialBoundsRef.current && markers.length >= 2) {
+        points = markers;
       }
+      if (!points || points.length < 2) return;
+
+      const toFit = points;
+      // The "already fitted" flags are set INSIDE the timer: if a GPS update re-runs this effect within the
+      // 350 ms window the timer is cancelled and the fit is simply rescheduled, never silently lost.
+      const timer = setTimeout(() => {
+        if (isRouteFit) hasFittedRouteRef.current = true;
+        hasFittedInitialBoundsRef.current = true;
+        mapRef.current?.fitToCoordinates(toFit, { edgePadding: fitPadding, animated: true });
+      }, 350);
+      return () => clearTimeout(timer);
     }, [
       isMapReady,
       mode,
+      hasRoute,
       polylineCoords,
       effCustomerLat,
       effCustomerLng,
       effHasPartnerLocation,
       effPartnerLat,
       effPartnerLng,
+      fitPadding,
     ]);
 
-    // Explicit camera-follow behavior for tracking mode (only when full route is not active or user is not interacting)
+    // Follow behaviour ONLY when there is no road route to frame (routing unavailable). It pans - it never
+    // changes zoom or bearing - and only when the worker is leaving the visible area, so a customer who has
+    // zoomed or panned is not fought on every GPS ping. Manual gestures pause it for 12 s.
     useEffect(() => {
       if (!isMapReady || mode !== 'tracking') return;
       if (isUserInteractingRef.current) return;
-      // When a road route is rendered, preserve the route overview so customer can see both markers
-      if (polylineCoords.length >= 2) return;
+      if (hasRoute) return;
 
       const pLat = effPartnerLat;
       const pLng = effPartnerLng;
       if (!isValidCoordinate(pLat ?? NaN, pLng ?? NaN)) return;
 
+      const region = currentRegionRef.current;
+      if (
+        region &&
+        Math.abs(pLat! - region.latitude) < region.latitudeDelta * 0.35 &&
+        Math.abs(pLng! - region.longitude) < region.longitudeDelta * 0.35
+      ) {
+        return; // still comfortably inside the viewport
+      }
+
       const now = Date.now();
-      // Throttle automatic camera following to at most once every 6 seconds
       if (now - lastCameraFollowTimeRef.current < 6000) return;
       lastCameraFollowTimeRef.current = now;
 
-      mapRef.current?.animateToRegion(
-        {
-          latitude: pLat!,
-          longitude: pLng!,
-          latitudeDelta: 0.012,
-          longitudeDelta: 0.012,
-        },
-        700
-      );
-    }, [effPartnerLat, effPartnerLng, isMapReady, mode, polylineCoords.length]);
+      mapRef.current?.animateCamera({ center: { latitude: pLat!, longitude: pLng! } }, { duration: 700 });
+    }, [effPartnerLat, effPartnerLng, isMapReady, mode, hasRoute]);
 
     const handleMapReady = useCallback(() => {
       setIsMapReady(true);
