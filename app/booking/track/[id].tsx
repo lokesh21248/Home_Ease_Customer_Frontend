@@ -546,18 +546,32 @@ export default function TrackingScreen() {
             </View>
           </View>
 
-          {/* Refund Guarantee Card */}
-          <View style={styles.refundNoticeCard}>
-            <View style={styles.refundIconWrap}>
-              <Ionicons name="shield-checkmark" size={22} color="#059669" />
+          {/* Payment / Refund Status Card */}
+          {booking?.paymentStatus === 'PAID' || booking?.paymentStatus === 'COMPLETED' ? (
+            <View style={styles.refundNoticeCard}>
+              <View style={styles.refundIconWrap}>
+                <Ionicons name="shield-checkmark" size={22} color="#059669" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.refundNoticeTitle}>100% Refund Assurance</Text>
+                <Text style={styles.refundNoticeDesc}>
+                  A full refund has been automatically initiated to your original payment method (3–5 business days).
+                </Text>
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.refundNoticeTitle}>100% Refund Assurance</Text>
-              <Text style={styles.refundNoticeDesc}>
-                If any payment was deducted, a full refund has been automatically initiated to your original payment method (3–5 business days).
-              </Text>
+          ) : (
+            <View style={styles.refundNoticeCard}>
+              <View style={[styles.refundIconWrap, { backgroundColor: '#F1F5F9' }]}>
+                <Ionicons name="checkmark-circle-outline" size={22} color="#475569" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.refundNoticeTitle, { color: '#334155' }]}>No Charges Applied</Text>
+                <Text style={[styles.refundNoticeDesc, { color: '#64748B' }]}>
+                  No payment was collected for this booking. You have not been charged.
+                </Text>
+              </View>
             </View>
-          </View>
+          )}
 
           {/* Action Buttons */}
           <View style={styles.terminalActionsWrap}>
@@ -676,14 +690,24 @@ export default function TrackingScreen() {
               <Text style={styles.terminalDetailValue}>{booking?.serviceName || 'HomeEase Service'}</Text>
             </View>
             <View style={styles.terminalDetailRow}>
-              <Text style={styles.terminalDetailLabel}>Total Paid</Text>
+              <Text style={styles.terminalDetailLabel}>
+                {booking?.paymentStatus === 'PAID' || booking?.paymentStatus === 'COMPLETED'
+                  ? 'Total Paid'
+                  : 'Amount Payable'}
+              </Text>
               <Text style={[styles.terminalDetailValue, { color: '#059669', fontFamily: Typography.fontFamily.bold }]}>
                 ₹{booking?.totalAmount || (booking as any)?.finalPrice || '0'}
               </Text>
             </View>
             <View style={styles.terminalDetailRow}>
               <Text style={styles.terminalDetailLabel}>Payment Status</Text>
-              <Text style={[styles.terminalDetailValue, { color: '#059669' }]}>Paid</Text>
+              <Text style={[styles.terminalDetailValue, { color: booking?.paymentStatus === 'PAID' || booking?.paymentStatus === 'COMPLETED' ? '#059669' : '#D97706' }]}>
+                {booking?.paymentStatus === 'PAID' || booking?.paymentStatus === 'COMPLETED'
+                  ? 'Paid Online'
+                  : (booking as any)?.paymentMethod === 'COD' || (booking as any)?.paymentMode === 'COD'
+                  ? 'Cash on Delivery (Pay to Partner)'
+                  : (booking?.paymentStatus || 'Pending Payment')}
+              </Text>
             </View>
             <View style={styles.terminalDetailRow}>
               <Text style={styles.terminalDetailLabel}>Service Address</Text>
