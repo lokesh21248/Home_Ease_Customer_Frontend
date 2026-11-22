@@ -83,16 +83,28 @@ export function parseLocationTimestamp(value?: string | number): number | null {
   return null;
 }
 
+/**
+ * Ordering check for location frames: accept only frames newer than the last accepted one.
+ *
+ * Both timestamps come from the PARTNER's phone, so they are comparable with each other. They are deliberately NOT
+ * compared with this (customer) phone's clock: two phones' clocks routinely differ by minutes, and the old
+ * `incoming <= now + 60 s` rule dropped every frame from a partner whose clock ran fast, freezing the marker.
+ * (The server already clamps future device timestamps.) The third argument is kept for call-site compatibility.
+ */
 export function isAcceptableLocationTimestamp(
   incoming: number,
   previous: number | null,
-  now = Date.now(),
+  _ignoredLocalNow?: number,
 ): boolean {
-  return (
-    Number.isFinite(incoming) &&
-    incoming <= now + 60_000 &&
-    (previous === null || incoming > previous)
-  );
+  return Number.isFinite(incoming) && incoming > 0 && (previous === null || incoming > previous);
+}
+
+/**
+ * Freshness of the partner's location measured on THIS phone's clock only: time since the last accepted frame was
+ * RECEIVED here. Immune to clock skew between the two phones. Matches the server's 30 s live window by default.
+ */
+export function isLocationStale(lastReceivedLocalMs: number | null, nowLocalMs: number, staleAfterMs = 30_000): boolean {
+  return lastReceivedLocalMs === null || nowLocalMs - lastReceivedLocalMs > staleAfterMs;
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   getAuthHeaders,
   ApiError,
   type TrackingLocationResponse,
+  type TrackingSnapshot,
 } from '../api/client';
 import {
   RouteRequestError,
@@ -18,6 +19,7 @@ import {
 } from '../services/routing';
 import {
   isAcceptableLocationTimestamp,
+  isLocationStale,
   isSensibleGpsJump,
   parseLocationTimestamp,
 } from '../services/trackingMath';
@@ -57,7 +59,9 @@ interface UseLiveTrackingProps {
   onBookingEvent?: (event: Record<string, unknown>) => void;
 }
 
-const GPS_STALE_MS = 45_000;
+/** Same live window as the server (homeease.tracking.live-window-seconds). */
+const GPS_STALE_MS = 30_000;
+const SNAPSHOT_POLL_MS = 20_000;
 const isFinalStatus = (s?: string) => s === 'COMPLETED' || s === 'CANCELLED';
 const isTerminalForTravel = (s?: string) =>
   s === 'COMPLETED' || s === 'CANCELLED' || s === 'ARRIVED' || s === 'IN_PROGRESS';
@@ -80,6 +84,8 @@ export function useLiveTracking({
   const [trackingEnded, setTrackingEnded] = useState(false);
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState<number | null>(null);
   const [isGpsStale, setIsGpsStale] = useState(false);
+  /** Server-side tracking phase + partner device state (why there may be no location). */
+  const [serverSnapshot, setServerSnapshot] = useState<TrackingSnapshot | null>(null);
   // Wall clock for display-only derivations (route age). Updated by the 5 s staleness timer, never in render.
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -95,7 +101,10 @@ export function useLiveTracking({
 
   const partnerRef = useRef<PartnerCoordinate | null>(null);
   const routeRef = useRef<BookingRoute | null>(null);
+  /** Partner-device timestamp of the last accepted frame: ORDERING only (compared with the partner's own clock). */
   const lastUpdateRef = useRef<number | null>(null);
+  /** This phone's clock when the last accepted frame ARRIVED: freshness / "updated X s ago" (immune to clock skew). */
+  const lastReceivedRef = useRef<number | null>(null);
 
   const policyRef = useRef(initialRoutePolicyState());
   const failuresRef = useRef(0);
@@ -241,10 +250,12 @@ export function useLiveTracking({
 
       partnerRef.current = next;
       lastUpdateRef.current = timestamp;
+      const receivedAt = Date.now();
+      lastReceivedRef.current = receivedAt;
       setPartnerPos(next);
       setHasPartnerLocation(true);
-      setLastUpdateTimestamp(timestamp);
-      setIsGpsStale(Date.now() - timestamp > GPS_STALE_MS);
+      setLastUpdateTimestamp(receivedAt);
+      setIsGpsStale(false);
 
       // Off-route detection against the current road polyline (no network involved).
       const currentRoute = routeRef.current;
@@ -275,6 +286,8 @@ export function useLiveTracking({
     partnerRef.current = null;
     routeRef.current = null;
     lastUpdateRef.current = null;
+    lastReceivedRef.current = null;
+    setServerSnapshot(null);
     setPartnerPos(null);
     setHasPartnerLocation(false);
     setRoute(null);
@@ -351,11 +364,33 @@ export function useLiveTracking({
     }
     const timer = setInterval(() => {
       const now = Date.now();
-      setIsGpsStale(lastUpdateRef.current !== null && now - lastUpdateRef.current > GPS_STALE_MS);
+      setIsGpsStale(lastReceivedRef.current !== null && isLocationStale(lastReceivedRef.current, now, GPS_STALE_MS));
       setNowMs(now);
     }, 5000);
     return () => clearInterval(timer);
   }, [trackingActive]);
+
+  // ───────────────────────── server tracking phase (why location may be missing) ─────────────────────────
+
+  useEffect(() => {
+    if (!bookingId || !trackingActive) {
+      setServerSnapshot(null);
+      return;
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+    const load = async () => {
+      const snap = await trackingApi.getTrackingSnapshot(bookingId, controller.signal);
+      if (!cancelled && snap && snap.bookingId === bookingId) setServerSnapshot(snap);
+    };
+    void load();
+    const timer = setInterval(() => void load(), SNAPSHOT_POLL_MS);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearInterval(timer);
+    };
+  }, [bookingId, trackingActive]);
 
   // ───────────────────────── single shared STOMP connection ─────────────────────────
 
@@ -627,12 +662,19 @@ export function useLiveTracking({
     distanceText = 'Partner on site';
     etaText = 'Service in progress';
   } else if (status === 'ACCEPTED' || status === 'ON_THE_WAY' || status === 'CONFIRMED') {
-    if (!hasPartnerLocation || !partnerPos) {
-      distanceText = 'Awaiting service-person location';
+    const phase = serverSnapshot?.phase;
+    if (phase === 'GPS_PERMISSION_DENIED' && (!hasPartnerLocation || isGpsStale)) {
+      distanceText = "Partner's location sharing is turned off";
+      etaText = 'ETA unavailable';
+    } else if (phase === 'LOCATION_UNAVAILABLE' && serverSnapshot?.deviceGpsState === 'GPS_DISABLED' && (!hasPartnerLocation || isGpsStale)) {
+      distanceText = "Partner's GPS is switched off";
+      etaText = 'ETA unavailable';
+    } else if (!hasPartnerLocation || !partnerPos) {
+      distanceText = status === 'ON_THE_WAY' ? 'Waiting for partner location' : 'Partner will start the trip soon';
       etaText = 'ETA unavailable';
     } else if (isGpsStale) {
-      distanceText = 'Location update is stale';
-      etaText = 'Updating...';
+      distanceText = 'Location updates paused';
+      etaText = 'Waiting for partner location';
     } else if (etaSeconds !== null && remainingMeters !== null) {
       distanceText = `${formatDistance(remainingMeters)} away`;
       etaText = formatDuration(Math.max(60, etaSeconds)); // never "0 mins" while still travelling
@@ -676,7 +718,10 @@ export function useLiveTracking({
     etaSeconds,
     remainingMeters,
     isGpsStale,
+    /** Local receipt time of the last accepted frame (this phone's clock). */
     lastUpdateTimestamp,
+    /** Server tracking phase / device state / partner card (null until loaded). */
+    serverSnapshot,
     trackingEnded,
     refreshLocation,
   };

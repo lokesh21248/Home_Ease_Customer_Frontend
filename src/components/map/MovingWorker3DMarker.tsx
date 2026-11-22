@@ -13,9 +13,11 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
-import { Platform, StyleSheet, View, Image } from 'react-native';
+import { Platform, StyleSheet, View, Image, Text } from 'react-native';
 import { AnimatedRegion, Marker } from 'react-native-maps';
+import { Ionicons } from '@expo/vector-icons';
 import { isValidCoordinate } from '../../services/coordinates';
+import { categoryIcon } from '../../services/workerMarkerStyle';
 
 export interface WorkerGPS {
   latitude: number;
@@ -29,6 +31,11 @@ export interface MovingWorker3DMarkerProps {
   staleAfterMs?: number;
   name?: string;
   zIndex?: number;
+  /** Service category / name, shown as a trade icon on the badge (electrician, plumber, AC technician...). */
+  serviceCategory?: string;
+  /** "Live" vs. last-seen text on the badge (computed by the caller from fresh, connected data only). */
+  statusLabel?: string;
+  isLive?: boolean;
 }
 
 type Position = Pick<WorkerGPS, 'latitude' | 'longitude'>;
@@ -61,7 +68,20 @@ export const MovingWorker3DMarker: React.FC<MovingWorker3DMarkerProps> = memo(fu
   name = 'Service Partner',
   zIndex = 999,
   staleAfterMs = 45_000,
+  serviceCategory,
+  statusLabel,
+  isLive = false,
 }) {
+  const trade = categoryIcon(serviceCategory);
+  const badgeRef = useRef<any>(null);
+  // The badge is a SEPARATE, upright marker riding on the same animated coordinate: the vehicle rotates with the
+  // GPS bearing, while the name / trade / live text stays readable. It re-snapshots only when its content changes.
+  const [badgeTracks, setBadgeTracks] = useState(true);
+  useEffect(() => {
+    setBadgeTracks(true);
+    const t = setTimeout(() => setBadgeTracks(false), 400);
+    return () => clearTimeout(t);
+  }, [name, trade.icon, statusLabel, isLive]);
   const animated = useRef(
     new AnimatedRegion({
       latitude: worker.latitude,
@@ -194,6 +214,7 @@ export const MovingWorker3DMarker: React.FC<MovingWorker3DMarkerProps> = memo(fu
       if (Platform.OS === 'android' && markerRef.current?.animateMarkerToCoordinate) {
         // Native Android Google Maps SDK hardware-accelerated translation
         markerRef.current.animateMarkerToCoordinate(next, duration);
+        badgeRef.current?.animateMarkerToCoordinate?.(next, duration);
       } else {
         // iOS AnimatedRegion timing
         (animated as any).timing({ ...next, duration, useNativeDriver: false }).start();
@@ -210,6 +231,32 @@ export const MovingWorker3DMarker: React.FC<MovingWorker3DMarkerProps> = memo(fu
   }, [worker, animated, smoothRotation, staleAfterMs]);
 
   return (
+    <>
+    <AnimatedMarker
+      ref={badgeRef}
+      coordinate={animated}
+      anchor={{ x: 0.5, y: 1 }}
+      zIndex={zIndex + 1}
+      tracksViewChanges={badgeTracks}
+      identifier="homeease-assigned-worker-badge"
+    >
+      <View style={styles.badgeWrap}>
+        <View style={styles.badge}>
+          <View style={[styles.tradeCircle, { backgroundColor: trade.color }]}>
+            <Ionicons name={trade.icon as any} size={12} color="#FFFFFF" />
+          </View>
+          <Text style={styles.badgeName} numberOfLines={1}>
+            {name}
+          </Text>
+          <View style={[styles.liveDot, { backgroundColor: isLive ? '#16A34A' : '#9CA3AF' }]} />
+          <Text style={[styles.badgeStatus, { color: isLive ? '#16A34A' : '#6B7280' }]} numberOfLines={1}>
+            {statusLabel || (isLive ? 'Live' : 'Offline')}
+          </Text>
+        </View>
+        {/* transparent spacer so the badge sits above the vehicle instead of covering it */}
+        <View style={styles.badgeSpacer} />
+      </View>
+    </AnimatedMarker>
     <AnimatedMarker
       ref={markerRef}
       coordinate={animated}
@@ -231,10 +278,60 @@ export const MovingWorker3DMarker: React.FC<MovingWorker3DMarkerProps> = memo(fu
         />
       </View>
     </AnimatedMarker>
+    </>
   );
 });
 
 const styles = StyleSheet.create({
+  badgeWrap: {
+    alignItems: 'center',
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 4,
+    paddingLeft: 4,
+    paddingRight: 8,
+    maxWidth: 220,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  tradeCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  badgeName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#111827',
+    maxWidth: 110,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginLeft: 6,
+    marginRight: 3,
+  },
+  badgeStatus: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  badgeSpacer: {
+    height: 62,
+    width: 1,
+  },
   markerContainer: {
     width: 60,
     height: 75,

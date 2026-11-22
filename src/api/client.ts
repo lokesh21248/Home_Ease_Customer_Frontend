@@ -1394,6 +1394,41 @@ export interface DispatchTriggerResponse {
 }
 
 // ─── Live Tracking Service ────────────────────────────────────────────────────
+
+/** Response of GET /api/v1/tracking/{bookingId} (core). */
+export interface TrackingSnapshot {
+  bookingId: string;
+  bookingStatus: string | null;
+  phase: string;
+  live: boolean;
+  liveWindowSeconds: number;
+  lastUpdateAt: string | null;
+  lastUpdateAgeSeconds: number | null;
+  deviceGpsState: 'OK' | 'PERMISSION_DENIED' | 'GPS_DISABLED' | 'UNKNOWN';
+  workerLocation: {
+    lat: number;
+    lng: number;
+    heading: number | null;
+    speedMps: number | null;
+    accuracyM: number | null;
+    recordedAtEpochMs: number;
+    receivedAtEpochMs: number;
+  } | null;
+  destination: { lat: number; lng: number } | null;
+  straightLineDistanceMeters: number | null;
+  worker: {
+    name: string | null;
+    avatarUrl: string | null;
+    /** null when the partner has no reviews yet (never a default rating) */
+    rating: number | null;
+    ratingCount: number;
+    serviceCategory: string | null;
+    phone?: string | null;
+  } | null;
+  pinAvailable?: boolean;
+  pinLockedUntil?: string | null;
+  serverTime: string;
+}
 export const TRACKING_BASE_URL =
   process.env.EXPO_PUBLIC_TRACKING_API_URL || 'https://3-108-55-219.sslip.io/api/v1';
 export const TRACKING_WS_URL =
@@ -1555,6 +1590,29 @@ export const trackingApi = {
     }
     const data: TrackingRouteResponse = await res.json();
     return data.found === false ? null : data;
+  },
+
+  /**
+   * Authoritative tracking view (core): GET /api/v1/tracking/{bookingId}
+   * phase = BOOKING_CONFIRMED | PARTNER_ASSIGNED | PARTNER_EN_ROUTE | PARTNER_NEARBY | ARRIVED | SERVICE_STARTED |
+   *         SERVICE_COMPLETED | CANCELLED | LOCATION_UNAVAILABLE | GPS_PERMISSION_DENIED | TRACKING_INTERRUPTED.
+   * `live` is true only while the server has a fix newer than its live window. Returns null on any failure (the
+   * caller keeps its own state; nothing is invented).
+   */
+  getTrackingSnapshot: async (bookingId: string, signal?: AbortSignal): Promise<TrackingSnapshot | null> => {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetchWithTimeout(
+        `${TRACKING_BASE_URL}/tracking/${encodeURIComponent(bookingId)}`,
+        { headers, signal },
+        8000,
+      );
+      if (!res.ok) return null;
+      const data = (await res.json()) as TrackingSnapshot;
+      return data && typeof data.phase === 'string' ? data : null;
+    } catch {
+      return null;
+    }
   },
 
   /**

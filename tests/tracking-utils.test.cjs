@@ -26,6 +26,7 @@ const {
   formatDistance,
   formatDuration,
   isAcceptableLocationTimestamp,
+  isLocationStale,
   parseLocationTimestamp,
   shouldRecalculateRoute,
   shortestAngleDistance,
@@ -96,12 +97,33 @@ test('throttles route recalculation by movement and maximum route age', () => {
   assert.equal(shouldRecalculateRoute(previous, { lat: 91, lng: 0 }, 2000), false);
 });
 
-test('normalizes location timestamps and rejects stale or future updates', () => {
+test('normalizes location timestamps and rejects replayed / out-of-order updates', () => {
   assert.equal(parseLocationTimestamp(1700000000), 1700000000000);
   assert.equal(parseLocationTimestamp('not-a-date'), null);
   assert.equal(isAcceptableLocationTimestamp(2000, 1000, 2000), true);
-  assert.equal(isAcceptableLocationTimestamp(1000, 2000, 2000), false);
-  assert.equal(isAcceptableLocationTimestamp(62001, 0, 1000), false);
+  assert.equal(isAcceptableLocationTimestamp(1000, 2000, 2000), false);   // older: replay
+  assert.equal(isAcceptableLocationTimestamp(2000, 2000, 2000), false);   // duplicate
+  assert.equal(isAcceptableLocationTimestamp(Number.NaN, null), false);
+});
+
+test('clock skew between the two phones never freezes the partner marker', () => {
+  const customerNow = 1_800_000_000_000;
+  // partner phone 5 minutes FAST: frames used to be dropped as "future" (marker frozen)
+  const fast = customerNow + 5 * 60_000;
+  assert.equal(isAcceptableLocationTimestamp(fast, null, customerNow), true);
+  assert.equal(isAcceptableLocationTimestamp(fast + 3_000, fast, customerNow), true);
+  // partner phone 5 minutes SLOW: frames are still ordered correctly
+  const slow = customerNow - 5 * 60_000;
+  assert.equal(isAcceptableLocationTimestamp(slow + 3_000, slow, customerNow), true);
+});
+
+test('freshness uses this phone\'s receipt time, never the partner\'s device clock', () => {
+  const now = 1_800_000_000_000;
+  assert.equal(isLocationStale(null, now), true);                 // nothing received: not live
+  assert.equal(isLocationStale(now - 29_000, now), false);
+  assert.equal(isLocationStale(now - 30_000, now), false);
+  assert.equal(isLocationStale(now - 30_001, now), true);         // same 30 s live window as the server
+  assert.equal(isLocationStale(now - 10_000, now, 5_000), true);
 });
 
 test('handles shortest angular distance and 359 to 1 degree transition seamlessly', () => {

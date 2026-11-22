@@ -259,16 +259,28 @@ export default function TrackingScreen() {
     router.push('/(tabs)/notifications');
   };
 
+  /** Safety line from the build config (EXPO_PUBLIC_SUPPORT_PHONE). Never a placeholder; 112 is the national emergency number. */
+  const callSafetyLine = () => {
+    const support = process.env.EXPO_PUBLIC_SUPPORT_PHONE?.trim();
+    void Linking.openURL(`tel:${support || '112'}`);
+  };
+
   const handleEmergencySOS = () => {
+    const hasSupportLine = Boolean(process.env.EXPO_PUBLIC_SUPPORT_PHONE?.trim());
     Alert.alert(
-      'Emergency SOS & Safety Hotline',
-      'Need urgent help? Connect immediately with HomeEase 24/7 Safety Support or local emergency services.',
+      'Emergency SOS',
+      hasSupportLine
+        ? 'Need urgent help? Call HomeEase safety support, or 112 for police / ambulance.'
+        : 'Need urgent help? Call 112 for police / ambulance.',
       [
         { text: 'Cancel', style: 'cancel' },
+        ...(hasSupportLine
+          ? [{ text: 'Call 112', onPress: () => void Linking.openURL('tel:112') }]
+          : []),
         {
-          text: 'Call Safety Support',
-          style: 'destructive',
-          onPress: () => Linking.openURL('tel:1800123456'),
+          text: hasSupportLine ? 'Call Safety Support' : 'Call 112',
+          style: 'destructive' as const,
+          onPress: () => callSafetyLine(),
         },
       ]
     );
@@ -630,7 +642,7 @@ export default function TrackingScreen() {
 
             <Pressable
               style={styles.textHelpButton}
-              onPress={() => Linking.openURL('tel:1800123456')}
+              onPress={() => callSafetyLine()}
             >
               <Ionicons name="headset-outline" size={16} color="#64748B" />
               <Text style={styles.textHelpButtonText}>Need Help? Call 24/7 Support</Text>
@@ -694,7 +706,7 @@ export default function TrackingScreen() {
                 <View style={styles.ratingRow}>
                   <Ionicons name="star" size={13} color="#F59E0B" />
                   <Text style={styles.ratingText}>
-                    {booking.workerRating != null ? booking.workerRating.toFixed(1) : '5.0'} • Verified Pro
+                    {booking.workerRating != null ? booking.workerRating.toFixed(1) : 'New partner'} • Verified Pro
                   </Text>
                 </View>
                 <Text style={styles.completedPartnerRole}>
@@ -908,7 +920,7 @@ export default function TrackingScreen() {
                 <View style={styles.ratingRow}>
                   <Ionicons name="star" size={13} color="#F59E0B" />
                   <Text style={styles.ratingText}>
-                    {booking.workerRating != null ? booking.workerRating.toFixed(1) : '5.0'} • Verified Pro
+                    {booking.workerRating != null ? booking.workerRating.toFixed(1) : 'New partner'} • Verified Pro
                   </Text>
                 </View>
                 <Text style={styles.workerRole}>
@@ -1033,7 +1045,7 @@ export default function TrackingScreen() {
                 <View style={styles.ratingRow}>
                   <Ionicons name="star" size={13} color="#F59E0B" />
                   <Text style={styles.ratingText}>
-                    {booking.workerRating != null ? booking.workerRating.toFixed(1) : '5.0'} • Verified Pro
+                    {booking.workerRating != null ? booking.workerRating.toFixed(1) : 'New partner'} • Verified Pro
                   </Text>
                 </View>
                 <Text style={styles.workerRole}>
@@ -1345,7 +1357,7 @@ export default function TrackingScreen() {
                 <View style={styles.ratingRow}>
                   <Ionicons name="star" size={13} color="#F59E0B" />
                   <Text style={styles.ratingText}>
-                    {booking.workerRating != null ? booking.workerRating.toFixed(1) : '5.0'}  Verified Pro
+                    {booking.workerRating != null ? booking.workerRating.toFixed(1) : 'New partner'}  Verified Pro
                   </Text>
                 </View>
                 <Text style={styles.workerRole}>

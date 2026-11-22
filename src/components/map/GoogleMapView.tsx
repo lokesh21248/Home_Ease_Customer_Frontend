@@ -45,6 +45,7 @@ import {
   LatLngCoordinate,
 } from '../../services/coordinates';
 import { MovingWorker3DMarker } from './MovingWorker3DMarker';
+import { liveLabel } from '../../services/workerMarkerStyle';
 
 export interface Coordinates {
   latitude: number;
@@ -680,6 +681,9 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
                 }}
                 name={partnerName}
                 zIndex={999}
+                serviceCategory={serviceCategory}
+                isLive={Boolean(isLiveConnected && !isGpsStale)}
+                statusLabel={liveLabel(Boolean(isLiveConnected && !isGpsStale), lastUpdateTimestamp ?? null, Date.now())}
               />
             )}
 
