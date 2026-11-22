@@ -44,8 +44,8 @@ import {
   toGoogleMapCoordinates,
   LatLngCoordinate,
 } from '../../services/coordinates';
-import { MovingWorker3DMarker } from './MovingWorker3DMarker';
 import { liveLabel } from '../../services/workerMarkerStyle';
+import { MovingWorkerWoman3D } from './MovingWorkerWoman3D';
 
 export interface Coordinates {
   latitude: number;
@@ -363,13 +363,13 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
           const targetLat = isValidCoordinate(customerGpsLat ?? NaN, customerGpsLng ?? NaN)
             ? customerGpsLat!
             : isValidCoordinate(customerLat ?? NaN, customerLng ?? NaN)
-            ? customerLat!
-            : centerLat;
+              ? customerLat!
+              : centerLat;
           const targetLng = isValidCoordinate(customerGpsLat ?? NaN, customerGpsLng ?? NaN)
             ? customerGpsLng!
             : isValidCoordinate(customerLat ?? NaN, customerLng ?? NaN)
-            ? customerLng!
-            : centerLng;
+              ? customerLng!
+              : centerLng;
 
           mapRef.current?.animateToRegion(
             {
@@ -669,13 +669,15 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
             </>
           )}
 
-          {/* 3. 3D-Style HomeEase Worker-on-Scooter Moving Navigation Marker */}
+          {/* 3. Moving Worker Marker — real GPS coordinates, bearing rotation, trade icon */}
           {effHasPartnerLocation &&
-            isValidCoordinate(effPartnerLat ?? NaN, effPartnerLng ?? NaN) && (
-              <MovingWorker3DMarker
+            effPartnerLat != null &&
+            effPartnerLng != null &&
+            isValidCoordinate(effPartnerLat, effPartnerLng) && (
+              <MovingWorkerWoman3D
                 worker={{
-                  latitude: effPartnerLat!,
-                  longitude: effPartnerLng!,
+                  latitude: effPartnerLat,
+                  longitude: effPartnerLng,
                   heading: partnerBearing,
                   timestampMs: lastUpdateTimestamp || Date.now(),
                 }}
@@ -684,6 +686,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
                 serviceCategory={serviceCategory}
                 isLive={Boolean(isLiveConnected && !isGpsStale)}
                 statusLabel={liveLabel(Boolean(isLiveConnected && !isGpsStale), lastUpdateTimestamp ?? null, Date.now())}
+                isGpsStale={isGpsStale}
               />
             )}
 
