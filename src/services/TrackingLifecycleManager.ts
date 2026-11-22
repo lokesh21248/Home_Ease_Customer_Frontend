@@ -79,7 +79,13 @@ class TrackingLifecycleManager {
       return false;
     }
 
-    return normalized === 'ON_THE_WAY' || normalized === 'ACCEPTED' || normalized === 'CONFIRMED';
+    return (
+      normalized === 'ON_THE_WAY' ||
+      normalized === 'ACCEPTED' ||
+      normalized === 'CONFIRMED' ||
+      normalized === 'JOURNEY_STARTED' ||
+      normalized === 'PARTNER_EN_ROUTE'
+    );
   }
 
   /**

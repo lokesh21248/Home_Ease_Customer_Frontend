@@ -164,15 +164,22 @@ export default function TrackingScreen() {
   }, [booking?.status, servicePin, isFetchingPin, fetchServicePin]);
 
   // Booking lifecycle events (ARRIVED, SERVICE_STARTED, ...) arrive on the SINGLE socket owned by
-  // useLiveTracking. This screen used to open a second STOMP client on three topics and re-fetch the booking
-  // over HTTP on every GPS frame; location frames are no longer forwarded here, only lifecycle events.
+  // useLiveTracking. Reactive update: immediately reflect lifecycle changes in local state without delay.
   const handleBookingEvent = useCallback(
     (event: Record<string, any>) => {
       const eventStatus = event.status || event.type;
       if (eventStatus === 'ARRIVED' || eventStatus === 'WORKER_ARRIVED') {
+        setBooking((prev) => (prev ? { ...prev, status: 'ARRIVED' } : null));
         void fetchServicePin();
       } else if (eventStatus === 'IN_PROGRESS' || eventStatus === 'SERVICE_STARTED') {
+        setBooking((prev) => (prev ? { ...prev, status: 'IN_PROGRESS' } : null));
         setServicePin(null);
+      } else if (eventStatus === 'COMPLETED' || eventStatus === 'SERVICE_COMPLETED') {
+        setBooking((prev) => (prev ? { ...prev, status: 'COMPLETED' } : null));
+      } else if (eventStatus === 'CANCELLED' || eventStatus === 'BOOKING_CANCELLED') {
+        setBooking((prev) => (prev ? { ...prev, status: 'CANCELLED' } : null));
+      } else if (eventStatus === 'WORKER_ON_THE_WAY' || eventStatus === 'ON_THE_WAY') {
+        setBooking((prev) => (prev ? { ...prev, status: 'ON_THE_WAY' } : null));
       }
       void fetchBooking();
     },
@@ -360,9 +367,37 @@ export default function TrackingScreen() {
           onPress: async () => {
             try {
               await bookingApi.cancelBooking(id, 'Customer cancelled request from tracking screen');
+              setBooking((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      status: 'CANCELLED',
+                      cancellationReason: 'Customer cancelled request from tracking screen',
+                    }
+                  : null
+              );
               await fetchBooking();
             } catch (err: any) {
-              Alert.alert('Cancellation Error', err?.message || 'Could not cancel booking.');
+              const msg = err?.message || '';
+              if (
+                msg.includes('CANCELLED') ||
+                msg.includes('already') ||
+                msg.includes('CONCURRENT') ||
+                msg.includes('modified')
+              ) {
+                setBooking((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        status: 'CANCELLED',
+                        cancellationReason: 'Customer cancelled request from tracking screen',
+                      }
+                    : null
+                );
+                await fetchBooking();
+              } else {
+                Alert.alert('Cancellation Error', err?.message || 'Could not cancel booking.');
+              }
             }
           },
         },
@@ -1232,14 +1267,24 @@ export default function TrackingScreen() {
             <View style={styles.statusHeaderRow}>
               <View style={[styles.statusIndicatorDot, { backgroundColor: statusSummary.badgeColor }]} />
               <Text style={styles.statusCardTitle}>{statusSummary.title}</Text>
-              {isLiveConnected && (
+              {hasPartnerLocation && !isGpsStale && isLiveConnected ? (
                 <View style={styles.liveIndicatorBadge}>
                   <View style={styles.liveBlinkingDot} />
                   <Text style={styles.liveIndicatorText}>LIVE</Text>
                 </View>
-              )}
+              ) : isGpsStale && hasPartnerLocation ? (
+                <View style={[styles.liveIndicatorBadge, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
+                  <Ionicons name="time-outline" size={11} color="#D97706" style={{ marginRight: 3 }} />
+                  <Text style={[styles.liveIndicatorText, { color: '#B45309', fontSize: 9.5 }]}>GPS PAUSED</Text>
+                </View>
+              ) : null}
             </View>
             <Text style={styles.statusCardDesc}>{statusSummary.desc}</Text>
+            {hasPartnerLocation && lastUpdateTimestamp ? (
+              <Text style={styles.gpsSignalTimestampText}>
+                {`Signal received: ${new Date(lastUpdateTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`}
+              </Text>
+            ) : null}
 
             {/* WORKER_NOT_FOUND Action Buttons */}
             {booking?.status === 'WORKER_NOT_FOUND' && (
@@ -1700,6 +1745,12 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginTop: 3,
     lineHeight: 16,
+  },
+  gpsSignalTimestampText: {
+    fontFamily: Typography.fontFamily.medium,
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 4,
   },
 
   // Worker Not Found Actions
