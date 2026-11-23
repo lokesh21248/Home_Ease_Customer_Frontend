@@ -1603,7 +1603,9 @@ export const trackingApi = {
     try {
       const headers = await getAuthHeaders();
       const res = await fetchWithTimeout(
-        `${TRACKING_BASE_URL}/tracking/${encodeURIComponent(bookingId)}`,
+        // Core-owned endpoint via the non-v1 alias: today's production nginx sends /api/v1/tracking/{id} to the
+        // tracking service (404) but /api/... to the core; the updated nginx config routes both to the core.
+        `${TRACKING_BASE_URL.replace(/\/api\/v1\/?$/, '/api')}/tracking/${encodeURIComponent(bookingId)}`,
         { headers, signal },
         8000,
       );

@@ -45,6 +45,8 @@ import {
   LatLngCoordinate,
 } from '../../services/coordinates';
 import { liveLabel } from '../../services/workerMarkerStyle';
+import { MINIMAL_LIGHT_MAP_STYLE } from '../../constants/mapStyle';
+import { CustomerHomeMarker } from './CustomerHomeMarker';
 import { MovingWorkerWoman3D } from './MovingWorkerWoman3D';
 
 export interface Coordinates {
@@ -359,6 +361,8 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
       ref,
       () => ({
         recenterToCustomerGps: () => {
+          isUserInteractingRef.current = false;
+          if (userInteractionTimerRef.current) clearTimeout(userInteractionTimerRef.current);
           onRecenterPress?.();
           const targetLat = isValidCoordinate(customerGpsLat ?? NaN, customerGpsLng ?? NaN)
             ? customerGpsLat!
@@ -382,6 +386,8 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
           );
         },
         fitRouteBounds: () => {
+          isUserInteractingRef.current = false;
+          if (userInteractionTimerRef.current) clearTimeout(userInteractionTimerRef.current);
           const points: LatLngCoordinate[] = [];
           if (isValidCoordinate(effCustomerLat ?? NaN, effCustomerLng ?? NaN)) {
             points.push({ latitude: effCustomerLat!, longitude: effCustomerLng! });
@@ -543,13 +549,11 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
       fitPadding,
     ]);
 
-    // Follow behaviour ONLY when there is no road route to frame (routing unavailable). It pans - it never
-    // changes zoom or bearing - and only when the worker is leaving the visible area, so a customer who has
-    // zoomed or panned is not fought on every GPS ping. Manual gestures pause it for 12 s.
+    // Follow behaviour: smooth camera centering when worker moves toward viewport edge.
+    // Respects manual user interaction: paused for 12 s when user manually pans/gestures.
     useEffect(() => {
       if (!isMapReady || mode !== 'tracking') return;
       if (isUserInteractingRef.current) return;
-      if (hasRoute) return;
 
       const pLat = effPartnerLat;
       const pLng = effPartnerLng;
@@ -558,18 +562,24 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
       const region = currentRegionRef.current;
       if (
         region &&
-        Math.abs(pLat! - region.latitude) < region.latitudeDelta * 0.35 &&
-        Math.abs(pLng! - region.longitude) < region.longitudeDelta * 0.35
+        Math.abs(pLat! - region.latitude) < region.latitudeDelta * 0.28 &&
+        Math.abs(pLng! - region.longitude) < region.longitudeDelta * 0.28
       ) {
-        return; // still comfortably inside the viewport
+        return; // still comfortably inside viewport
       }
 
       const now = Date.now();
-      if (now - lastCameraFollowTimeRef.current < 6000) return;
+      if (now - lastCameraFollowTimeRef.current < 4500) return;
       lastCameraFollowTimeRef.current = now;
 
-      mapRef.current?.animateCamera({ center: { latitude: pLat!, longitude: pLng! } }, { duration: 700 });
-    }, [effPartnerLat, effPartnerLng, isMapReady, mode, hasRoute]);
+      mapRef.current?.animateCamera(
+        {
+          center: { latitude: pLat!, longitude: pLng! },
+          pitch: 16,
+        },
+        { duration: 750 }
+      );
+    }, [effPartnerLat, effPartnerLng, isMapReady, mode]);
 
     const handleMapReady = useCallback(() => {
       setIsMapReady(true);
@@ -605,6 +615,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
           style={StyleSheet.absoluteFill}
           provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
           initialRegion={initialRegion}
+          customMapStyle={MINIMAL_LIGHT_MAP_STYLE}
           onMapReady={handleMapReady}
           onPanDrag={handlePanDrag}
           onRegionChange={handleRegionChange}
@@ -615,33 +626,20 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
           showsScale={false}
           toolbarEnabled={false}
           rotateEnabled={true}
-          pitchEnabled={false}
+          pitchEnabled={true}
           loadingEnabled={false}
           mapType="standard"
           userInterfaceStyle="light"
         >
           {/* 1. Destination / Customer House Marker */}
           {isValidCoordinate(effCustomerLat ?? NaN, effCustomerLng ?? NaN) && (
-            <Marker
+            <CustomerHomeMarker
               coordinate={{ latitude: effCustomerLat!, longitude: effCustomerLng! }}
               title={customerTitle}
-              description={customerAddress}
-              anchor={{ x: 0.5, y: 1 }}
+              address={customerAddress}
+              label="Customer Destination"
               zIndex={30}
-              tracksViewChanges={false}
-            >
-              <View style={styles.destinationMarkerWrap}>
-                <View style={styles.destinationBadge}>
-                  <Text style={styles.destinationBadgeText} numberOfLines={1}>
-                    {customerTitle || 'Your Service Location'}
-                  </Text>
-                </View>
-                <View style={styles.destinationMarkerPin}>
-                  <Ionicons name="home" size={16} color="#FFFFFF" />
-                </View>
-                <View style={styles.markerTriangle} />
-              </View>
-            </Marker>
+            />
           )}
 
           {/* 2. Customer Real-time Device GPS Pulsing Dot */}

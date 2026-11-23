@@ -17,13 +17,13 @@ export type TrackingLifecycleState = 'CREATED' | 'ACTIVE' | 'ARRIVED' | 'STOPPED
 
 export interface TrackingLifecycleEvent {
   type:
-    | 'WORKER_ON_THE_WAY'
-    | 'WORKER_LOCATION_UPDATED'
-    | 'WORKER_ARRIVED'
-    | 'BOOKING_TRACKING_STOPPED'
-    | 'SERVICE_STARTED'
-    | 'SERVICE_COMPLETED'
-    | 'BOOKING_CANCELLED';
+  | 'WORKER_ON_THE_WAY'
+  | 'WORKER_LOCATION_UPDATED'
+  | 'WORKER_ARRIVED'
+  | 'BOOKING_TRACKING_STOPPED'
+  | 'SERVICE_STARTED'
+  | 'SERVICE_COMPLETED'
+  | 'BOOKING_CANCELLED';
   bookingId: string;
   trackingActive: boolean;
   state: TrackingLifecycleState;
@@ -34,7 +34,7 @@ export interface TrackingLifecycleEvent {
 
 type EventListener = (event: TrackingLifecycleEvent) => void;
 
-class TrackingLifecycleManager {
+export class TrackingLifecycleManager {
   private static instance: TrackingLifecycleManager;
 
   // Keyed by bookingId
@@ -42,7 +42,7 @@ class TrackingLifecycleManager {
   private listeners = new Map<string, Set<EventListener>>();
   private abortControllers = new Map<string, AbortController>();
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): TrackingLifecycleManager {
     if (!TrackingLifecycleManager.instance) {

@@ -40,6 +40,7 @@ import { useCustomerLocation } from '../../../src/hooks/useCustomerLocation';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../../src/constants/theme';
 import { isValidCoordinate } from '../../../src/services/coordinates';
 import { RatingModal, RadarSearchingView } from '../../../src/components/common';
+import { TrackingLifecycleManager } from '../../../src/services/TrackingLifecycleManager';
 
 const { width } = Dimensions.get('window');
 
@@ -167,23 +168,45 @@ export default function TrackingScreen() {
   // useLiveTracking. Reactive update: immediately reflect lifecycle changes in local state without delay.
   const handleBookingEvent = useCallback(
     (event: Record<string, any>) => {
-      const eventStatus = event.status || event.type;
-      if (eventStatus === 'ARRIVED' || eventStatus === 'WORKER_ARRIVED') {
+      const eventStatus = (event.status || event.reason || event.type || '').toUpperCase();
+      if (
+        eventStatus === 'ARRIVED' ||
+        eventStatus === 'WORKER_ARRIVED' ||
+        event.type === 'WORKER_ARRIVED'
+      ) {
+        if (id) TrackingLifecycleManager.getInstance().markArrived(id);
         setBooking((prev) => (prev ? { ...prev, status: 'ARRIVED' } : null));
         void fetchServicePin();
-      } else if (eventStatus === 'IN_PROGRESS' || eventStatus === 'SERVICE_STARTED') {
+      } else if (
+        eventStatus === 'IN_PROGRESS' ||
+        eventStatus === 'SERVICE_STARTED' ||
+        event.type === 'SERVICE_STARTED'
+      ) {
+        if (id) TrackingLifecycleManager.getInstance().stopTracking(id, 'IN_PROGRESS');
         setBooking((prev) => (prev ? { ...prev, status: 'IN_PROGRESS' } : null));
         setServicePin(null);
-      } else if (eventStatus === 'COMPLETED' || eventStatus === 'SERVICE_COMPLETED') {
+      } else if (
+        eventStatus === 'COMPLETED' ||
+        eventStatus === 'SERVICE_COMPLETED' ||
+        event.type === 'SERVICE_COMPLETED'
+      ) {
+        if (id) TrackingLifecycleManager.getInstance().stopTracking(id, 'COMPLETED');
         setBooking((prev) => (prev ? { ...prev, status: 'COMPLETED' } : null));
-      } else if (eventStatus === 'CANCELLED' || eventStatus === 'BOOKING_CANCELLED') {
+      } else if (
+        eventStatus === 'CANCELLED' ||
+        eventStatus === 'BOOKING_CANCELLED' ||
+        event.type === 'BOOKING_CANCELLED' ||
+        (event.type === 'BOOKING_TRACKING_STOPPED' && (eventStatus.includes('CANCEL') || event.status === 'CANCELLED'))
+      ) {
+        if (id) TrackingLifecycleManager.getInstance().stopTracking(id, 'CANCELLED');
         setBooking((prev) => (prev ? { ...prev, status: 'CANCELLED' } : null));
       } else if (eventStatus === 'WORKER_ON_THE_WAY' || eventStatus === 'ON_THE_WAY') {
+        if (id) TrackingLifecycleManager.getInstance().markTravelling(id);
         setBooking((prev) => (prev ? { ...prev, status: 'ON_THE_WAY' } : null));
       }
       void fetchBooking();
     },
-    [fetchBooking, fetchServicePin],
+    [id, fetchBooking, fetchServicePin],
   );
 
   useEffect(() => {
@@ -377,17 +400,22 @@ export default function TrackingScreen() {
           text: 'Yes, Cancel',
           style: 'destructive',
           onPress: async () => {
+            // Instantly stop client-side live tracking and abort any pending location/route polling
+            TrackingLifecycleManager.getInstance().stopTracking(id, 'CANCELLED');
+
+            // Optimistically update local booking state so the live map immediately unmounts
+            setBooking((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    status: 'CANCELLED',
+                    cancellationReason: 'Customer cancelled request from tracking screen',
+                  }
+                : null
+            );
+
             try {
               await bookingApi.cancelBooking(id, 'Customer cancelled request from tracking screen');
-              setBooking((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      status: 'CANCELLED',
-                      cancellationReason: 'Customer cancelled request from tracking screen',
-                    }
-                  : null
-              );
               await fetchBooking();
             } catch (err: any) {
               const msg = err?.message || '';
@@ -395,20 +423,16 @@ export default function TrackingScreen() {
                 msg.includes('CANCELLED') ||
                 msg.includes('already') ||
                 msg.includes('CONCURRENT') ||
-                msg.includes('modified')
+                msg.includes('modified') ||
+                msg.includes('unexpected row count') ||
+                msg.includes('version') ||
+                msg.includes('StaleObject')
               ) {
-                setBooking((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        status: 'CANCELLED',
-                        cancellationReason: 'Customer cancelled request from tracking screen',
-                      }
-                    : null
-                );
+                // Booking was successfully cancelled or state was modified concurrently
                 await fetchBooking();
               } else {
-                Alert.alert('Cancellation Error', err?.message || 'Could not cancel booking.');
+                Alert.alert('Cancellation Notice', 'Cancellation requested. Refreshing booking status...');
+                await fetchBooking();
               }
             }
           },
@@ -1288,6 +1312,16 @@ export default function TrackingScreen() {
                 <View style={[styles.liveIndicatorBadge, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
                   <Ionicons name="time-outline" size={11} color="#D97706" style={{ marginRight: 3 }} />
                   <Text style={[styles.liveIndicatorText, { color: '#B45309', fontSize: 9.5 }]}>GPS PAUSED</Text>
+                </View>
+              ) : isLiveConnected && !hasPartnerLocation ? (
+                <View style={[styles.liveIndicatorBadge, { backgroundColor: '#DBEAFE', borderColor: '#BFDBFE' }]}>
+                  <ActivityIndicator size="small" color="#2563EB" style={{ transform: [{ scale: 0.6 }], marginRight: 2 }} />
+                  <Text style={[styles.liveIndicatorText, { color: '#1D4ED8', fontSize: 9.5 }]}>UPDATING</Text>
+                </View>
+              ) : !isLiveConnected && !hasPartnerLocation ? (
+                <View style={[styles.liveIndicatorBadge, { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' }]}>
+                  <Ionicons name="cloud-offline-outline" size={11} color="#64748B" style={{ marginRight: 3 }} />
+                  <Text style={[styles.liveIndicatorText, { color: '#475569', fontSize: 9.5 }]}>OFFLINE</Text>
                 </View>
               ) : null}
             </View>

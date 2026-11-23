@@ -1,10 +1,10 @@
 /**
- * WorkerNavigationMarker — Re-exporting MovingWorker3DMarker for backward compatibility.
- * Replaces the legacy top-down blue disc/arrow with the realistic 3D scooter rider.
+ * WorkerNavigationMarker — Re-exporting MovingWorkerWoman3D for backward compatibility.
+ * Code-drawn realistic 3D-style walking female worker marker.
  */
 
 import React from 'react';
-import { MovingWorker3DMarker, WorkerGPS } from './MovingWorker3DMarker';
+import { MovingWorkerWoman3D, WorkerFix } from './MovingWorkerWoman3D';
 import { LatLngCoordinate } from '../../services/coordinates';
 
 export interface WorkerNavigationMarkerProps {
@@ -19,7 +19,6 @@ export interface WorkerNavigationMarkerProps {
 export const WorkerNavigationMarker: React.FC<WorkerNavigationMarkerProps> = ({
   coordinate,
   heading = 0,
-  name = 'Service Partner',
   zIndex = 999,
 }) => {
   const timestampRef = React.useRef(0);
@@ -27,7 +26,7 @@ export const WorkerNavigationMarker: React.FC<WorkerNavigationMarkerProps> = ({
     timestampRef.current = 1700000000000;
   }
 
-  const worker: WorkerGPS = React.useMemo(
+  const worker: WorkerFix = React.useMemo(
     () => ({
       latitude: coordinate.latitude,
       longitude: coordinate.longitude,
@@ -37,7 +36,7 @@ export const WorkerNavigationMarker: React.FC<WorkerNavigationMarkerProps> = ({
     [coordinate.latitude, coordinate.longitude, heading],
   );
 
-  return <MovingWorker3DMarker worker={worker} name={name} zIndex={zIndex} />;
+  return <MovingWorkerWoman3D worker={worker} zIndex={zIndex} />;
 };
 
 export default WorkerNavigationMarker;
