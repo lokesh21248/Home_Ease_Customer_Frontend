@@ -32,7 +32,7 @@ import {
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
   const { phone } = useLocalSearchParams<{ phone: string }>();
-  const { completeRegistration, bypassLogin } = useAuth();
+  const { completeRegistration } = useAuth();
 
   const [form, setForm] = useState({ fullName: '', email: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -59,11 +59,7 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       const name = form.fullName.trim() || 'HomeEase Customer';
-      try {
-        await completeRegistration(name, phone || '+919876543210', form.email.trim() || undefined);
-      } catch {
-        await bypassLogin(phone || '+919876543210');
-      }
+      await completeRegistration(name, phone || '', form.email.trim() || undefined);
       try {
         const perm = await requestLocationPermission();
         if (perm.granted) {
@@ -78,8 +74,7 @@ export default function RegisterScreen() {
       }
       router.replace('/(tabs)');
     } catch (e: any) {
-      await bypassLogin(phone || '+919876543210');
-      router.replace('/(tabs)');
+      setErrors((prev) => ({ ...prev, form: e?.message || 'Registration failed. Please try again.' }));
     } finally {
       setLoading(false);
     }
