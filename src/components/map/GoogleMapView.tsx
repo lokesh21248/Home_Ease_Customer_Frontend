@@ -47,7 +47,7 @@ import {
 import { liveLabel } from '../../services/workerMarkerStyle';
 import { MINIMAL_LIGHT_MAP_STYLE } from '../../constants/mapStyle';
 import { CustomerHomeMarker } from './CustomerHomeMarker';
-import { WorkerScooter3DMarker } from './WorkerScooter3DMarker';
+import { MovingWorkerWoman3D } from './MovingWorkerWoman3D';
 
 export interface Coordinates {
   latitude: number;
@@ -691,20 +691,28 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
             </>
           )}
 
-          {/* 3. Moving Worker Marker — 3D scooter with rider & floating callout */}
+          {/* 3. Moving Worker Marker — 3D code-drawn walking female partner */}
           {((effHasPartnerLocation && effPartnerLat != null && effPartnerLng != null) ||
             (mode === 'tracking' && polylineCoords.length > 0)) && (
-            <WorkerScooter3DMarker
+            <MovingWorkerWoman3D
               worker={{
-                latitude: effPartnerLat ?? polylineCoords[0].latitude,
-                longitude: effPartnerLng ?? polylineCoords[0].longitude,
+                latitude:
+                  effPartnerLat != null && isValidCoordinate(effPartnerLat, effPartnerLng ?? 0)
+                    ? effPartnerLat
+                    : polylineCoords[0].latitude,
+                longitude:
+                  effPartnerLng != null && isValidCoordinate(effPartnerLat ?? 0, effPartnerLng)
+                    ? effPartnerLng
+                    : polylineCoords[0].longitude,
                 heading: partnerBearing,
                 timestampMs: lastUpdateTimestamp || Date.now(),
               }}
               name={partnerName || 'Lokesh'}
-              distanceText={distanceText ? `${distanceText} away` : '2.8 km away'}
               zIndex={999}
+              serviceCategory={serviceCategory}
               isLive={Boolean(isLiveConnected && !isGpsStale)}
+              statusLabel={liveLabel(Boolean(isLiveConnected && !isGpsStale), lastUpdateTimestamp ?? null, Date.now())}
+              isGpsStale={isGpsStale}
             />
           )}
 
