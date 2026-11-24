@@ -53,7 +53,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test:tracking": "node --test tests/tracking-utils.test.cjs tests/route-geometry.test.cjs tests/worker-marker.test.cjs"
+    "test:tracking": "node --test tests/tracking-utils.test.cjs tests/route-geometry.test.cjs tests/worker-marker.test.cjs tests/two-phone-tracking-e2e.cjs"
   },
   "private": true
 }
