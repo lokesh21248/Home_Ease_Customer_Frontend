@@ -24,7 +24,7 @@ import {
   parseLocationTimestamp,
 } from '../services/trackingMath';
 import { isValidCoordinate, type LatLngCoordinate } from '../services/coordinates';
-import { computeRemaining, projectOntoRoute } from '../services/routeGeometry';
+import { computeRemaining, projectOntoRoute, remainingRoadPolyline } from '../services/routeGeometry';
 import {
   ROUTE_POLICY,
   backoffMs,
@@ -222,10 +222,11 @@ export function useLiveTracking({
       const longitude = payload.longitude ?? payload.lng;
       if (payload.found === false || !isValidCoordinate(latitude ?? NaN, longitude ?? NaN)) return;
 
-      const rawTimestamp = payload.timestamp ?? payload.updatedAt;
-      const parsedTimestamp = parseLocationTimestamp(rawTimestamp);
-      if (rawTimestamp !== undefined && parsedTimestamp === null) return;
-      const timestamp = parsedTimestamp ?? Date.now();
+      // Never manufacture a fresh location from an old or timestamp-less cached response.
+      // Server receipt time is acceptable only if the tracking backend actually provides it.
+      const rawTimestamp = payload.timestamp ?? payload.updatedAt ?? payload.serverTimestamp;
+      const timestamp = parseLocationTimestamp(rawTimestamp);
+      if (timestamp === null) return;
       // Out-of-order / replayed / future-dated frames never overwrite a newer position.
       if (!isAcceptableLocationTimestamp(timestamp, lastUpdateRef.current)) return;
 
@@ -576,23 +577,23 @@ export function useLiveTracking({
     refreshLocationRef.current = refreshLocation;
   }, [refreshLocation]);
 
-  // ───────────────────────── 7-second periodic location & route sync ─────────────────────────
-  // Continuous 7-second location & route synchronization loop requested by user.
-  // Runs continuously while tracking is active (7000ms cadence) to guarantee fresh worker GPS
-  // and prompt route updates even if WebSocket frames are idle or delayed.
+  // WebSocket is primary. REST supplies initial position and recovers missing/stale
+  // broadcasts (a connected STOMP socket does NOT prove that GPS fixes are arriving).
+  // This avoids a duplicate HTTP request for every valid real-time GPS frame.
   useEffect(() => {
     if (!trackingActive) return;
-    // Immediate refresh on mount or status change
     void refreshLocation();
     const interval = Math.max(3000, pollIntervalMs);
     const timer = setInterval(() => {
-      void refreshLocation();
+      const hasRecentFrame = lastReceivedRef.current !== null &&
+        !isLocationStale(lastReceivedRef.current, Date.now(), Math.max(interval * 2, 15_000));
+      if (!socketConnected || !hasRecentFrame) void refreshLocation();
     }, interval);
     return () => {
       clearInterval(timer);
       pollAbortRef.current?.abort();
     };
-  }, [trackingActive, refreshLocation, pollIntervalMs]);
+  }, [trackingActive, socketConnected, refreshLocation, pollIntervalMs]);
 
   // Re-evaluate the route on a 7-second timer (updates ETA and route while moving or stationary).
   useEffect(() => {
@@ -635,10 +636,16 @@ export function useLiveTracking({
 
   // ───────────────────────── derived, display-only values ─────────────────────────
 
-  const routeCoordinates = useMemo<LatLngCoordinate[]>(
-    () => (trackingActive && route ? route.polylineCoordinates : []),
-    [trackingActive, route],
-  );
+  // Keep the complete provider route for ETA/off-route analysis. Only the drawn
+  // blue line is trimmed as fresh accepted worker GPS moves along the road.
+  const routeCoordinates = useMemo<LatLngCoordinate[]>(() => {
+    if (!trackingActive || !route) return [];
+    if (!partnerPos || isGpsStale) return route.polylineCoordinates;
+    return remainingRoadPolyline(
+      route.polylineCoordinates,
+      { latitude: partnerPos.lat, longitude: partnerPos.lng },
+    );
+  }, [trackingActive, route, partnerPos, isGpsStale]);
 
   const remaining = useMemo(() => {
     if (!trackingActive || !route || !partnerPos) return null;
