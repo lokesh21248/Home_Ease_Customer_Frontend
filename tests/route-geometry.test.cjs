@@ -17,7 +17,7 @@ require.extensions['.ts'] = (module, filename) => {
 };
 
 const { decodePolyline, decodePolylineStrict, toGeoJsonCoordinates } = require('../src/services/coordinates.ts');
-const { projectOntoRoute, computeRemaining, collectBoundsPoints, sliceRemainingRoute } = require('../src/services/routeGeometry.ts');
+const { projectOntoRoute, computeRemaining, collectBoundsPoints, sliceRemainingRoute, remainingRoadPolyline } = require('../src/services/routeGeometry.ts');
 const {
   ROUTE_POLICY,
   decideRouteFetch,
@@ -188,6 +188,29 @@ test('sliceRemainingRoute avoids premature segment jumps on looped or self-cross
   const sliced = sliceRemainingRoute(LOOP_ROAD, workerAtStart, 0);
   // Must choose segment 0, NOT segment 4
   assert.equal(sliced.progress.segmentIndex, 0);
+});
+
+test('blue Google route shortens while preserving the real remaining road vertices', () => {
+  const worker = { latitude: LAT, longitude: 78.5 + 0.5 * dLng };
+  const route = remainingRoadPolyline(ROAD, worker);
+  assert.equal(route.length, 3);
+  approx(route[0].longitude, worker.longitude, 1e-9);
+  assert.deepEqual(route.slice(1), ROAD.slice(1));
+  assert.deepEqual(route.at(-1), ROAD.at(-1));
+});
+
+test('route progress at a known vertex removes travelled segments', () => {
+  assert.deepEqual(remainingRoadPolyline(ROAD, ROAD[1]), ROAD.slice(1));
+});
+
+test('off-route GPS cannot invent a shortcut to the saved home destination', () => {
+  const off = { latitude: LAT + 100 / M_PER_DEG_LAT, longitude: ROAD[1].longitude };
+  assert.deepEqual(remainingRoadPolyline(ROAD, off), ROAD);
+  assert.deepEqual(remainingRoadPolyline(ROAD, null), ROAD);
+});
+
+test('displayed road is empty at actual route end', () => {
+  assert.deepEqual(remainingRoadPolyline(ROAD, ROAD[2]), []);
 });
 
 // ───────────────────────── route refresh policy (cost control) ─────────────────────────

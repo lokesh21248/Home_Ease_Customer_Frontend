@@ -24,6 +24,8 @@ export interface RouteProgress {
   remainingMeters: number;
   /** Index of the polyline segment the point projects onto. */
   segmentIndex: number;
+  /** Fraction of the worker's projection along this road segment. */
+  segmentFraction: number;
 }
 
 /**
@@ -115,7 +117,35 @@ export function projectOntoRoute(
     totalMeters: total,
     remainingMeters: Math.max(0, total - along),
     segmentIndex: best.bestIndex,
+    segmentFraction: best.bestT,
   };
+}
+
+/**
+ * Display only the untravelled portion of the real provider road geometry.
+ * The unsnapped worker GPS remains authoritative for marker position; this
+ * projects only the drawn route start and does not fabricate any new road.
+ * Off-route fixes retain the existing road until the provider reroutes it.
+ */
+export function remainingRoadPolyline(
+  path: LatLngCoordinate[],
+  worker: LatLngCoordinate | null,
+  maxSnapMeters = 35,
+): LatLngCoordinate[] {
+  if (!worker || !Array.isArray(path) || path.length < 2) return path;
+  const p = projectOntoRoute(worker, path);
+  if (!p || p.distanceFromRouteMeters > maxSnapMeters) return path;
+  if (p.remainingMeters < 2) return [];
+
+  const start = path[p.segmentIndex];
+  const end = path[p.segmentIndex + 1];
+  if (!start || !end) return path;
+  const rest = path.slice(p.segmentIndex + 1);
+  if (p.segmentFraction >= 0.999999) return rest;
+  return [{
+    latitude: start.latitude + (end.latitude - start.latitude) * p.segmentFraction,
+    longitude: start.longitude + (end.longitude - start.longitude) * p.segmentFraction,
+  }, ...rest];
 }
 
 export interface RouteSnapshot {

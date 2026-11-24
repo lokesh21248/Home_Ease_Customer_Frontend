@@ -607,10 +607,11 @@ export function useLiveTracking({
   }, [refreshLocation]);
 
   // ───────────────────────── periodic location & route sync ─────────────────────────
-  // WebSocket is primary. REST polling is fallback / recovery when socket is silent or disconnected.
+  // WebSocket is primary. REST supplies the initial position and recovers missing/stale broadcasts:
+  // a connected STOMP socket does NOT prove that GPS fixes are arriving, so the poll also fires when the
+  // socket has been silent. This avoids a duplicate HTTP request for every valid real-time GPS frame.
   useEffect(() => {
     if (!trackingActive) return;
-    // Immediate refresh on mount or status change
     void refreshLocation();
     const interval = Math.max(3000, pollIntervalMs);
     const timer = setInterval(() => {
@@ -668,9 +669,12 @@ export function useLiveTracking({
 
   // ───────────────────────── derived, display-only values ─────────────────────────
 
+  // Keep the complete provider route for ETA/off-route analysis. Only the drawn blue line is trimmed as
+  // fresh accepted worker GPS moves along the road. The sticky segment index stops a looped or
+  // self-crossing road from snapping the worker onto a later stretch.
   const routeCoordinates = useMemo<LatLngCoordinate[]>(() => {
     if (!trackingActive || !route) return [];
-    if (!partnerPos) return route.polylineCoordinates;
+    if (!partnerPos || isGpsStale) return route.polylineCoordinates;
     const sliced = sliceRemainingRoute(
       route.polylineCoordinates,
       { latitude: partnerPos.lat, longitude: partnerPos.lng },
@@ -681,7 +685,7 @@ export function useLiveTracking({
       lastSegmentIndexRef.current = sliced.progress.segmentIndex;
     }
     return sliced.remainingPolyline;
-  }, [trackingActive, route, partnerPos]);
+  }, [trackingActive, route, partnerPos, isGpsStale]);
 
   const remaining = useMemo(() => {
     if (!trackingActive || !route || !partnerPos) return null;

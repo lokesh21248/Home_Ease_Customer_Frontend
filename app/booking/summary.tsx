@@ -21,7 +21,7 @@ import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { bookingApi, userApi, BookingRequest, generateUUID, DEMO_USER_ID } from '../../src/api/client';
+import { bookingApi, userApi, BookingRequest, generateUUID } from '../../src/api/client';
 import { useCart, PaymentMethod } from '../../src/context/CartContext';
 import { useUserLocation } from '../../src/hooks/useUserLocation';
 import { useWallet } from '../../src/hooks/useWallet';
@@ -67,7 +67,7 @@ function BillRow({ label, value, highlight }: { label: string; value: string; hi
 
 export default function SummaryScreen() {
   const insets = useSafeAreaInsets();
-  const { isAuthenticated, bypassLogin } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { cart, setCoupon, setPaymentMethod, setAddress, clearCart } = useCart();
   const userLoc = useUserLocation();
   const { balance, deductMoney } = useWallet();
@@ -245,11 +245,11 @@ export default function SummaryScreen() {
     if (bookingLoading || isSubmittingRef.current) return;
 
     if (!isAuthenticated) {
-      try {
-        await bypassLogin();
-      } catch (loginErr) {
-        console.warn('[BookingSummary] Auto-auth bypass fallback:', loginErr);
-      }
+      Alert.alert('Sign in required', 'Please verify your phone number before placing a booking.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign in', onPress: () => router.push('/(auth)/phone') },
+      ]);
+      return;
     }
 
     if (cart.items.length === 0) {
@@ -333,21 +333,11 @@ export default function SummaryScreen() {
         }
       }
 
-      if (!address) {
-        // Fallback default address in serviceable area so direct booking proceeds smoothly
-        address = {
-          id: 'addr-default-gachibowli',
-          userId: DEMO_USER_ID,
-          title: 'DLF Cyber City',
-          addressLine: 'DLF Cyber City, Phase 2, Gachibowli',
-          city: 'Hyderabad',
-          state: 'Telangana',
-          pincode: '500032',
-          lat: 17.4485,
-          lng: 78.3748,
-          isDefault: true,
-        };
-        setAddress(address);
+      if (!address || !isValidCoordinate(address.lat, address.lng)) {
+        Alert.alert('Select your service address',
+          'Choose the actual doorstep location on the map. A default city location could send the worker to the wrong home.',
+          [{ text: 'Choose location', onPress: () => router.push('/location/select') }]);
+        return;
       }
 
       // Check coordinates validity
@@ -561,19 +551,10 @@ export default function SummaryScreen() {
         throw new Error('Booking could not be confirmed. Please check your bookings.');
       }
     } catch (e: any) {
-      if ((e?.status === 401 || e?.status === 403) && !isRetryRef.current) {
-        isRetryRef.current = true;
-        isSubmittingRef.current = false;
-        setBookingLoading(false);
-        try {
-          await bypassLogin();
-          // Silently retry booking submission with the freshly synchronized token
-          return await handlePlaceBooking();
-        } catch (retryErr) {
-          console.warn('[BookingSummary] Session refresh and retry notice:', retryErr);
-        } finally {
-          isRetryRef.current = false;
-        }
+      if (e?.status === 401 || e?.status === 403) {
+        Alert.alert('Session expired', 'Please sign in again to continue your booking.',
+          [{ text: 'Sign in', onPress: () => router.push('/(auth)/phone') }]);
+        return;
       }
       console.error('[BookingSummary] Booking submission error:', e);
       const isTimeout =
