@@ -24,7 +24,7 @@ import {
   parseLocationTimestamp,
 } from '../services/trackingMath';
 import { isValidCoordinate, type LatLngCoordinate } from '../services/coordinates';
-import { computeRemaining, projectOntoRoute } from '../services/routeGeometry';
+import { computeRemaining, projectOntoRoute, remainingRoadPolyline } from '../services/routeGeometry';
 import {
   ROUTE_POLICY,
   backoffMs,
@@ -222,10 +222,12 @@ export function useLiveTracking({
       const longitude = payload.longitude ?? payload.lng;
       if (payload.found === false || !isValidCoordinate(latitude ?? NaN, longitude ?? NaN)) return;
 
-      const rawTimestamp = payload.timestamp ?? payload.updatedAt;
-      const parsedTimestamp = parseLocationTimestamp(rawTimestamp);
-      if (rawTimestamp !== undefined && parsedTimestamp === null) return;
-      const timestamp = parsedTimestamp ?? Date.now();
+      // A cached/unversioned position is not a new GPS fix. Never manufacture its device timestamp from
+      // this customer's clock: that can make an old location appear LIVE and move the worker backward.
+      // The tracking microservice supplies timestamp (device) and serverTimestamp (receipt).
+      const rawTimestamp = payload.timestamp ?? payload.updatedAt ?? payload.serverTimestamp;
+      const timestamp = parseLocationTimestamp(rawTimestamp);
+      if (timestamp === null) return;
       // Out-of-order / replayed / future-dated frames never overwrite a newer position.
       if (!isAcceptableLocationTimestamp(timestamp, lastUpdateRef.current)) return;
 
@@ -624,10 +626,16 @@ export function useLiveTracking({
 
   // ───────────────────────── derived, display-only values ─────────────────────────
 
-  const routeCoordinates = useMemo<LatLngCoordinate[]>(
-    () => (trackingActive && route ? route.polylineCoordinates : []),
-    [trackingActive, route],
-  );
+  // EatClub-style trip progress: trim ONLY the displayed blue road line as the real GPS moves.
+  // Keep the full provider route for ETA/rerouting calculations; the worker marker stays on actual GPS.
+  const routeCoordinates = useMemo<LatLngCoordinate[]>(() => {
+    if (!trackingActive || !route) return [];
+    if (!partnerPos || isGpsStale) return route.polylineCoordinates;
+    return remainingRoadPolyline(
+      route.polylineCoordinates,
+      { latitude: partnerPos.lat, longitude: partnerPos.lng },
+    );
+  }, [trackingActive, route, partnerPos, isGpsStale]);
 
   const remaining = useMemo(() => {
     if (!trackingActive || !route || !partnerPos) return null;
