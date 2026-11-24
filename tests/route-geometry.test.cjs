@@ -17,7 +17,7 @@ require.extensions['.ts'] = (module, filename) => {
 };
 
 const { decodePolyline, decodePolylineStrict, toGeoJsonCoordinates } = require('../src/services/coordinates.ts');
-const { projectOntoRoute, computeRemaining, collectBoundsPoints } = require('../src/services/routeGeometry.ts');
+const { projectOntoRoute, computeRemaining, collectBoundsPoints, remainingRoadPolyline } = require('../src/services/routeGeometry.ts');
 const {
   ROUTE_POLICY,
   decideRouteFetch,
@@ -146,6 +146,32 @@ test('viewport bounds include worker, destination and every route vertex', () =>
   const d = { latitude: 17.5, longitude: 78.54 };
   assert.equal(collectBoundsPoints(w, d, ROAD).length, 5);
   assert.equal(collectBoundsPoints(null, d, []).length, 1);
+});
+
+
+test('remaining displayed road begins at the projected worker and follows real vertices to home', () => {
+  const worker = { latitude: LAT, longitude: 78.5 + 0.5 * dLng };
+  const remaining = remainingRoadPolyline(ROAD, worker);
+  assert.equal(remaining.length, 3, 'on-road projection + both remaining road vertices');
+  approx(remaining[0].latitude, worker.latitude, 1e-9);
+  approx(remaining[0].longitude, worker.longitude, 1e-9);
+  assert.deepEqual(remaining.slice(1), ROAD.slice(1));
+  assert.deepEqual(remaining.at(-1), ROAD.at(-1), 'must still end at the saved destination');
+  assert.deepEqual(ROAD[0], {latitude: LAT, longitude: 78.5}, 'original Google route must not be mutated');
+});
+
+test('remaining road removes the already travelled segment at an exact route vertex', () => {
+  assert.deepEqual(remainingRoadPolyline(ROAD, ROAD[1]), ROAD.slice(1));
+});
+
+test('remaining road never pretends an off-route worker is on the current road', () => {
+  const offRouteWorker = { latitude: LAT + 100 / M_PER_DEG_LAT, longitude: ROAD[1].longitude };
+  assert.deepEqual(remainingRoadPolyline(ROAD, offRouteWorker), ROAD);
+  assert.deepEqual(remainingRoadPolyline(ROAD, null), ROAD);
+});
+
+test('remaining road disappears only when the worker reaches the end of the route', () => {
+  assert.deepEqual(remainingRoadPolyline(ROAD, ROAD[2]), []);
 });
 
 // ───────────────────────── route refresh policy (cost control) ─────────────────────────
