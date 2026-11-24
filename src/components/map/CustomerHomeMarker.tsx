@@ -25,6 +25,7 @@ export interface CustomerHomeMarkerProps {
   title?: string;
   address?: string;
   label?: string;
+  showLabel?: boolean;
   zIndex?: number;
 }
 
@@ -34,6 +35,7 @@ export const CustomerHomeMarker: React.FC<CustomerHomeMarkerProps> = memo(
     title,
     address,
     label = 'Customer Destination',
+    showLabel = false,
     zIndex = 30,
   }) {
     if (!isValidCoordinate(coordinate.latitude, coordinate.longitude)) {
@@ -48,31 +50,33 @@ export const CustomerHomeMarker: React.FC<CustomerHomeMarkerProps> = memo(
         }}
         title={title || label}
         description={address}
-        anchor={{ x: 0.5, y: 1.0 }}
+        anchor={{ x: 0.5, y: 0.85 }}
         centerOffset={{ x: 0, y: 0 }}
         zIndex={zIndex}
         tracksViewChanges={false}
         identifier="homeease-customer-destination"
       >
         <View collapsable={false} style={styles.container}>
-          {/* Top Label Pill */}
-          <View style={styles.labelPill}>
-            <View style={styles.labelDot} />
-            <Text style={styles.labelText} numberOfLines={1}>
-              {label}
-            </Text>
-          </View>
+          {/* Optional Top Label Pill */}
+          {showLabel && (
+            <View style={styles.labelPill}>
+              <View style={styles.labelDot} />
+              <Text style={styles.labelText} numberOfLines={1}>
+                {label}
+              </Text>
+            </View>
+          )}
 
           {/* Circular Pin Head */}
           <View style={styles.pinCircle}>
-            <Ionicons name="home" size={17} color="#FFFFFF" />
+            <Ionicons name="home" size={20} color="#FFFFFF" />
           </View>
 
-          {/* Ground-Pointing Needle Tip */}
-          <View style={styles.pinTip} />
-
-          {/* Ground Contact Shadow */}
-          <View style={styles.groundShadow} />
+          {/* Ground Contact Glow Ring & Dot */}
+          <View style={styles.groundGlowWrap}>
+            <View style={styles.groundHaloRing} />
+            <View style={styles.groundDot} />
+          </View>
         </View>
       </Marker>
     );
@@ -127,6 +131,28 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 4,
     elevation: 5,
+  },
+  groundGlowWrap: {
+    width: 28,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  groundHaloRing: {
+    position: 'absolute',
+    width: 24,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: 'rgba(37, 99, 235, 0.20)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(37, 99, 235, 0.40)',
+  },
+  groundDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#2563EB',
   },
   pinTip: {
     width: 0,

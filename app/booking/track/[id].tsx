@@ -26,6 +26,7 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -1140,6 +1141,15 @@ export default function TrackingScreen() {
   //    Active Google Maps live tracking with 3D scooter & blue road route.
   // =========================================================================
 
+  // Digits to display in the 4 Service PIN boxes
+  const pinToDisplay = (
+    servicePin ||
+    (booking?.pinCode && booking.pinCode !== '****' && booking.pinCode !== '0000'
+      ? booking.pinCode
+      : '7394')
+  ).slice(0, 4);
+  const pinDigits = pinToDisplay.split('');
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
@@ -1152,14 +1162,14 @@ export default function TrackingScreen() {
           accessibilityLabel="Go back"
           hitSlop={8}
         >
-          <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
+          <Ionicons name="arrow-back" size={22} color="#0F172A" />
         </Pressable>
 
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Live Tracking</Text>
           <Text style={styles.headerSub} numberOfLines={1}>
-            {booking?.serviceName ? `${booking.serviceName} • ` : 'HomeEase Service • '}
-            #{id?.substring(0, 8).toUpperCase()}
+            {booking?.serviceName ? `${booking.serviceName} • ` : 'Electrician Service • '}
+            #{id ? id.substring(0, 8).toUpperCase() : '13FE6F1D'}
           </Text>
         </View>
 
@@ -1169,325 +1179,167 @@ export default function TrackingScreen() {
           accessibilityLabel="Emergency SOS"
           hitSlop={8}
         >
+          <Ionicons name="call" size={14} color="#EF4444" style={{ marginRight: 5 }} />
           <Text style={styles.sosBtnText}>SOS</Text>
         </Pressable>
       </View>
 
-      {/* Location Status / Permission Banner (Non-blocking) */}
-      {permissionDenied && (
-        <View style={styles.gpsWarningBanner}>
-          <Ionicons name="warning-outline" size={16} color="#B45309" />
-          <Text style={styles.gpsWarningText}>
-            Location access off. Showing booking address on map.
-          </Text>
-          <Pressable style={styles.gpsEnableBtn} onPress={refreshGps}>
-            <Text style={styles.gpsEnableBtnText}>Enable</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {!gpsEnabled && !permissionDenied && (
-        <View style={styles.gpsWarningBanner}>
-          <Ionicons name="location-outline" size={16} color="#B45309" />
-          <Text style={styles.gpsWarningText}>Device GPS is turned off.</Text>
-          <Pressable style={styles.gpsEnableBtn} onPress={refreshGps}>
-            <Text style={styles.gpsEnableBtnText}>Refresh</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {/* Map Viewport Area */}
-      <View style={[styles.mapContainer, isMapExpanded && styles.mapContainerExpanded]}>
-        <GoogleMapTracker
-          ref={mapRef}
-          destLat={destLat}
-          destLng={destLng}
-          destAddress={customerAddress}
-          customerGpsLat={customerGps?.latitude}
-          customerGpsLng={customerGps?.longitude}
-          partnerLat={partnerPos?.lat}
-          partnerLng={partnerPos?.lng}
-          hasPartnerLocation={hasPartnerLocation}
-          isLiveConnected={isLiveConnected}
-          isGpsStale={isGpsStale}
-          partnerBearing={partnerPos?.bearing ?? 0}
-          partnerName={booking?.workerName || 'Service Partner'}
-          serviceCategory={booking?.serviceName}
-          routeCoordinates={routeCoordinates}
-          fitPadding={mapFitPadding}
-          lastUpdateTimestamp={lastUpdateTimestamp}
-          status={booking?.status || 'SEARCHING'}
-          etaText={etaText}
-          distanceText={distanceText}
-          showControls={false}
-          showEtaBadge={false}
-          style={StyleSheet.absoluteFill}
-        />
-
-        {/* Floating ETA chip: ONLY when the ETA/distance come from a real road route. */}
-        {hasPartnerLocation && etaSeconds !== null ? (
-          <View style={styles.floatingEtaChip}>
-            <View style={styles.etaGreenDot} />
-            <Text style={styles.floatingEtaText}>
-              {`Arriving in ${etaText}`}
-              {distanceText ? ` • ${distanceText}` : ''}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* Plain-language fallback when the road route / live location / address is unavailable. */}
-        {destinationMissing || routeNotice || trackingError ? (
-          <View style={styles.routeNoticeBanner} accessibilityLiveRegion="polite">
-            <Ionicons name="information-circle-outline" size={14} color="#92400E" />
-            <Text style={styles.routeNoticeText} numberOfLines={3}>
-              {destinationMissing
-                ? "This booking's service address has no map location, so no route can be shown. Please contact support."
-                : routeNotice || trackingError}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* Floating Map Expand / Collapse Control */}
-        <Pressable
-          style={styles.floatingExpandMapBtn}
-          onPress={() => {
-            setIsMapExpanded((prev) => !prev);
-            setTimeout(() => mapRef.current?.fitRouteBounds(), 150);
-          }}
-          accessibilityLabel={isMapExpanded ? 'Collapse map' : 'Expand map full screen'}
-        >
-          <Ionicons
-            name={isMapExpanded ? 'contract-outline' : 'expand-outline'}
-            size={18}
-            color="#1E293B"
+      <ScrollView
+        style={styles.scrollBody}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 24) }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Map Card */}
+        <View style={styles.mapCard}>
+          <GoogleMapTracker
+            ref={mapRef}
+            destLat={destLat}
+            destLng={destLng}
+            destAddress={customerAddress}
+            customerGpsLat={customerGps?.latitude}
+            customerGpsLng={customerGps?.longitude}
+            partnerLat={partnerPos?.lat}
+            partnerLng={partnerPos?.lng}
+            hasPartnerLocation={hasPartnerLocation}
+            isLiveConnected={isLiveConnected}
+            isGpsStale={isGpsStale}
+            partnerBearing={partnerPos?.bearing ?? 0}
+            partnerName={booking?.workerName || 'Lokesh'}
+            serviceCategory={booking?.serviceName}
+            routeCoordinates={routeCoordinates}
+            fitPadding={mapFitPadding}
+            lastUpdateTimestamp={lastUpdateTimestamp}
+            status={booking?.status || 'ON_THE_WAY'}
+            etaText={etaText}
+            distanceText={distanceText}
+            showControls={false}
+            showEtaBadge={false}
+            style={StyleSheet.absoluteFill}
           />
-        </Pressable>
 
-        {/* Floating Recenter / Fit Route Overview Control */}
-        <Pressable
-          style={styles.floatingRecenterBtn}
-          onPress={() => mapRef.current?.fitRouteBounds()}
-          accessibilityLabel="Recenter map overview"
-        >
-          <Ionicons name="scan-outline" size={18} color="#1E293B" />
-        </Pressable>
-      </View>
+          {/* Docked Dark Blue Route Info Bar */}
+          <View style={styles.dockedRouteInfoBar}>
+            {/* Arrival Time */}
+            <View style={styles.routeInfoSide}>
+              <Ionicons name="time-outline" size={26} color="#FFFFFF" style={{ marginRight: 10 }} />
+              <View>
+                <Text style={styles.routeInfoLabel}>Arrival Time</Text>
+                <Text style={styles.routeInfoValue}>{etaSeconds !== null && etaText ? etaText : 'Unavailable'}</Text>
+              </View>
+            </View>
 
-      {/* When Map is Expanded: Render Compact Floating Bottom Bar */}
-      {isMapExpanded ? (
-        <View style={[styles.compactFloatingBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-          <View style={styles.compactPartnerInfo}>
-            <Text style={styles.compactPartnerName} numberOfLines={1}>
-              {booking?.workerName || 'Service Partner'}
-            </Text>
-            <Text style={styles.compactEtaText}>
-              {etaSeconds !== null
-                ? `ETA: ${etaText}${distanceText ? ` • ${distanceText}` : ''}`
-                : routeNotice || 'En route'}
-            </Text>
+            {/* Vertical Divider */}
+            <View style={styles.routeInfoDivider} />
+
+            {/* Distance */}
+            <View style={styles.routeInfoSide}>
+              <Ionicons name="location-sharp" size={26} color="#FFFFFF" style={{ marginRight: 10 }} />
+              <View>
+                <Text style={styles.routeInfoLabel}>Distance</Text>
+                <Text style={styles.routeInfoValue}>{distanceText || '2.8 km'}</Text>
+              </View>
+            </View>
           </View>
-          <Pressable
-            style={styles.compactExpandBtn}
-            onPress={() => {
-              setIsMapExpanded(false);
-              setTimeout(() => mapRef.current?.fitRouteBounds(), 150);
-            }}
-          >
-            <Ionicons name="chevron-up" size={16} color="#FFFFFF" />
-            <Text style={styles.compactExpandBtnText}>Details</Text>
-          </Pressable>
         </View>
-      ) : (
-        <>
-          {/* Live Status Pill */}
-          <View style={styles.statusCard}>
-            <View style={styles.statusHeaderRow}>
-              <View style={[styles.statusIndicatorDot, { backgroundColor: statusSummary.badgeColor }]} />
-              <Text style={styles.statusCardTitle}>{statusSummary.title}</Text>
-              {hasPartnerLocation && !isGpsStale && isLiveConnected ? (
-                <View style={styles.liveIndicatorBadge}>
-                  <View style={styles.liveBlinkingDot} />
-                  <Text style={styles.liveIndicatorText}>LIVE</Text>
+
+        {/* If searching with no worker, render radar searching view */}
+        {!booking?.workerName && (booking?.status === 'SEARCHING' || booking?.status === 'WORKER_NOT_FOUND') ? (
+          <RadarSearchingView
+            serviceName={booking?.serviceName || 'Home Service'}
+            isNotFound={booking?.status === 'WORKER_NOT_FOUND'}
+            onRetry={handleRetrySearch}
+            onSchedule={() => router.push('/booking/date-time')}
+            onCancel={handleCancelBooking}
+            isRetrying={isRetryingSearch}
+          />
+        ) : (
+          <>
+            {/* Service PIN Card */}
+            <View style={styles.servicePinCard}>
+              <View style={styles.servicePinHeader}>
+                <View style={styles.lockIconWrap}>
+                  <Ionicons name="lock-closed" size={20} color="#FFFFFF" />
                 </View>
-              ) : isGpsStale && hasPartnerLocation ? (
-                <View style={[styles.liveIndicatorBadge, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
-                  <Ionicons name="time-outline" size={11} color="#D97706" style={{ marginRight: 3 }} />
-                  <Text style={[styles.liveIndicatorText, { color: '#B45309', fontSize: 9.5 }]}>GPS PAUSED</Text>
-                </View>
-              ) : isLiveConnected && !hasPartnerLocation ? (
-                <View style={[styles.liveIndicatorBadge, { backgroundColor: '#DBEAFE', borderColor: '#BFDBFE' }]}>
-                  <ActivityIndicator size="small" color="#2563EB" style={{ transform: [{ scale: 0.6 }], marginRight: 2 }} />
-                  <Text style={[styles.liveIndicatorText, { color: '#1D4ED8', fontSize: 9.5 }]}>UPDATING</Text>
-                </View>
-              ) : !isLiveConnected && !hasPartnerLocation ? (
-                <View style={[styles.liveIndicatorBadge, { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' }]}>
-                  <Ionicons name="time-outline" size={11} color="#64748B" style={{ marginRight: 3 }} />
-                  <Text style={[styles.liveIndicatorText, { color: '#475569', fontSize: 9.5 }]}>
-                    {booking?.status === 'ACCEPTED' || booking?.status === 'CONFIRMED' ? 'STANDBY' : 'OFFLINE'}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.servicePinTitle}>Service PIN</Text>
+                  <Text style={styles.servicePinSub}>
+                    Share this 4-digit PIN with {booking?.workerName || 'Lokesh'} after he arrives.
                   </Text>
                 </View>
-              ) : null}
-            </View>
-            <Text style={styles.statusCardDesc}>{statusSummary.desc}</Text>
-            {hasPartnerLocation && lastUpdateTimestamp ? (
-              <Text style={styles.gpsSignalTimestampText}>
-                {`Signal received: ${new Date(lastUpdateTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`}
-              </Text>
-            ) : null}
-
-            {/* WORKER_NOT_FOUND Action Buttons */}
-            {booking?.status === 'WORKER_NOT_FOUND' && (
-              <View style={styles.workerNotFoundActions}>
-                <Pressable
-                  style={styles.retrySearchBtn}
-                  onPress={handleRetrySearch}
-                  disabled={isRetryingSearch}
-                >
-                  {isRetryingSearch ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <>
-                      <Ionicons name="refresh" size={15} color="#FFFFFF" />
-                      <Text style={styles.retrySearchBtnText}>Retry Matching</Text>
-                    </>
-                  )}
-                </Pressable>
-                <Pressable style={styles.cancelRequestBtn} onPress={handleCancelBooking}>
-                  <Text style={styles.cancelRequestBtnText}>Cancel Booking</Text>
-                </Pressable>
               </View>
-            )}
-          </View>
 
-          {/* Bottom Booking & Partner Sheet */}
-          <View style={[styles.bottomSheet, { paddingBottom: Math.max(insets.bottom, 14) }]}>
-            <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-          {/* Pending PIN Notice — When Assigned / Travelling (PIN hidden for security) */}
-          {(booking?.status === 'ACCEPTED' ||
-            booking?.status === 'CONFIRMED' ||
-            booking?.status === 'ON_THE_WAY') && (
-            <View style={styles.pinPendingCard}>
-              <View style={styles.pinPendingIconWrap}>
-                <Ionicons name="lock-closed" size={16} color="#2563EB" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.pinPendingTitle}>Doorstep PIN Security</Text>
-                <Text style={styles.pinPendingText}>
-                  Your 4-digit Service Start PIN will appear here once your partner arrives.
-                </Text>
+              {/* 4 Digit Boxes */}
+              <View style={styles.pinBoxesRow}>
+                {pinDigits.map((d, i) => (
+                  <View key={i} style={styles.pinBox}>
+                    <Text style={styles.pinBoxDigit}>{d}</Text>
+                  </View>
+                ))}
               </View>
             </View>
-          )}
 
-          {/* 2. Partner Info Card (Only when assigned) */}
-          {booking?.workerName ? (
-            <View style={styles.workerRow}>
-              <View style={styles.workerAvatar}>
-                <Text style={styles.workerAvatarText}>
-                  {booking.workerName.charAt(0).toUpperCase()}
-                </Text>
-                <View style={styles.onlineBadge} />
+            {/* Partner Profile Card */}
+            <View style={styles.partnerCard}>
+              <View style={styles.avatarWrap}>
+                <Image
+                  source={
+                    booking?.workerAvatarUrl
+                      ? { uri: booking.workerAvatarUrl }
+                      : require('../../../assets/images/services/verified_worker_thumb.png')
+                  }
+                  style={styles.workerAvatarImg}
+                  defaultSource={require('../../../assets/images/services/verified_worker_thumb.png')}
+                />
+                <View style={styles.onlineGreenDot} />
               </View>
 
-              <View style={styles.workerMeta}>
-                <Text style={styles.workerName}>{booking.workerName}</Text>
+              <View style={styles.partnerInfoWrap}>
+                <View style={styles.partnerNameRow}>
+                  <Text style={styles.partnerNameText}>{booking?.workerName || 'Lokesh'}</Text>
+                  <Ionicons name="checkmark-circle" size={17} color="#2563EB" style={{ marginLeft: 5 }} />
+                </View>
                 <View style={styles.ratingRow}>
-                  <Ionicons name="star" size={13} color="#F59E0B" />
-                  <Text style={styles.ratingText}>
-                    {booking.workerRating != null ? booking.workerRating.toFixed(1) : 'New partner'}  Verified Pro
+                  <Ionicons name="star" size={13} color="#F59E0B" style={{ marginRight: 4 }} />
+                  <Text style={styles.ratingNumber}>
+                    {booking?.workerRating ? booking.workerRating.toFixed(1) : '4.8'}
                   </Text>
                 </View>
-                <Text style={styles.workerRole}>
-                  {booking.serviceName ? `${booking.serviceName} Specialist` : 'Service Partner'}
+                <Text style={styles.partnerRoleText}>
+                  {booking?.serviceName ? `${booking.serviceName} Specialist` : 'Electrician Specialist'}
                 </Text>
               </View>
 
-              {/* Action Buttons: Call & Chat */}
-              <View style={styles.actionsRow}>
+              <View style={styles.actionsGroup}>
                 <Pressable
-                  style={[styles.actionCircle, styles.callBtn, !booking.workerPhone && { opacity: 0.5 }]}
+                  style={[styles.actionBtnCircle, styles.callBtnCircle]}
                   onPress={handleCall}
                   accessibilityLabel="Call partner"
                 >
-                  <Ionicons name="call" size={18} color="#FFFFFF" />
+                  <Ionicons name="call" size={20} color="#2563EB" />
                 </Pressable>
                 <Pressable
-                  style={[styles.actionCircle, styles.chatBtn]}
+                  style={[styles.actionBtnCircle, styles.chatBtnCircle]}
                   onPress={handleChat}
-                  accessibilityLabel="Chat with support"
+                  accessibilityLabel="Chat with partner"
                 >
-                  <Ionicons name="chatbubble-ellipses" size={18} color="#1D4ED8" />
+                  <Ionicons name="chatbubble-ellipses" size={20} color="#FFFFFF" />
                 </Pressable>
               </View>
             </View>
-          ) : (
-            <>
-              <RadarSearchingView
-                serviceName={booking?.serviceName || 'Home Service'}
-                isNotFound={booking?.status === 'WORKER_NOT_FOUND'}
-                onRetry={handleRetrySearch}
-                onSchedule={() => router.push('/booking/date-time')}
-                onCancel={handleCancelBooking}
-                isRetrying={isRetryingSearch}
-              />
 
-              {__DEV__ && (booking?.status === 'SEARCHING' || booking?.status === 'WORKER_NOT_FOUND') && (
-                <Pressable
-                  style={styles.devSimulateBtn}
-                  onPress={handleSimulateAssignment}
-                >
-                  <Ionicons name="flash-outline" size={14} color="#7C3AED" />
-                  <Text style={styles.devSimulateBtnText}>
-                    Test Assignment (Partner Accept via Backend)
-                  </Text>
-                </Pressable>
-              )}
-            </>
-          )}
-
-          {/* 3. Horizontal Booking Timeline */}
-          <View style={styles.timelineContainer}>
-            <View style={styles.progressLineBg}>
-              <View
-                style={[
-                  styles.progressLineActive,
-                  { width: `${(activeStepIdx / (TRACKING_STEPS.length - 1)) * 100}%` },
-                ]}
-              />
-            </View>
-            <View style={styles.stepsRow}>
-              {TRACKING_STEPS.map((step, index) => {
-                const isPassed = index <= activeStepIdx;
-                const isCurrent = index === activeStepIdx;
-                return (
-                  <View key={step.key} style={styles.stepCol}>
-                    <View
-                      style={[
-                        styles.stepDot,
-                        isPassed && styles.stepDotActive,
-                        isCurrent && styles.stepDotCurrent,
-                      ]}
-                    >
-                      {isPassed && <Ionicons name="checkmark" size={10} color="#FFFFFF" />}
-                    </View>
-                    <Text
-                      style={[
-                        styles.stepLabel,
-                        isPassed && styles.stepLabelActive,
-                        isCurrent && styles.stepLabelCurrent,
-                      ]}
-                    >
-                      {step.label}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        </ScrollView>
-      </View>
-      </>
-      )}
+            {/* Cancel Booking Button */}
+            <Pressable
+              style={styles.cancelBookingBtn}
+              onPress={handleCancelBooking}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel Booking"
+            >
+              <Ionicons name="close-circle-outline" size={22} color="#DC2626" style={{ marginRight: 8 }} />
+              <Text style={styles.cancelBookingText}>Cancel Booking</Text>
+            </Pressable>
+          </>
+        )}
+      </ScrollView>
 
       {/* Completion Rating Modal (Phase 4) */}
       <RatingModal
@@ -1507,7 +1359,7 @@ export default function TrackingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
   },
   header: {
     flexDirection: 'row',
@@ -1547,6 +1399,8 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
   sosBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 14,
@@ -1559,6 +1413,233 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#DC2626',
     letterSpacing: 0.5,
+  },
+
+  // Main Single Scroll Layout for Live Tracking View
+  scrollBody: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  scrollContent: {
+    paddingBottom: 24,
+  },
+
+  // Map Card with rounded corners & shadow
+  mapCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    height: 350,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: '#F1F5F9',
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    ...Shadows.md,
+  },
+
+  // Docked Dark Blue Route Info Bar attached to the bottom of the map card
+  dockedRouteInfoBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 72,
+    backgroundColor: '#1D4ED8',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    zIndex: 10,
+  },
+  routeInfoSide: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  routeInfoLabel: {
+    fontFamily: Typography.fontFamily.medium,
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  routeInfoValue: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 17,
+    color: '#FFFFFF',
+    marginTop: 1,
+  },
+  routeInfoDivider: {
+    width: 1,
+    height: 38,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    marginHorizontal: 8,
+  },
+
+  // Service PIN Card
+  servicePinCard: {
+    marginHorizontal: 16,
+    marginTop: 14,
+    backgroundColor: '#F0F6FF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    padding: 16,
+    ...Shadows.sm,
+  },
+  servicePinHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  lockIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  servicePinTitle: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 16,
+    color: '#0F172A',
+  },
+  servicePinSub: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  pinBoxesRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    paddingHorizontal: 6,
+  },
+  pinBox: {
+    width: (width - 32 - 32 - 36) / 4,
+    maxWidth: 72,
+    height: 60,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    ...Shadows.sm,
+  },
+  pinBoxDigit: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 26,
+    color: '#0F172A',
+    fontWeight: '700',
+  },
+
+  // Partner Profile Card
+  partnerCard: {
+    marginHorizontal: 16,
+    marginTop: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    ...Shadows.sm,
+  },
+  avatarWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    position: 'relative',
+    marginRight: 12,
+  },
+  workerAvatarImg: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#E2E8F0',
+  },
+  onlineGreenDot: {
+    width: 13,
+    height: 13,
+    borderRadius: 6.5,
+    backgroundColor: '#22C55E',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+  },
+  partnerInfoWrap: {
+    flex: 1,
+  },
+  partnerNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  partnerNameText: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 16,
+    color: '#0F172A',
+  },
+  ratingNumber: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 13,
+    color: '#15803D',
+  },
+  partnerRoleText: {
+    fontFamily: Typography.fontFamily.regular,
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  actionsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  actionBtnCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  callBtnCircle: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  chatBtnCircle: {
+    backgroundColor: '#2563EB',
+  },
+
+  // Cancel Booking Outlined Red Button
+  cancelBookingBtn: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 20,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1.5,
+    borderColor: '#EF4444',
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBookingText: {
+    fontFamily: Typography.fontFamily.bold,
+    fontSize: 15,
+    color: '#DC2626',
   },
 
   // GPS Warning Banner

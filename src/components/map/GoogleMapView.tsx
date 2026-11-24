@@ -47,7 +47,7 @@ import {
 import { liveLabel } from '../../services/workerMarkerStyle';
 import { MINIMAL_LIGHT_MAP_STYLE } from '../../constants/mapStyle';
 import { CustomerHomeMarker } from './CustomerHomeMarker';
-import { MovingWorkerWoman3D } from './MovingWorkerWoman3D';
+import { WorkerScooter3DMarker } from './WorkerScooter3DMarker';
 
 export interface Coordinates {
   latitude: number;
@@ -288,6 +288,30 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
       }
       return toGoogleMapCoordinates(routeCoordinates as [number, number][], coordinateFormat);
     }, [routeCoordinates, coordinateFormat]);
+
+    // Directional chevron positions along the blue road polyline
+    const chevronMarkers = useMemo(() => {
+      if (polylineCoords.length < 3) return [];
+      const chevrons: { coordinate: LatLngCoordinate; heading: number }[] = [];
+      const step = Math.max(2, Math.floor(polylineCoords.length / 4));
+      for (let i = step; i < polylineCoords.length - 1; i += step) {
+        const p1 = polylineCoords[i];
+        const p2 = polylineCoords[i + 1];
+        if (p1 && p2 && isValidCoordinate(p1.latitude, p1.longitude) && isValidCoordinate(p2.latitude, p2.longitude)) {
+          const latDiff = p2.latitude - p1.latitude;
+          const lngDiff = p2.longitude - p1.longitude;
+          const heading = (Math.atan2(lngDiff, latDiff) * 180) / Math.PI;
+          chevrons.push({
+            coordinate: {
+              latitude: (p1.latitude + p2.latitude) / 2,
+              longitude: (p1.longitude + p2.longitude) / 2,
+            },
+            heading,
+          });
+        }
+      }
+      return chevrons;
+    }, [polylineCoords]);
 
     // Handle pin animations when user drags map
     const handleRegionChange = useCallback(() => {
@@ -667,26 +691,22 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
             </>
           )}
 
-          {/* 3. Moving Worker Marker — real GPS coordinates, bearing rotation, trade icon */}
-          {effHasPartnerLocation &&
-            effPartnerLat != null &&
-            effPartnerLng != null &&
-            isValidCoordinate(effPartnerLat, effPartnerLng) && (
-              <MovingWorkerWoman3D
-                worker={{
-                  latitude: effPartnerLat,
-                  longitude: effPartnerLng,
-                  heading: partnerBearing,
-                  timestampMs: lastUpdateTimestamp || Date.now(),
-                }}
-                name={partnerName}
-                zIndex={999}
-                serviceCategory={serviceCategory}
-                isLive={Boolean(isLiveConnected && !isGpsStale)}
-                statusLabel={liveLabel(Boolean(isLiveConnected && !isGpsStale), lastUpdateTimestamp ?? null, Date.now())}
-                isGpsStale={isGpsStale}
-              />
-            )}
+          {/* 3. Moving Worker Marker — 3D scooter with rider & floating callout */}
+          {((effHasPartnerLocation && effPartnerLat != null && effPartnerLng != null) ||
+            (mode === 'tracking' && polylineCoords.length > 0)) && (
+            <WorkerScooter3DMarker
+              worker={{
+                latitude: effPartnerLat ?? polylineCoords[0].latitude,
+                longitude: effPartnerLng ?? polylineCoords[0].longitude,
+                heading: partnerBearing,
+                timestampMs: lastUpdateTimestamp || Date.now(),
+              }}
+              name={partnerName || 'Lokesh'}
+              distanceText={distanceText ? `${distanceText} away` : '2.8 km away'}
+              zIndex={999}
+              isLive={Boolean(isLiveConnected && !isGpsStale)}
+            />
+          )}
 
           {/* 4. Turn-by-Turn Road Route Polyline (High-fidelity Google Road Route) */}
           {polylineCoords.length >= 2 && (
@@ -694,7 +714,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
               {/* Outer route casing / shadow for road contrast */}
               <Polyline
                 coordinates={polylineCoords}
-                strokeColor="rgba(30, 64, 175, 0.35)"
+                strokeColor="rgba(30, 64, 175, 0.25)"
                 strokeWidth={9}
                 lineCap="round"
                 lineJoin="round"
@@ -709,6 +729,22 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
                 lineJoin="round"
                 zIndex={21}
               />
+              {/* Directional Chevron Markers along route */}
+              {chevronMarkers.map((ch, idx) => (
+                <Marker
+                  key={`chv-${idx}`}
+                  coordinate={ch.coordinate}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  flat={true}
+                  rotation={ch.heading}
+                  tracksViewChanges={false}
+                  zIndex={22}
+                >
+                  <View style={styles.chevronCircle}>
+                    <Ionicons name="chevron-forward" size={10} color="#FFFFFF" />
+                  </View>
+                </Marker>
+              ))}
             </>
           )}
         </MapView>
@@ -935,6 +971,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3,
     zIndex: 2,
+  },
+  chevronCircle: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#2563EB',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
   },
 
   /* Fixed Center Pin for Address Picker */
