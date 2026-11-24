@@ -18,13 +18,11 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../src/constants/theme';
 
-import { useAuth } from '../../src/context/AuthContext';
 
 const { width, height } = Dimensions.get('window');
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
-  const { bypassLogin } = useAuth();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
 
@@ -44,8 +42,8 @@ export default function WelcomeScreen() {
     ]).start();
   }, []);
 
-  const handleDirectLogin = async () => {
-    await bypassLogin();
+  const handleDirectLogin = () => {
+    // Guest users can browse services; booking/tracking requires a real customer session.
     router.replace('/(tabs)');
   };
 
@@ -85,7 +83,7 @@ export default function WelcomeScreen() {
           onPress={handleDirectLogin}
           activeOpacity={0.85}
         >
-          <Text style={styles.getStartedText}>Get Started (Direct Login)</Text>
+          <Text style={styles.getStartedText}>Explore HomeEase</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
