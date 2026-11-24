@@ -36,7 +36,7 @@ const RESEND_SECONDS = 30;
 export default function OtpScreen() {
   const insets = useSafeAreaInsets();
   const { phone } = useLocalSearchParams<{ phone: string }>();
-  const { verifyOtp, sendOtp, bypassLogin } = useAuth();
+  const { verifyOtp, sendOtp } = useAuth();
 
   const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const [loading, setLoading] = useState(false);
@@ -85,26 +85,22 @@ export default function OtpScreen() {
   };
 
   const handleVerify = async (code?: string) => {
+    const entered = code || otp.join('');
+    if (entered.length !== OTP_LENGTH || !phone) {
+      setError('Enter the verification code sent to your phone.');
+      return;
+    }
     setLoading(true);
     try {
-      // Direct Login bypass: provisions demo customer session immediately
-      await bypassLogin(phone || '+919876543210');
-      // Optional background location check
-      try {
-        const perm = await requestLocationPermission();
-        if (perm.granted) {
-          const coords = await getCurrentLocation();
-          if (coords) {
-            const rev = await reverseGeocodeLocation(coords);
-            await saveSelectedLocation({ coordinates: coords, address: rev });
-          }
-        }
-      } catch (locErr) {
-        console.warn('[OtpScreen] Location detection error:', locErr);
+      const result = await verifyOtp(phone, entered);
+      if (result.isNewUser) {
+        router.replace({ pathname: '/(auth)/register', params: { phone } });
+      } else {
+        router.replace('/(tabs)');
       }
-      router.replace('/(tabs)');
     } catch (e: any) {
-      router.replace('/(tabs)');
+      setError(e?.message || 'Invalid or expired OTP. Try again.');
+      shake();
     } finally {
       setLoading(false);
     }
