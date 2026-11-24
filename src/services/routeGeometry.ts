@@ -24,6 +24,8 @@ export interface RouteProgress {
   remainingMeters: number;
   /** Index of the polyline segment the point projects onto. */
   segmentIndex: number;
+  /** Fraction (0 to 1) traveled along that segment, used to trim the visible road route. */
+  segmentFraction: number;
 }
 
 /**
@@ -84,7 +86,44 @@ export function projectOntoRoute(point: LatLngCoordinate, path: LatLngCoordinate
     totalMeters: total,
     remainingMeters: Math.max(0, total - along),
     segmentIndex: bestIndex,
+    segmentFraction: bestT,
   };
+}
+
+/**
+ * Draw only the road that remains between the live worker and the fixed customer destination.
+ *
+ * The route itself comes from Google Routes; this function NEVER invents a straight line.
+ * When the GPS fix is near the route, start the drawn line at its nearest point ON that road,
+ * then retain the exact original route vertices through the destination. The worker marker
+ * continues using the real (unsnapped) GPS coordinate.
+ *
+ * When GPS is too far from the known road, keep the original route while the separate
+ * off-route logic requests a replacement. A fresh reroute is the only way to know which
+ * road the worker has actually taken.
+ */
+export function remainingRoadPolyline(
+  path: LatLngCoordinate[],
+  worker: LatLngCoordinate | null,
+  maxSnapMeters = 35,
+): LatLngCoordinate[] {
+  if (!worker || !Array.isArray(path) || path.length < 2) return path;
+  const progress = projectOntoRoute(worker, path);
+  if (!progress || progress.distanceFromRouteMeters > maxSnapMeters) return path;
+  if (progress.remainingMeters < 2) return [];
+
+  const start = path[progress.segmentIndex];
+  const end = path[progress.segmentIndex + 1];
+  if (!start || !end) return path;
+  const t = progress.segmentFraction;
+  const rest = path.slice(progress.segmentIndex + 1);
+  if (t >= 0.999999) return rest;
+
+  const onRoad: LatLngCoordinate = {
+    latitude: start.latitude + (end.latitude - start.latitude) * t,
+    longitude: start.longitude + (end.longitude - start.longitude) * t,
+  };
+  return [onRoad, ...rest];
 }
 
 export interface RouteSnapshot {
