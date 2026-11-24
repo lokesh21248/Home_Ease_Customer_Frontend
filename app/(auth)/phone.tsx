@@ -61,7 +61,7 @@ export default function PhoneScreen() {
     if (!validate()) return;
     setLoading(true);
     try {
-      const fullPhone = `${COUNTRY_CODE}${phone.replace(/\\D/g, '')}`;
+      const fullPhone = `${COUNTRY_CODE}${phone.replace(/\D/g, '')}`;
       await sendOtp(fullPhone);
       router.push({ pathname: '/(auth)/otp', params: { phone: fullPhone } });
     } catch (e: any) {
