@@ -70,7 +70,7 @@ export function useLiveTracking({
   bookingId,
   status,
   enabled = true,
-  pollIntervalMs = 10_000,
+  pollIntervalMs = 7_000,
   onBookingEvent,
 }: UseLiveTrackingProps) {
   const [partnerPos, setPartnerPos] = useState<PartnerCoordinate | null>(null);
@@ -256,6 +256,12 @@ export function useLiveTracking({
       setHasPartnerLocation(true);
       setLastUpdateTimestamp(receivedAt);
       setIsGpsStale(false);
+
+      // Fresh worker fix clears any prior location-unavailable failure backoff so INITIAL route fetch runs immediately
+      if (!policyRef.current.hasRoute) {
+        policyRef.current.retryNotBefore = null;
+        failuresRef.current = 0;
+      }
 
       // Off-route detection against the current road polyline (no network involved).
       const currentRoute = routeRef.current;
@@ -570,24 +576,29 @@ export function useLiveTracking({
     refreshLocationRef.current = refreshLocation;
   }, [refreshLocation]);
 
+  // ───────────────────────── 7-second periodic location & route sync ─────────────────────────
+  // Continuous 7-second location & route synchronization loop requested by user.
+  // Runs continuously while tracking is active (7000ms cadence) to guarantee fresh worker GPS
+  // and prompt route updates even if WebSocket frames are idle or delayed.
   useEffect(() => {
     if (!trackingActive) return;
-    // One snapshot on activation (screen reopened / status just became travel) ...
+    // Immediate refresh on mount or status change
     void refreshLocation();
-    // ... then HTTP polling ONLY while the socket is down. With a live socket there is zero polling.
-    if (socketConnected) return;
-    const timer = setInterval(() => void refreshLocation(), Math.max(5000, pollIntervalMs));
+    const interval = Math.max(3000, pollIntervalMs);
+    const timer = setInterval(() => {
+      void refreshLocation();
+    }, interval);
     return () => {
       clearInterval(timer);
       pollAbortRef.current?.abort();
     };
-  }, [trackingActive, socketConnected, refreshLocation, pollIntervalMs]);
+  }, [trackingActive, refreshLocation, pollIntervalMs]);
 
-  // Re-evaluate the route on a slow timer too (a stationary worker still needs a periodic ETA refresh).
+  // Re-evaluate the route on a 7-second timer (updates ETA and route while moving or stationary).
   useEffect(() => {
     if (!trackingActive) return;
     evaluateRoute();
-    const timer = setInterval(evaluateRoute, 5000);
+    const timer = setInterval(evaluateRoute, 7000);
     return () => clearInterval(timer);
   }, [trackingActive, evaluateRoute]);
 

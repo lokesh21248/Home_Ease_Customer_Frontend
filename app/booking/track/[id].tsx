@@ -264,6 +264,7 @@ export default function TrackingScreen() {
     bookingId: id,
     status: booking?.status,
     enabled: trackingEnabled,
+    pollIntervalMs: 7000,
     onBookingEvent: handleBookingEvent,
   });
 
@@ -1320,8 +1321,10 @@ export default function TrackingScreen() {
                 </View>
               ) : !isLiveConnected && !hasPartnerLocation ? (
                 <View style={[styles.liveIndicatorBadge, { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' }]}>
-                  <Ionicons name="cloud-offline-outline" size={11} color="#64748B" style={{ marginRight: 3 }} />
-                  <Text style={[styles.liveIndicatorText, { color: '#475569', fontSize: 9.5 }]}>OFFLINE</Text>
+                  <Ionicons name="time-outline" size={11} color="#64748B" style={{ marginRight: 3 }} />
+                  <Text style={[styles.liveIndicatorText, { color: '#475569', fontSize: 9.5 }]}>
+                    {booking?.status === 'ACCEPTED' || booking?.status === 'CONFIRMED' ? 'STANDBY' : 'OFFLINE'}
+                  </Text>
                 </View>
               ) : null}
             </View>
