@@ -81,6 +81,8 @@ export function useLiveTracking({
   const [route, setRoute] = useState<BookingRoute | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeFailure, setRouteFailure] = useState<RouteFailure | null>(null);
+  const routeFailureRef = useRef<RouteFailure | null>(null);
+  routeFailureRef.current = routeFailure;
   const [trackingEnded, setTrackingEnded] = useState(false);
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState<number | null>(null);
   const [isGpsStale, setIsGpsStale] = useState(false);
@@ -276,10 +278,11 @@ export function useLiveTracking({
       // Promptly retry an initial route only when failure was due to missing worker location.
       // Do NOT clear retry backoff for auth, rate-limit, or configuration errors.
       if (!policyRef.current.hasRoute) {
+        const currentFailure = routeFailureRef.current;
         const canRetryNow =
-          !routeFailure ||
-          routeFailure.code === 'WORKER_LOCATION_UNAVAILABLE' ||
-          routeFailure.code === 'WORKER_LOCATION_STALE';
+          !currentFailure ||
+          currentFailure.code === 'WORKER_LOCATION_UNAVAILABLE' ||
+          currentFailure.code === 'WORKER_LOCATION_STALE';
         if (canRetryNow) {
           policyRef.current.retryNotBefore = null;
           failuresRef.current = 0;
