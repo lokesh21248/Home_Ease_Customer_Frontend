@@ -185,4 +185,5 @@ test('useLiveTracking stores routeFailure in ref for fresh callback checks', () 
     'utf8',
   );
   assert.equal(hookSource.includes('routeFailureRef'), true, 'must use routeFailureRef to avoid stale closure');
+  assert.equal(hookSource.includes('previousWorkerIdRef'), true, 'must clear stale partner marker/route on worker reassignment');
 });

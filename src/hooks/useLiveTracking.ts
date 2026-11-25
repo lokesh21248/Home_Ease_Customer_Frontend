@@ -48,6 +48,7 @@ type ConnectionStatus = 'CONNECTING' | 'CONNECTED' | 'DISCONNECTED' | 'AUTH_ERRO
 interface UseLiveTrackingProps {
   bookingId?: string;
   status?: string;
+  workerId?: string | null;
   /** Booking has an assigned worker and is in a travel status. */
   enabled?: boolean;
   /** HTTP fallback poll interval, used ONLY while the WebSocket is disconnected. */
@@ -69,6 +70,7 @@ const isTerminalForTravel = (s?: string) =>
 export function useLiveTracking({
   bookingId,
   status,
+  workerId,
   enabled = true,
   pollIntervalMs = 7_000,
   onBookingEvent,
@@ -335,6 +337,49 @@ export function useLiveTracking({
     setIsGpsStale(false);
     setTrackingError(null);
   }, [bookingId, cancelRouteWork]);
+
+  // Reset stale partner coordinates & polyline if the booking returns to SEARCHING or is reassigned.
+  useEffect(() => {
+    if (!bookingId) return;
+    if (status === 'SEARCHING' || status === 'WORKER_NOT_FOUND') {
+      partnerRef.current = null;
+      routeRef.current = null;
+      lastUpdateRef.current = null;
+      lastReceivedRef.current = null;
+      lastSequenceRef.current = null;
+      lastSegmentIndexRef.current = 0;
+      policyRef.current = initialRoutePolicyState();
+      setPartnerPos(null);
+      setHasPartnerLocation(false);
+      setRoute(null);
+      setRouteFailure(null);
+      setLastUpdateTimestamp(null);
+      setIsGpsStale(false);
+    }
+  }, [bookingId, status]);
+
+  const previousWorkerIdRef = useRef<string | null | undefined>(workerId);
+  useEffect(() => {
+    const prev = previousWorkerIdRef.current;
+    previousWorkerIdRef.current = workerId;
+    if (prev && workerId && prev !== workerId) {
+      // Reassigned directly from one worker to another: drop old partner's marker, route & sequence floor.
+      cancelRouteWork();
+      partnerRef.current = null;
+      routeRef.current = null;
+      lastUpdateRef.current = null;
+      lastReceivedRef.current = null;
+      lastSequenceRef.current = null;
+      lastSegmentIndexRef.current = 0;
+      policyRef.current = initialRoutePolicyState();
+      setPartnerPos(null);
+      setHasPartnerLocation(false);
+      setRoute(null);
+      setRouteFailure(null);
+      setLastUpdateTimestamp(null);
+      setIsGpsStale(false);
+    }
+  }, [workerId, cancelRouteWork]);
 
   // ───────────────────────── booking status -> tracking lifecycle ─────────────────────────
 

@@ -264,6 +264,7 @@ export default function TrackingScreen() {
   } = useLiveTracking({
     bookingId: id,
     status: booking?.status,
+    workerId: booking?.workerId,
     enabled: trackingEnabled,
     pollIntervalMs: 7000,
     onBookingEvent: handleBookingEvent,
