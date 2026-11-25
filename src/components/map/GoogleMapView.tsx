@@ -707,7 +707,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
                 heading: partnerBearing,
                 timestampMs: lastUpdateTimestamp || Date.now(),
               }}
-              name={partnerName || 'Lokesh'}
+              name={partnerName || 'Service Partner'}
               zIndex={999}
               serviceCategory={serviceCategory}
               isLive={Boolean(isLiveConnected && !isGpsStale)}
