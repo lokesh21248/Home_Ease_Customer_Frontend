@@ -157,7 +157,7 @@ export default function PhoneScreen() {
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text style={styles.sendBtnText}>
-                  Direct Login to Pronto
+                  Login to HomeEase
                 </Text>
               )}
             </LinearGradient>
@@ -183,7 +183,7 @@ export default function PhoneScreen() {
 
           {/* Footer */}
           <View style={styles.footerRow}>
-            <Text style={styles.footerText}>New to Pronto? </Text>
+            <Text style={styles.footerText}>New to HomeEase? </Text>
             <Pressable onPress={() => router.push('/(auth)/register')}>
               <Text style={styles.footerLink}>Create Account</Text>
             </Pressable>
