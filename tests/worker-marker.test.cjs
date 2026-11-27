@@ -13,6 +13,7 @@ require.extensions['.ts'] = (module, filename) => {
 };
 
 const { categoryIcon, liveLabel } = require('../src/services/workerMarkerStyle.ts');
+const { WORKER_SYMBOL_WIDTH, WORKER_SYMBOL_HEIGHT, smoothWorkerMotionDurationMs } = require('../src/services/workerMarkerMotion.ts');
 
 test('trade icons per service category', () => {
   assert.equal(categoryIcon('Electrician').icon, 'flash');
@@ -42,4 +43,16 @@ test('badge says Live only when live, otherwise how long ago', () => {
   assert.equal(liveLabel(false, null, now), 'Offline');
   assert.equal(liveLabel(false, now - 42_000, now), 'Seen 42s ago');
   assert.equal(liveLabel(false, now - 5 * 60_000, now), 'Seen 5m ago');
+});
+
+test('worker map symbol stays compact rather than covering city streets', () => {
+  assert.ok(WORKER_SYMBOL_WIDTH <= 44);
+  assert.ok(WORKER_SYMBOL_HEIGHT <= 52);
+});
+
+test('native marker smoothing stays within a GPS frame, with bounded duration', () => {
+  assert.equal(smoothWorkerMotionDurationMs(7_000), 6_440);
+  assert.equal(smoothWorkerMotionDurationMs(null), 6_440);
+  assert.equal(smoothWorkerMotionDurationMs(200), 500);
+  assert.equal(smoothWorkerMotionDurationMs(60_000), 6_500);
 });

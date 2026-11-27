@@ -21,17 +21,12 @@ export const WorkerNavigationMarker: React.FC<WorkerNavigationMarkerProps> = ({
   heading = 0,
   zIndex = 999,
 }) => {
-  const timestampRef = React.useRef(0);
-  if (timestampRef.current === 0) {
-    timestampRef.current = 1700000000000;
-  }
-
   const worker: WorkerFix = React.useMemo(
     () => ({
       latitude: coordinate.latitude,
       longitude: coordinate.longitude,
       heading: heading,
-      timestampMs: timestampRef.current,
+      // This compatibility wrapper has no authoritative GPS clock; do not invent a fixed timestamp.
     }),
     [coordinate.latitude, coordinate.longitude, heading],
   );
