@@ -132,13 +132,15 @@ export default function PartnerBroadcasterScreen() {
     numCustomerLng !== undefined &&
     isValidCoordinate(numCustomerLat, numCustomerLng);
 
-  const customerLat = hasValidCustomerCoords ? numCustomerLat! : 17.4485;
-  const customerLng = hasValidCustomerCoords ? numCustomerLng! : 78.3748;
-  const hasDestination = true;
+  const customerLat = hasValidCustomerCoords ? numCustomerLat : undefined;
+  const customerLng = hasValidCustomerCoords ? numCustomerLng : undefined;
+  const hasDestination = hasValidCustomerCoords;
   const customerAddress = booking?.userLocation || 'Customer Location';
   const isAssignedToCurrentUser = !!userId && booking?.workerId === userId;
   const isActiveBooking =
-    booking?.status === 'ACCEPTED' || booking?.status === 'IN_PROGRESS';
+    booking?.status === 'ACCEPTED' ||
+    booking?.status === 'ON_THE_WAY' ||
+    booking?.status === 'IN_PROGRESS';
   const canBroadcast = isAssignedToCurrentUser && isActiveBooking && hasDestination;
 
   const handleToggleBroadcast = async () => {

@@ -356,21 +356,6 @@ export default function TrackingScreen() {
     }
   };
 
-  const handleSimulateAssignment = async () => {
-    if (!id) return;
-    try {
-      const VERIFIED_WORKER_USER_ID = '0d3dd87e-2cc0-46a9-9177-8e5a541a36e9';
-      const updated = await bookingApi.acceptBookingAsWorker(id, VERIFIED_WORKER_USER_ID);
-      setBooking(updated);
-      Alert.alert(
-        'Partner Assigned',
-        `Partner ${updated.workerName || 'Service Partner'} accepted the booking request. Doorstep PIN will be revealed once partner arrives.`
-      );
-    } catch (e: any) {
-      Alert.alert('Assignment', e?.message || 'Failed to accept booking on backend.');
-    }
-  };
-
   const handleCancelBooking = () => {
     if (!id) return;
 
