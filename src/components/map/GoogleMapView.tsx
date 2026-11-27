@@ -677,7 +677,7 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
                   latitude: effPartnerLat,
                   longitude: effPartnerLng,
                   heading: partnerBearing,
-                  timestampMs: lastUpdateTimestamp || Date.now(),
+                  timestampMs: lastUpdateTimestamp ?? null,
                 }}
                 name={partnerName}
                 zIndex={999}
