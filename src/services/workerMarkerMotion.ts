@@ -1,8 +1,8 @@
 /**
  * Pure worker-marker presentation settings. These never modify authenticated GPS data.
- * Small circular professional avatar with a pointed map anchor (Snabbit-scale, not full-screen character).
+ * Small full-body walking woman (Snabbit-scale, not an avatar or a full-screen character).
  */
-export const WORKER_SYMBOL_WIDTH = 40;
+export const WORKER_SYMBOL_WIDTH = 30;
 export const WORKER_SYMBOL_HEIGHT = 48;
 export const WORKER_MARKER_JITTER_METERS = 1.5;
 export const WORKER_GPS_EXPECTED_INTERVAL_MS = 7_000;
