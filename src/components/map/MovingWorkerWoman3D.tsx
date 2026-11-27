@@ -6,6 +6,7 @@
 import React, { memo, useEffect, useRef, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { AnimatedRegion, Marker } from 'react-native-maps';
+import { WORKER_SYMBOL_WIDTH, WORKER_SYMBOL_HEIGHT, WORKER_MARKER_JITTER_METERS, smoothWorkerMotionDurationMs } from '../../services/workerMarkerMotion';
 import Svg, {
   Circle,
   Defs,
@@ -59,7 +60,7 @@ function validFix(w: WorkerFix): boolean {
 /** Source-only vector art: simulated depth using SVG gradients and layered body shapes. */
 export const WalkingWoman3D = memo(function WalkingWoman3D({ heading = 0 }: { heading?: number }) {
   return (
-    <Svg width={68} height={98} viewBox="0 0 96 138">
+    <Svg width={WORKER_SYMBOL_WIDTH} height={WORKER_SYMBOL_HEIGHT} viewBox="0 0 48 58">
       <Defs>
         <LinearGradient id="shirt" x1="0" y1="0" x2="1" y2="0">
           <Stop offset="0" stopColor="#133B93" />
@@ -83,6 +84,11 @@ export const WalkingWoman3D = memo(function WalkingWoman3D({ heading = 0 }: { he
         </LinearGradient>
       </Defs>
 
+      {/* Compact circular worker map symbol, clear on both light and dark roads. */}
+      <Path d="M24 55 L17 41 L31 41 Z" fill="#FFFFFF" stroke="#1D4ED8" strokeWidth="1.5" />
+      <Circle cx="24" cy="23" r="21.5" fill="#FFFFFF" />
+      <Circle cx="24" cy="23" r="19" fill="#DBEAFE" stroke="#1D4ED8" strokeWidth="2.5" />
+      <G transform="translate(9 2) scale(0.31 0.34)">
       {/* Soft contact shadow; kept inside marker bounds */}
       <Ellipse cx="48" cy="124" rx="27" ry="8" fill="#0F172A" opacity="0.10" />
       <Ellipse cx="48" cy="124" rx="19" ry="5" fill="#0F172A" opacity="0.15" />
@@ -137,6 +143,7 @@ export const WalkingWoman3D = memo(function WalkingWoman3D({ heading = 0 }: { he
       <Circle cx="54.8" cy="30.5" r="1.15" fill="#2E2629" />
       <Path d="M53 38 Q56 39 58 37" stroke="#9C534B" strokeWidth="1.3" fill="none" />
       <Path d="M43 37 Q46 41 51 41" stroke="#F5C89E" strokeWidth="1.1" fill="none" opacity="0.7" />
+      </G>
     </Svg>
   );
 });
@@ -183,14 +190,14 @@ export const MovingWorkerWoman3D = memo(function MovingWorkerWoman3D({
       return;
     }
     const metres = distanceMetres(last.current, worker);
-    if (metres < 2) {
+    if (metres < WORKER_MARKER_JITTER_METERS) {
       last.current = worker;
       return; // Do not twitch when stationary.
     }
     const dt =
       (worker.timestampMs ?? Date.now()) -
       (last.current.timestampMs ?? Date.now() - 7000);
-    const duration = Math.max(700, Math.min(6000, dt > 0 ? dt * 0.8 : 5500));
+    const duration = smoothWorkerMotionDurationMs(dt);
     const next = { latitude: worker.latitude, longitude: worker.longitude };
 
     if (Platform.OS === 'android') {
@@ -198,7 +205,11 @@ export const MovingWorkerWoman3D = memo(function MovingWorkerWoman3D({
       if (nativeMarker?.animateMarkerToCoordinate) {
         nativeMarker.animateMarkerToCoordinate(next, duration);
       } else {
-        animatedCoordinate.setValue({ ...next, latitudeDelta: 0, longitudeDelta: 0 }); // First GPS fix before native marker is ready.
+        // Keep animating when the Android marker instance has not exposed its
+        // native animation method yet; only snap for the first valid fix.
+        (animatedCoordinate as any)
+          .timing({ ...next, latitudeDelta: 0, longitudeDelta: 0, duration, useNativeDriver: false })
+          .start();
       }
     } else {
       (animatedCoordinate as any)
@@ -214,13 +225,13 @@ export const MovingWorkerWoman3D = memo(function MovingWorkerWoman3D({
     <AnimatedMarker
       ref={markerRef}
       coordinate={animatedCoordinate}
-      anchor={{ x: 0.5, y: 0.9 }}
+      anchor={{ x: 0.5, y: 0.97 }}
       flat={false}
       tracksViewChanges={snapshotUpdates}
       zIndex={zIndex}
       identifier="homeease-walking-partner"
     >
-      <View collapsable={false} style={{ width: 68, height: 98 }}>
+      <View collapsable={false} style={{ width: WORKER_SYMBOL_WIDTH, height: WORKER_SYMBOL_HEIGHT }}>
         <WalkingWoman3D heading={bearing} />
       </View>
     </AnimatedMarker>
