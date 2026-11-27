@@ -159,3 +159,41 @@ test('filters heading jitter when stationary', () => {
   // 10 degree turn while moving (15 km/h) -> should accept new heading
   assert.equal(filterHeadingJitter(45, 55, 15, 3), 55);
 });
+
+test('customer tracking screen and map never fall back to hardcoded PIN, distance, or partner name', () => {
+  const path = require('node:path');
+  const screenSource = fs.readFileSync(
+    path.join(__dirname, '..', 'app', 'booking', 'track', '[id].tsx'),
+    'utf8',
+  );
+  const mapSource = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'components', 'map', 'GoogleMapView.tsx'),
+    'utf8',
+  );
+  assert.equal(screenSource.includes("'7394'"), false, 'must never fabricate 7394 PIN');
+  assert.equal(screenSource.includes("'2.8 km'"), false, 'must never fabricate 2.8 km distance');
+  assert.equal(screenSource.includes("'13FE6F1D'"), false, 'must never fabricate booking ID');
+  assert.equal(screenSource.includes("|| 'Lokesh'"), false, 'must never fabricate partner name on screen');
+  assert.equal(mapSource.includes("|| 'Lokesh'"), false, 'must never fabricate partner name on map marker');
+  assert.equal(screenSource.includes('pinPendingCard'), true, 'must gate PIN until ARRIVED');
+});
+
+test('useLiveTracking stores routeFailure in ref for fresh callback checks', () => {
+  const path = require('node:path');
+  const hookSource = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'hooks', 'useLiveTracking.ts'),
+    'utf8',
+  );
+  assert.equal(hookSource.includes('routeFailureRef'), true, 'must use routeFailureRef to avoid stale closure');
+  assert.equal(hookSource.includes('previousWorkerIdRef'), true, 'must clear stale partner marker/route on worker reassignment');
+
+  // Verify sequence gate commits ONLY after timestamp/jump checks, REST staleness uses server time, and single canonical topic is subscribed
+  assert.equal(hookSource.includes("source === 'REST'"), true, 'must differentiate WS vs REST staleness');
+  assert.equal(hookSource.includes('lastSegmentIndexRef.current = 0;'), true, 'must reset segment index on new route fetch');
+  assert.equal(hookSource.includes('/topic/track/${id}'), false, 'must not double-subscribe to both /topic/tracking and /topic/track');
+  const applyIdx = hookSource.indexOf('const applyLocation');
+  const applyBlock = hookSource.slice(applyIdx, hookSource.indexOf('const subscribeTracking'));
+  const seqAssignIdx = applyBlock.indexOf('lastSequenceRef.current = incomingSeq');
+  const jumpCheckIdx = applyBlock.indexOf('isSensibleGpsJump');
+  assert.ok(seqAssignIdx > jumpCheckIdx && jumpCheckIdx > 0, 'lastSequenceRef must advance only after jump & timestamp validation pass');
+});

@@ -5,7 +5,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authApi, userApi, AuthResponse, UserProfile, STORAGE_KEYS, DEMO_JWT_TOKEN, DEMO_USER_ID, fetchLiveBackendToken, isJwtTokenExpired } from '../api/client';
+import { authApi, userApi, AuthResponse, UserProfile, STORAGE_KEYS, isJwtTokenExpired } from '../api/client';
 import { queryClient } from '../query/queryClient';
 
 interface AuthState {
@@ -38,70 +38,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
 
-  const bypassLogin = useCallback(async (phone?: string) => {
-    let BACKEND_TOKEN = DEMO_JWT_TOKEN;
-    try {
-      BACKEND_TOKEN = await fetchLiveBackendToken();
-    } catch {}
-    const BACKEND_USER_ID = DEMO_USER_ID;
-    const defaultUser: UserProfile = {
-      userId: BACKEND_USER_ID,
-      fullName: 'Rahul Sharma',
-      phoneNumber: phone || '+919876543210',
-      email: 'rahul.sharma@example.com',
-      role: 'CUSTOMER',
-      createdAt: new Date().toISOString(),
-    };
-    await Promise.all([
-      AsyncStorage.setItem(STORAGE_KEYS.TOKEN, BACKEND_TOKEN),
-      AsyncStorage.setItem(STORAGE_KEYS.USER_ID, BACKEND_USER_ID),
-      AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(defaultUser)),
-    ]);
-    setState({
-      isLoading: false,
-      isAuthenticated: true,
-      token: BACKEND_TOKEN,
-      userId: BACKEND_USER_ID,
-      user: defaultUser,
-    });
+  // Guest browsing can remain public, but booking tracking MUST use a real customer JWT.
+  // Never log in as an admin or silently install a demo JWT in production.
+  const bypassLogin = useCallback(async (_phone?: string) => {
+    throw new Error('A verified customer session is required for booking and live tracking. Please sign in.');
   }, []);
 
-  // Rehydrate session from storage on app start, or provision demo session for direct login
   useEffect(() => {
     (async () => {
       try {
-        let [token, userId, userDataRaw] = await Promise.all([
+        const [token, userId, userDataRaw] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEYS.TOKEN),
           AsyncStorage.getItem(STORAGE_KEYS.USER_ID),
           AsyncStorage.getItem(STORAGE_KEYS.USER_DATA),
         ]);
-
-        const isExpired = isJwtTokenExpired(token);
-        if (!token || token.split('.').length !== 3 || isExpired || !userId) {
-          await bypassLogin();
+        if (!token || token.split('.').length !== 3 || isJwtTokenExpired(token) || !userId) {
+          await AsyncStorage.multiRemove([
+            STORAGE_KEYS.TOKEN,
+            STORAGE_KEYS.USER_ID,
+            STORAGE_KEYS.USER_DATA,
+          ]);
+          setState({ isLoading: false, isAuthenticated: false, token: null, userId: null, user: null });
           return;
         }
-
         const user: UserProfile | null = userDataRaw ? JSON.parse(userDataRaw) : null;
-        setState({
-          isLoading: false,
-          isAuthenticated: true,
-          token,
-          userId,
-          user: user || {
-            userId,
-            fullName: 'Rahul Sharma',
-            phoneNumber: '+919876543210',
-            email: 'rahul.sharma@example.com',
-            role: 'CUSTOMER',
-            createdAt: new Date().toISOString(),
-          },
-        });
+        setState({ isLoading: false, isAuthenticated: true, token, userId, user });
       } catch {
-        await bypassLogin().catch(() => {});
+        setState({ isLoading: false, isAuthenticated: false, token: null, userId: null, user: null });
       }
     })();
-  }, [bypassLogin]);
+  }, []);
 
   const sendOtp = useCallback(async (phone: string) => {
     await authApi.sendOtp(phone);

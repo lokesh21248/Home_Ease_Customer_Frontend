@@ -15,6 +15,8 @@ require.extensions['.ts'] = (module, filename) => {
 const { categoryIcon, liveLabel } = require('../src/services/workerMarkerStyle.ts');
 const { WORKER_SYMBOL_WIDTH, WORKER_SYMBOL_HEIGHT, smoothWorkerMotionDurationMs } = require('../src/services/workerMarkerMotion.ts');
 
+// ─── Existing tests ───────────────────────────────────────────────────────────
+
 test('trade icons per service category', () => {
   assert.equal(categoryIcon('Electrician').icon, 'flash');
   assert.equal(categoryIcon('Ceiling fan repair').icon, 'flash');
@@ -55,4 +57,21 @@ test('native marker smoothing stays within a GPS frame, with bounded duration', 
   assert.equal(smoothWorkerMotionDurationMs(null), 6_440);
   assert.equal(smoothWorkerMotionDurationMs(200), 500);
   assert.equal(smoothWorkerMotionDurationMs(60_000), 6_500);
+});
+
+test('walking woman marker uses 8-phase gait, grounded anchor, and never triggers route fetches or synthetic coords', () => {
+  const path = require('node:path');
+  const markerSrc = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'components', 'map', 'MovingWorkerWoman3D.tsx'),
+    'utf8',
+  );
+  const mapSrc = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'components', 'map', 'GoogleMapView.tsx'),
+    'utf8',
+  );
+  assert.match(markerSrc, /STRIDE_PHASES\s*=\s*\[[^\]]+\]/);
+  assert.match(markerSrc, /anchor=\{\{\s*x:\s*0\.5,\s*y:\s*0\.97\s*\}\}/);
+  assert.doesNotMatch(markerSrc, /fetchBookingRoute|trackingApi/);
+  assert.doesNotMatch(mapSrc, /timestampMs:\s*lastUpdateTimestamp\s*\|\|\s*Date\.now/);
+  assert.doesNotMatch(mapSrc, /polylineCoords\[0\]\.latitude/);
 });

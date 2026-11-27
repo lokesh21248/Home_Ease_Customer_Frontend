@@ -327,48 +327,15 @@ export class ApiError extends Error {
   }
 }
 
-export const DEMO_USER_ID = 'cdbca436-888a-4447-9fe2-1b3e117165e1';
-export const DEMO_JWT_TOKEN =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJ1c2VySWQiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJyb2xlIjoiQURNSU4iLCJwaG9uZU51bWJlciI6Iis5MTAwMDAwMDAwMDAiLCJmdWxsTmFtZSI6IlN5c3RlbSBBZG1pbiIsImlhdCI6MTc5NTE2NzQwMCwiZXhwIjoxNzk3NzU5NDAwfQ.rLBRY2oCfcp60lZUvkgpKnpOpm5_3w7C74N5jY7bvBo';
+/**
+ * Legacy exports retained temporarily for source compatibility with unfinished guest screens.
+ * These values are NOT credentials and cannot authenticate a tracking session.
+ */
+export const DEMO_USER_ID = '';
+export const DEMO_JWT_TOKEN = '';
 
 export async function fetchLiveBackendToken(): Promise<string> {
-  const tryEndpoints = [
-    `${BASE_URL}/admin/auth/login`,
-    'https://3-108-55-219.sslip.io/api/v1/admin/auth/login',
-    'http://3.108.55.219/api/v1/admin/auth/login',
-  ];
-
-  for (const url of tryEndpoints) {
-    try {
-      const res = await fetchWithTimeout(
-        url,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: 'admin@homeease.com', password: 'AdminPassword123!' }),
-        },
-        5000,
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.token) {
-          await Promise.all([
-            AsyncStorage.setItem(STORAGE_KEYS.TOKEN, data.token),
-            AsyncStorage.setItem(STORAGE_KEYS.USER_ID, DEMO_USER_ID),
-          ]);
-          return data.token;
-        }
-      }
-    } catch (e) {
-      console.warn(`[client] fetchLiveBackendToken fallback warning for ${url}:`, e);
-    }
-  }
-
-  await Promise.all([
-    AsyncStorage.setItem(STORAGE_KEYS.TOKEN, DEMO_JWT_TOKEN),
-    AsyncStorage.setItem(STORAGE_KEYS.USER_ID, DEMO_USER_ID),
-  ]);
-  return DEMO_JWT_TOKEN;
+  throw new ApiError('A valid customer session is required. Please sign in to track your booking.', 401);
 }
 
 function decodeBase64(input: string): string {
@@ -414,14 +381,8 @@ export async function getAuthHeaders(requiresAuth = true): Promise<Record<string
       AsyncStorage.getItem(STORAGE_KEYS.USER_ID),
     ]);
 
-    const isExpired = isJwtTokenExpired(token);
-    if (!token || token.split('.').length !== 3 || isExpired) {
-      token = DEMO_JWT_TOKEN;
-      await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, DEMO_JWT_TOKEN).catch(() => {});
-    }
-    if (!userId) {
-      userId = DEMO_USER_ID;
-      await AsyncStorage.setItem(STORAGE_KEYS.USER_ID, DEMO_USER_ID).catch(() => {});
+    if (!token || token.split('.').length !== 3 || isJwtTokenExpired(token) || !userId) {
+      throw new ApiError('Please sign in before accessing this booking.', 401);
     }
 
     headers.Authorization = `Bearer ${token}`;
@@ -483,22 +444,6 @@ async function request<T>(
     );
 
     if (!response.ok) {
-      if (requiresAuth && !(options as any)?._isRetry && (response.status === 401 || response.status === 403)) {
-        try {
-          const freshToken = await fetchLiveBackendToken();
-          return await request<T>(endpoint, {
-            ...options,
-            headers: {
-              ...(options.headers as Record<string, string>),
-              Authorization: `Bearer ${freshToken}`,
-              'X-User-Id': DEMO_USER_ID,
-            },
-            _isRetry: true,
-          } as any, true);
-        } catch (retryErr) {
-          console.warn(`[API Auth Retry] Refresh failed for ${endpoint}:`, retryErr);
-        }
-      }
 
       let message = `HTTP ${response.status}`;
       try {
@@ -585,9 +530,10 @@ export async function apiRequest<T>(
     ? path
     : `${baseUrl}${normalizedPath}`;
 
-  const validToken = token
-    ? (token.split('.').length === 3 ? token : DEMO_JWT_TOKEN)
-    : undefined;
+  if (token && (token.split('.').length !== 3 || isJwtTokenExpired(token))) {
+    throw new ApiError('Session expired. Please sign in again.', 401);
+  }
+  const validToken = token;
   const authHeaders = validToken
     ? { Authorization: `Bearer ${validToken}` }
     : await getAuthHeaders(true);
@@ -1445,6 +1391,10 @@ export interface TrackingLocationResponse {
   bearing?: number;
   speed?: number;
   accuracy?: number;
+  sequenceNumber?: number;
+  serverTimestamp?: number | string;
+  responseServerTimeMs?: number;
+  ageSeconds?: number;
   status?: string;
   trackingActive?: boolean;
   updatedAt?: string;
@@ -1538,7 +1488,13 @@ export const trackingApi = {
     if (!res.ok) {
       throw new ApiError(res.status, `Unable to load tracking location (HTTP ${res.status})`);
     }
-    return res.json();
+    const data = await res.json();
+    const dateHdr = res.headers?.get?.('date');
+    const responseServerTimeMs = dateHdr ? Date.parse(dateHdr) : NaN;
+    if (Number.isFinite(responseServerTimeMs) && data && typeof data === 'object' && !Array.isArray(data)) {
+      return { ...(data as TrackingLocationResponse), responseServerTimeMs };
+    }
+    return data;
   },
 
   /**

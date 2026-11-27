@@ -24,7 +24,7 @@ import {
   parseLocationTimestamp,
 } from '../services/trackingMath';
 import { isValidCoordinate, type LatLngCoordinate } from '../services/coordinates';
-import { computeRemaining, projectOntoRoute } from '../services/routeGeometry';
+import { computeRemaining, projectOntoRoute, sliceRemainingRoute } from '../services/routeGeometry';
 import {
   ROUTE_POLICY,
   backoffMs,
@@ -48,6 +48,7 @@ type ConnectionStatus = 'CONNECTING' | 'CONNECTED' | 'DISCONNECTED' | 'AUTH_ERRO
 interface UseLiveTrackingProps {
   bookingId?: string;
   status?: string;
+  workerId?: string | null;
   /** Booking has an assigned worker and is in a travel status. */
   enabled?: boolean;
   /** HTTP fallback poll interval, used ONLY while the WebSocket is disconnected. */
@@ -69,6 +70,7 @@ const isTerminalForTravel = (s?: string) =>
 export function useLiveTracking({
   bookingId,
   status,
+  workerId,
   enabled = true,
   pollIntervalMs = 7_000,
   onBookingEvent,
@@ -81,11 +83,15 @@ export function useLiveTracking({
   const [route, setRoute] = useState<BookingRoute | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeFailure, setRouteFailure] = useState<RouteFailure | null>(null);
+  const routeFailureRef = useRef<RouteFailure | null>(null);
+  routeFailureRef.current = routeFailure;
   const [trackingEnded, setTrackingEnded] = useState(false);
   const [lastUpdateTimestamp, setLastUpdateTimestamp] = useState<number | null>(null);
   const [isGpsStale, setIsGpsStale] = useState(false);
   /** Server-side tracking phase + partner device state (why there may be no location). */
   const [serverSnapshot, setServerSnapshot] = useState<TrackingSnapshot | null>(null);
+  const serverSnapshotRef = useRef<TrackingSnapshot | null>(null);
+  serverSnapshotRef.current = serverSnapshot;
   // Wall clock for display-only derivations (route age). Updated by the 5 s staleness timer, never in render.
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -105,6 +111,12 @@ export function useLiveTracking({
   const lastUpdateRef = useRef<number | null>(null);
   /** This phone's clock when the last accepted frame ARRIVED: freshness / "updated X s ago" (immune to clock skew). */
   const lastReceivedRef = useRef<number | null>(null);
+  /** Server-assigned monotonic sequence counter: discards out-of-order packets. */
+  const lastSequenceRef = useRef<number | null>(null);
+  /** Segment index along the route for EatClub-style progressive route shortening without jumps. */
+  const lastSegmentIndexRef = useRef<number>(0);
+  /** Timestamp of the last location message received over WebSocket. */
+  const lastSocketLocationAtRef = useRef<number | null>(null);
 
   const policyRef = useRef(initialRoutePolicyState());
   const failuresRef = useRef(0);
@@ -156,6 +168,7 @@ export function useLiveTracking({
       const result = await fetchBookingRoute(id, reason, controller.signal);
       if (!isCurrent()) return;
       routeRef.current = result;
+      lastSegmentIndexRef.current = 0;
       setRoute(result);
       setRouteFailure(null);
       failuresRef.current = 0;
@@ -204,7 +217,11 @@ export function useLiveTracking({
   }, [cancelRouteWork]);
 
   const applyLocation = useCallback(
-    (payload: TrackingLocationResponse & Record<string, any>, expectedBookingId: string) => {
+    (
+      payload: TrackingLocationResponse & Record<string, any>,
+      expectedBookingId: string,
+      source: 'WS' | 'REST' = 'WS',
+    ) => {
       if (expectedBookingId !== activeBookingIdRef.current) return;
       // Cross-booking guard: a frame that names another booking is dropped.
       if (payload.bookingId && payload.bookingId !== expectedBookingId) return;
@@ -222,10 +239,21 @@ export function useLiveTracking({
       const longitude = payload.longitude ?? payload.lng;
       if (payload.found === false || !isValidCoordinate(latitude ?? NaN, longitude ?? NaN)) return;
 
-      const rawTimestamp = payload.timestamp ?? payload.updatedAt;
+      const rawTimestamp = payload.timestamp ?? payload.serverTimestamp ?? payload.updatedAt;
       const parsedTimestamp = parseLocationTimestamp(rawTimestamp);
-      if (rawTimestamp !== undefined && parsedTimestamp === null) return;
-      const timestamp = parsedTimestamp ?? Date.now();
+      // Reject frames without an authoritative timestamp from device or server — never substitute Date.now() for GPS
+      if (parsedTimestamp === null || !Number.isFinite(parsedTimestamp) || parsedTimestamp <= 0) return;
+      const timestamp = parsedTimestamp;
+
+      // Validate sequence number without mutating lastSequenceRef until ALL checks succeed
+      const incomingSeq =
+        typeof payload.sequenceNumber === 'number' && Number.isFinite(payload.sequenceNumber)
+          ? payload.sequenceNumber
+          : null;
+      if (incomingSeq !== null && lastSequenceRef.current !== null && incomingSeq <= lastSequenceRef.current) {
+        return;
+      }
+
       // Out-of-order / replayed / future-dated frames never overwrite a newer position.
       if (!isAcceptableLocationTimestamp(timestamp, lastUpdateRef.current)) return;
 
@@ -239,6 +267,35 @@ export function useLiveTracking({
         return;
       }
 
+      const now = Date.now();
+      let effectiveReceivedAt = now;
+      if (source === 'REST') {
+        const serverResponseMs =
+          typeof payload.responseServerTimeMs === 'number' && Number.isFinite(payload.responseServerTimeMs)
+            ? payload.responseServerTimeMs
+            : null;
+        const authoritativeServerTs = parseLocationTimestamp(payload.serverTimestamp);
+        let restAgeMs: number | null = null;
+        if (serverResponseMs !== null && authoritativeServerTs !== null) {
+          restAgeMs = Math.max(0, serverResponseMs - authoritativeServerTs);
+        } else if (typeof payload.ageSeconds === 'number' && Number.isFinite(payload.ageSeconds)) {
+          restAgeMs = Math.max(0, payload.ageSeconds * 1000);
+        } else if (
+          serverSnapshotRef.current &&
+          serverSnapshotRef.current.bookingId === expectedBookingId &&
+          typeof serverSnapshotRef.current.lastUpdateAgeSeconds === 'number' &&
+          Number.isFinite(serverSnapshotRef.current.lastUpdateAgeSeconds)
+        ) {
+          restAgeMs = Math.max(0, serverSnapshotRef.current.lastUpdateAgeSeconds * 1000);
+        } else if (authoritativeServerTs !== null && authoritativeServerTs <= now + 5000) {
+          restAgeMs = Math.max(0, now - authoritativeServerTs);
+        }
+        if (restAgeMs !== null) {
+          effectiveReceivedAt = now - restAgeMs;
+        }
+      }
+      const frameStale = isLocationStale(effectiveReceivedAt, now, GPS_STALE_MS);
+
       const incomingBearing = payload.heading ?? payload.bearing;
       const bearing =
         typeof incomingBearing === 'number' && Number.isFinite(incomingBearing)
@@ -248,29 +305,42 @@ export function useLiveTracking({
             : 0;
       const next: PartnerCoordinate = { lat: latitude!, lng: longitude!, bearing };
 
+      if (incomingSeq !== null) {
+        lastSequenceRef.current = incomingSeq;
+      }
       partnerRef.current = next;
       lastUpdateRef.current = timestamp;
-      const receivedAt = Date.now();
-      lastReceivedRef.current = receivedAt;
+      lastReceivedRef.current = effectiveReceivedAt;
       setPartnerPos(next);
       setHasPartnerLocation(true);
-      setLastUpdateTimestamp(receivedAt);
-      setIsGpsStale(false);
+      setLastUpdateTimestamp(effectiveReceivedAt);
+      setIsGpsStale(frameStale);
 
-      // Fresh worker fix clears any prior location-unavailable failure backoff so INITIAL route fetch runs immediately
+      // Promptly retry an initial route only when failure was due to missing worker location.
+      // Do NOT clear retry backoff for auth, rate-limit, or configuration errors.
       if (!policyRef.current.hasRoute) {
-        policyRef.current.retryNotBefore = null;
-        failuresRef.current = 0;
+        const currentFailure = routeFailureRef.current;
+        const canRetryNow =
+          !currentFailure ||
+          currentFailure.code === 'WORKER_LOCATION_UNAVAILABLE' ||
+          currentFailure.code === 'WORKER_LOCATION_STALE';
+        if (canRetryNow) {
+          policyRef.current.retryNotBefore = null;
+          failuresRef.current = 0;
+        }
       }
 
-      // Off-route detection against the current road polyline (no network involved).
+      // Off-route detection against the current road polyline with windowed progress tracking.
       const currentRoute = routeRef.current;
       if (currentRoute) {
         const progress = projectOntoRoute(
           { latitude: next.lat, longitude: next.lng },
           currentRoute.polylineCoordinates,
+          lastSegmentIndexRef.current,
+          ROUTE_POLICY.OFF_ROUTE_METERS,
         );
         if (progress) {
+          lastSegmentIndexRef.current = progress.segmentIndex;
           policyRef.current.offRouteStrikes = nextOffRouteStrikes(
             policyRef.current.offRouteStrikes,
             progress.distanceFromRouteMeters,
@@ -293,6 +363,9 @@ export function useLiveTracking({
     routeRef.current = null;
     lastUpdateRef.current = null;
     lastReceivedRef.current = null;
+    lastSequenceRef.current = null;
+    lastSegmentIndexRef.current = 0;
+    lastSocketLocationAtRef.current = null;
     setServerSnapshot(null);
     setPartnerPos(null);
     setHasPartnerLocation(false);
@@ -303,6 +376,49 @@ export function useLiveTracking({
     setIsGpsStale(false);
     setTrackingError(null);
   }, [bookingId, cancelRouteWork]);
+
+  // Reset stale partner coordinates & polyline if the booking returns to SEARCHING or is reassigned.
+  useEffect(() => {
+    if (!bookingId) return;
+    if (status === 'SEARCHING' || status === 'WORKER_NOT_FOUND') {
+      partnerRef.current = null;
+      routeRef.current = null;
+      lastUpdateRef.current = null;
+      lastReceivedRef.current = null;
+      lastSequenceRef.current = null;
+      lastSegmentIndexRef.current = 0;
+      policyRef.current = initialRoutePolicyState();
+      setPartnerPos(null);
+      setHasPartnerLocation(false);
+      setRoute(null);
+      setRouteFailure(null);
+      setLastUpdateTimestamp(null);
+      setIsGpsStale(false);
+    }
+  }, [bookingId, status]);
+
+  const previousWorkerIdRef = useRef<string | null | undefined>(workerId);
+  useEffect(() => {
+    const prev = previousWorkerIdRef.current;
+    previousWorkerIdRef.current = workerId;
+    if (prev && workerId && prev !== workerId) {
+      // Reassigned directly from one worker to another: drop old partner's marker, route & sequence floor.
+      cancelRouteWork();
+      partnerRef.current = null;
+      routeRef.current = null;
+      lastUpdateRef.current = null;
+      lastReceivedRef.current = null;
+      lastSequenceRef.current = null;
+      lastSegmentIndexRef.current = 0;
+      policyRef.current = initialRoutePolicyState();
+      setPartnerPos(null);
+      setHasPartnerLocation(false);
+      setRoute(null);
+      setRouteFailure(null);
+      setLastUpdateTimestamp(null);
+      setIsGpsStale(false);
+    }
+  }, [workerId, cancelRouteWork]);
 
   // ───────────────────────── booking status -> tracking lifecycle ─────────────────────────
 
@@ -405,10 +521,7 @@ export function useLiveTracking({
     const sub1 = client.subscribe(`/topic/tracking/${id}`, (message) => {
       handleFrameRef.current(message.body, id);
     });
-    const sub2 = client.subscribe(`/topic/track/${id}`, (message) => {
-      handleFrameRef.current(message.body, id);
-    });
-    trackingSubRef.current = [sub1, sub2];
+    trackingSubRef.current = [sub1];
   }, []);
 
   const handleFrame = useCallback(
@@ -432,10 +545,11 @@ export function useLiveTracking({
       );
       const isLocationFrame = hasCoords && (!event.type || event.type === 'WORKER_LOCATION_UPDATED');
       if (isLocationFrame) {
-        if (trackingActiveRef.current) applyLocation(event, id);
+        lastSocketLocationAtRef.current = Date.now();
+        if (trackingActiveRef.current) applyLocation(event, id, 'WS');
         return;
       }
-      applyLocation(event, id); // stop-type frames end tracking
+      applyLocation(event, id, 'WS'); // stop-type frames end tracking
       onBookingEventRef.current?.(event);
     },
     [applyLocation],
@@ -558,7 +672,7 @@ export function useLiveTracking({
     pollAbortRef.current = controller;
     try {
       const location = await trackingApi.getLatestLocation(id, controller.signal);
-      if (!controller.signal.aborted) applyLocation(location as any, id);
+      if (!controller.signal.aborted) applyLocation(location as any, id, 'REST');
     } catch (error) {
       if (!(error instanceof Error && error.name === 'AbortError')) {
         if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
@@ -576,23 +690,27 @@ export function useLiveTracking({
     refreshLocationRef.current = refreshLocation;
   }, [refreshLocation]);
 
-  // ───────────────────────── 7-second periodic location & route sync ─────────────────────────
-  // Continuous 7-second location & route synchronization loop requested by user.
-  // Runs continuously while tracking is active (7000ms cadence) to guarantee fresh worker GPS
-  // and prompt route updates even if WebSocket frames are idle or delayed.
+  // ───────────────────────── periodic location & route sync ─────────────────────────
+  // WebSocket is primary. REST supplies the initial position and recovers missing/stale broadcasts:
+  // a connected STOMP socket does NOT prove that GPS fixes are arriving, so the poll also fires when the
+  // socket has been silent. This avoids a duplicate HTTP request for every valid real-time GPS frame.
   useEffect(() => {
     if (!trackingActive) return;
-    // Immediate refresh on mount or status change
     void refreshLocation();
     const interval = Math.max(3000, pollIntervalMs);
     const timer = setInterval(() => {
-      void refreshLocation();
+      const now = Date.now();
+      const socketSilent =
+        lastSocketLocationAtRef.current === null || now - lastSocketLocationAtRef.current > 12_000;
+      if (!socketConnected || socketSilent || !partnerRef.current || isGpsStale) {
+        void refreshLocation();
+      }
     }, interval);
     return () => {
       clearInterval(timer);
       pollAbortRef.current?.abort();
     };
-  }, [trackingActive, refreshLocation, pollIntervalMs]);
+  }, [trackingActive, socketConnected, isGpsStale, refreshLocation, pollIntervalMs]);
 
   // Re-evaluate the route on a 7-second timer (updates ETA and route while moving or stationary).
   useEffect(() => {
@@ -635,10 +753,23 @@ export function useLiveTracking({
 
   // ───────────────────────── derived, display-only values ─────────────────────────
 
-  const routeCoordinates = useMemo<LatLngCoordinate[]>(
-    () => (trackingActive && route ? route.polylineCoordinates : []),
-    [trackingActive, route],
-  );
+  // Keep the complete provider route for ETA/off-route analysis. Only the drawn blue line is trimmed as
+  // fresh accepted worker GPS moves along the road. The sticky segment index stops a looped or
+  // self-crossing road from snapping the worker onto a later stretch.
+  const routeCoordinates = useMemo<LatLngCoordinate[]>(() => {
+    if (!trackingActive || !route) return [];
+    if (!partnerPos || isGpsStale) return route.polylineCoordinates;
+    const sliced = sliceRemainingRoute(
+      route.polylineCoordinates,
+      { latitude: partnerPos.lat, longitude: partnerPos.lng },
+      lastSegmentIndexRef.current,
+      ROUTE_POLICY.OFF_ROUTE_METERS,
+    );
+    if (sliced.progress) {
+      lastSegmentIndexRef.current = sliced.progress.segmentIndex;
+    }
+    return sliced.remainingPolyline;
+  }, [trackingActive, route, partnerPos, isGpsStale]);
 
   const remaining = useMemo(() => {
     if (!trackingActive || !route || !partnerPos) return null;
@@ -646,6 +777,7 @@ export function useLiveTracking({
       { polyline: route.polylineCoordinates, distanceMeters: route.distanceMeters, durationSeconds: route.durationSeconds },
       { latitude: partnerPos.lat, longitude: partnerPos.lng },
       ROUTE_POLICY.OFF_ROUTE_METERS,
+      lastSegmentIndexRef.current,
     );
   }, [trackingActive, route, partnerPos]);
 

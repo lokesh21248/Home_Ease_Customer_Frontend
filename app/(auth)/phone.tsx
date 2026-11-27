@@ -29,7 +29,7 @@ const COUNTRY_CODE = '+91';
 
 export default function PhoneScreen() {
   const insets = useSafeAreaInsets();
-  const { sendOtp, bypassLogin } = useAuth();
+  const { sendOtp } = useAuth();
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -58,26 +58,22 @@ export default function PhoneScreen() {
   };
 
   const handleSendOtp = async () => {
+    if (!validate()) return;
     setLoading(true);
     try {
-      const fullPhone = phone.trim() ? `${COUNTRY_CODE}${phone.replace(/\D/g, '')}` : '+919876543210';
-      await bypassLogin(fullPhone);
-      router.replace('/(tabs)');
-    } catch {
-      router.replace('/(tabs)');
+      const fullPhone = `${COUNTRY_CODE}${phone.replace(/\D/g, '')}`;
+      await sendOtp(fullPhone);
+      router.push({ pathname: '/(auth)/otp', params: { phone: fullPhone } });
+    } catch (e: any) {
+      setError(e?.message || 'Could not send OTP. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDirectLogin = async () => {
-    setLoading(true);
-    try {
-      await bypassLogin('+919876543210');
-      router.replace('/(tabs)');
-    } finally {
-      setLoading(false);
-    }
+  const handleDirectLogin = () => {
+    // Browsing without a session is permitted. Never impersonate another customer.
+    router.replace('/(tabs)');
   };
 
   const isValid = phone.replace(/\D/g, '').length === 10;
@@ -161,7 +157,7 @@ export default function PhoneScreen() {
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text style={styles.sendBtnText}>
-                  Direct Login to Pronto
+                  Login to HomeEase
                 </Text>
               )}
             </LinearGradient>
@@ -187,7 +183,7 @@ export default function PhoneScreen() {
 
           {/* Footer */}
           <View style={styles.footerRow}>
-            <Text style={styles.footerText}>New to Pronto? </Text>
+            <Text style={styles.footerText}>New to HomeEase? </Text>
             <Pressable onPress={() => router.push('/(auth)/register')}>
               <Text style={styles.footerLink}>Create Account</Text>
             </Pressable>

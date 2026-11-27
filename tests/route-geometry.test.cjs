@@ -17,7 +17,7 @@ require.extensions['.ts'] = (module, filename) => {
 };
 
 const { decodePolyline, decodePolylineStrict, toGeoJsonCoordinates } = require('../src/services/coordinates.ts');
-const { projectOntoRoute, computeRemaining, collectBoundsPoints } = require('../src/services/routeGeometry.ts');
+const { projectOntoRoute, computeRemaining, collectBoundsPoints, sliceRemainingRoute, remainingRoadPolyline } = require('../src/services/routeGeometry.ts');
 const {
   ROUTE_POLICY,
   decideRouteFetch,
@@ -146,6 +146,71 @@ test('viewport bounds include worker, destination and every route vertex', () =>
   const d = { latitude: 17.5, longitude: 78.54 };
   assert.equal(collectBoundsPoints(w, d, ROAD).length, 5);
   assert.equal(collectBoundsPoints(null, d, []).length, 1);
+});
+
+// ───────────────────────── route shortening (EatClub style) ─────────────────────────
+
+test('sliceRemainingRoute removes travelled segment and starts from projected worker point', () => {
+  // Road has 3 vertices: 0m, 1000m, 2000m. Worker is at 1500m (halfway between 1000m and 2000m)
+  const workerPos = { latitude: LAT, longitude: 78.5 + 1.5 * dLng };
+  const sliced = sliceRemainingRoute(ROAD, workerPos, 1);
+  assert.ok(sliced.progress);
+  assert.equal(sliced.progress.segmentIndex, 1);
+  assert.ok(sliced.remainingPolyline.length >= 2);
+  // First point of remaining polyline is near worker's projection (1500m)
+  approx(sliced.remainingPolyline[0].latitude, LAT, 1e-4);
+  approx(sliced.remainingPolyline[0].longitude, 78.5 + 1.5 * dLng, 1e-4);
+  // Last point is the destination (2000m)
+  approx(sliced.remainingPolyline[sliced.remainingPolyline.length - 1].longitude, ROAD[2].longitude, 1e-9);
+});
+
+test('sliceRemainingRoute keeps fixed destination at the end', () => {
+  const workerPos = { latitude: LAT, longitude: 78.5 + 0.2 * dLng };
+  const sliced = sliceRemainingRoute(ROAD, workerPos, 0);
+  assert.equal(
+    sliced.remainingPolyline[sliced.remainingPolyline.length - 1].longitude,
+    ROAD[ROAD.length - 1].longitude,
+  );
+});
+
+test('sliceRemainingRoute avoids premature segment jumps on looped or self-crossing routes', () => {
+  // A figure-8 or looped road where vertex 0 and vertex 4 are close in space
+  const LOOP_ROAD = [
+    { latitude: 17.500, longitude: 78.500 }, // seg 0
+    { latitude: 17.505, longitude: 78.500 }, // seg 1
+    { latitude: 17.505, longitude: 78.505 }, // seg 2
+    { latitude: 17.500, longitude: 78.505 }, // seg 3
+    { latitude: 17.500, longitude: 78.501 }, // seg 4 (crosses near seg 0)
+    { latitude: 17.495, longitude: 78.501 }, // seg 5 (destination)
+  ];
+  // Worker is on segment 0
+  const workerAtStart = { latitude: 17.501, longitude: 78.500 };
+  const sliced = sliceRemainingRoute(LOOP_ROAD, workerAtStart, 0);
+  // Must choose segment 0, NOT segment 4
+  assert.equal(sliced.progress.segmentIndex, 0);
+});
+
+test('blue Google route shortens while preserving the real remaining road vertices', () => {
+  const worker = { latitude: LAT, longitude: 78.5 + 0.5 * dLng };
+  const route = remainingRoadPolyline(ROAD, worker);
+  assert.equal(route.length, 3);
+  approx(route[0].longitude, worker.longitude, 1e-9);
+  assert.deepEqual(route.slice(1), ROAD.slice(1));
+  assert.deepEqual(route.at(-1), ROAD.at(-1));
+});
+
+test('route progress at a known vertex removes travelled segments', () => {
+  assert.deepEqual(remainingRoadPolyline(ROAD, ROAD[1]), ROAD.slice(1));
+});
+
+test('off-route GPS cannot invent a shortcut to the saved home destination', () => {
+  const off = { latitude: LAT + 100 / M_PER_DEG_LAT, longitude: ROAD[1].longitude };
+  assert.deepEqual(remainingRoadPolyline(ROAD, off), ROAD);
+  assert.deepEqual(remainingRoadPolyline(ROAD, null), ROAD);
+});
+
+test('displayed road is empty at actual route end', () => {
+  assert.deepEqual(remainingRoadPolyline(ROAD, ROAD[2]), []);
 });
 
 // ───────────────────────── route refresh policy (cost control) ─────────────────────────
