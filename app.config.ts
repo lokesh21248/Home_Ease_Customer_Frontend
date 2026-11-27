@@ -2,7 +2,7 @@ import type { ConfigContext } from 'expo/config';
 
 const googleMapsApiKey =
   process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() ||
-  'AIzaSyDbRS73XqF8kq0-6T30FjkTzy1QsUIEw5s';
+  'AIzaSyC4STWdqEz-DpPtrlqGOfoehAH3NF5tDTI';
 
 export default ({ config }: ConfigContext) => {
   const plugins = (config.plugins ?? []).filter((plugin) =>
