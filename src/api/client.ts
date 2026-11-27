@@ -1391,6 +1391,10 @@ export interface TrackingLocationResponse {
   bearing?: number;
   speed?: number;
   accuracy?: number;
+  sequenceNumber?: number;
+  serverTimestamp?: number | string;
+  responseServerTimeMs?: number;
+  ageSeconds?: number;
   status?: string;
   trackingActive?: boolean;
   updatedAt?: string;
@@ -1484,7 +1488,13 @@ export const trackingApi = {
     if (!res.ok) {
       throw new ApiError(res.status, `Unable to load tracking location (HTTP ${res.status})`);
     }
-    return res.json();
+    const data = await res.json();
+    const dateHdr = res.headers?.get?.('date');
+    const responseServerTimeMs = dateHdr ? Date.parse(dateHdr) : NaN;
+    if (Number.isFinite(responseServerTimeMs) && data && typeof data === 'object' && !Array.isArray(data)) {
+      return { ...(data as TrackingLocationResponse), responseServerTimeMs };
+    }
+    return data;
   },
 
   /**

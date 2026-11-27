@@ -7,7 +7,7 @@
  */
 
 import React, { memo, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Platform, View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { AnimatedRegion, Marker } from 'react-native-maps';
 import Svg, { Circle, Ellipse, G, Path } from 'react-native-svg';
 import {
@@ -26,8 +26,6 @@ export type WorkerFix = {
   timestampMs?: number | null;
 };
 
-type MarkerState = 'IDLE' | 'WALKING' | 'GPS_PAUSED' | 'ARRIVED' | 'COMPLETED';
-
 type Props = {
   worker: WorkerFix;
   isGpsStale?: boolean;
@@ -42,7 +40,9 @@ type Props = {
 
 const normalize = (degrees: number) => ((degrees % 360) + 360) % 360;
 const radians = (degrees: number) => (degrees * Math.PI) / 180;
-const WALK_FRAME_MS = 320;
+const WALK_FRAME_MS = 180;
+const STRIDE_PHASES = [0, -2.5, -5.2, -2.5, 0, 2.5, 5.2, 2.5];
+const BOB_PHASES = [0, -0.5, -1, -0.5, 0, -0.5, -1, -0.5];
 
 function distanceMetres(a: WorkerFix, b: WorkerFix): number {
   const lat = radians(b.latitude - a.latitude);
@@ -74,8 +74,9 @@ export const WalkingWoman3D = memo(function WalkingWoman3D({
   heading?: number;
   walkPhase?: number;
 }) {
-  const stride = [0, -6, 0, 6][Math.abs(walkPhase) % 4];
-  const bob = walkPhase === 1 || walkPhase === 3 ? -1 : 0;
+  const idx = Math.abs(walkPhase) % STRIDE_PHASES.length;
+  const stride = STRIDE_PHASES[idx];
+  const bob = BOB_PHASES[idx];
   const leftFootX = 19 + stride;
   const rightFootX = 29 - stride;
   return (
@@ -92,32 +93,40 @@ export const WalkingWoman3D = memo(function WalkingWoman3D({
         <Path d={'M' + (rightFootX - 1) + ' 66 L' + (rightFootX + 5) + ' 67'}
           stroke="#17243D" strokeWidth={4} strokeLinecap="round" />
 
+        {/* Small navy service backpack silhouette. */}
+        <Path d="M12.5 30.5 Q9.5 37 12.5 44 L17 44 L17 30 Z"
+          fill="#172554" stroke="#FFFFFF" strokeWidth={1.1} strokeLinejoin="round" />
+
         {/* The swinging arm behind the uniform. */}
         <Path d={'M30 30 Q' + (37 + stride * 0.3) + ' 39 ' + (35 + stride * 0.45) + ' 46'}
           fill="none" stroke="#D49A72" strokeWidth={5}
           strokeLinecap="round" />
 
-        {/* Front leg and shoe. */}
+        {/* Front leg and white/blue sneaker. */}
         <Path
           d={'M20 45 Q' + (17 + stride * 0.3) + ' 57 ' + leftFootX + ' 66'}
           fill="none" stroke="#152B52" strokeWidth={7.5}
           strokeLinecap="round" strokeLinejoin="round"
         />
-        <Path d={'M' + (leftFootX - 2) + ' 66 L' + (leftFootX + 4) + ' 67'}
-          stroke="#0C1B34" strokeWidth={4.5} strokeLinecap="round" />
+        <Path d={'M' + (leftFootX - 2) + ' 66 L' + (leftFootX + 4.5) + ' 67'}
+          stroke="#F8FAFC" strokeWidth={4.5} strokeLinecap="round" />
+        <Path d={'M' + (leftFootX - 1) + ' 65 L' + (leftFootX + 3) + ' 65.5'}
+          stroke="#2563EB" strokeWidth={2} strokeLinecap="round" />
 
-        {/* Ponytail behind head is a readable female silhouette even at 36px. */}
+        {/* Ponytail behind head is a readable female silhouette even at 30px. */}
         <Path d="M30 12 Q40 14 36 27 Q35 33 31 30 L28 19 Z"
           fill="#271E29" stroke="#FFFFFF" strokeWidth={1} />
         <Path d="M17 10 Q20 2 28 5 Q36 7 34 18 L32 27 L16 22 Z"
           fill="#31232B" stroke="#FFFFFF" strokeWidth={1} />
 
-        {/* Blue HomeEase uniform with contrast outline. */}
+        {/* Blue HomeEase polo uniform with crisp contrast outline and tiny white house emblem. */}
         <Path d="M18 28 Q24 24 31 28 L34 46 Q24 50 15 46 L16 33 Z"
           fill="#2563EB" stroke="#FFFFFF" strokeWidth={2.2} strokeLinejoin="round" />
         <Path d="M20 30 L22 44" stroke="#BFDBFE" strokeWidth={1.6} opacity={0.9} />
         <Path d="M29 29 L32 44" stroke="#1D4ED8" strokeWidth={2} opacity={0.9} />
         <Path d="M20 28 L24 33 L28 28" stroke="#F8FAFC" strokeWidth={1.8} fill="none" />
+        <Path d="M24 35.5 L21.5 38 L22.3 38 L22.3 40.5 L25.7 40.5 L25.7 38 L26.5 38 Z"
+          fill="#FFFFFF" opacity={0.95} />
 
         {/* Other arm moves in the reverse direction to the legs. */}
         <Path d={'M18 30 Q' + (11 - stride * 0.3) + ' 39 ' + (13 - stride * 0.45) + ' 46'}
@@ -144,7 +153,7 @@ export const WalkingWoman3D = memo(function WalkingWoman3D({
 });
 
 /**
- * A single map marker: native GPS coordinate animation + lightweight walking pose.
+ * A single map marker: native GPS coordinate animation + smooth 8-phase walking pose.
  * Android custom markers are briefly resnapshotted for each new pose, rather than
  * holding tracksViewChanges=true continuously at a high frame rate.
  */
@@ -152,8 +161,6 @@ export const MovingWorkerWoman3D = memo(function MovingWorkerWoman3D({
   worker,
   isGpsStale = false,
   zIndex = 100,
-  statusLabel,
-  isLive,
 }: Props) {
   // ── GPS interpolation ──────────────────────────────────────────────────────
   const animatedCoordinate = useRef(
@@ -170,13 +177,6 @@ export const MovingWorkerWoman3D = memo(function MovingWorkerWoman3D({
   const [walking, setWalking] = useState(false);
   const [walkPhase, setWalkPhase] = useState(0);
   const [snapshotUpdates, setSnapshotUpdates] = useState(true);
-  const snapshotTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const refreshSnapshot = () => {
-    setSnapshotUpdates(true);
-    if (snapshotTimer.current) clearTimeout(snapshotTimer.current);
-    snapshotTimer.current = setTimeout(() => setSnapshotUpdates(false), 450);
-  };
 
   const bearing =
     typeof worker.heading === 'number' && Number.isFinite(worker.heading)
@@ -189,7 +189,7 @@ export const MovingWorkerWoman3D = memo(function MovingWorkerWoman3D({
       setWalkPhase(0);
       return;
     }
-    const cadence = setInterval(() => setWalkPhase(p => (p + 1) % 4), WALK_FRAME_MS);
+    const cadence = setInterval(() => setWalkPhase(p => (p + 1) % STRIDE_PHASES.length), WALK_FRAME_MS);
     return () => clearInterval(cadence);
   }, [walking, isGpsStale]);
 

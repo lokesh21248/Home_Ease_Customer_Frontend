@@ -186,4 +186,14 @@ test('useLiveTracking stores routeFailure in ref for fresh callback checks', () 
   );
   assert.equal(hookSource.includes('routeFailureRef'), true, 'must use routeFailureRef to avoid stale closure');
   assert.equal(hookSource.includes('previousWorkerIdRef'), true, 'must clear stale partner marker/route on worker reassignment');
+
+  // Verify sequence gate commits ONLY after timestamp/jump checks, REST staleness uses server time, and single canonical topic is subscribed
+  assert.equal(hookSource.includes("source === 'REST'"), true, 'must differentiate WS vs REST staleness');
+  assert.equal(hookSource.includes('lastSegmentIndexRef.current = 0;'), true, 'must reset segment index on new route fetch');
+  assert.equal(hookSource.includes('/topic/track/${id}'), false, 'must not double-subscribe to both /topic/tracking and /topic/track');
+  const applyIdx = hookSource.indexOf('const applyLocation');
+  const applyBlock = hookSource.slice(applyIdx, hookSource.indexOf('const subscribeTracking'));
+  const seqAssignIdx = applyBlock.indexOf('lastSequenceRef.current = incomingSeq');
+  const jumpCheckIdx = applyBlock.indexOf('isSensibleGpsJump');
+  assert.ok(seqAssignIdx > jumpCheckIdx && jumpCheckIdx > 0, 'lastSequenceRef must advance only after jump & timestamp validation pass');
 });
