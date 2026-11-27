@@ -691,30 +691,26 @@ export const GoogleMapView = forwardRef<GoogleMapHandle, GoogleMapViewProps>(
             </>
           )}
 
-          {/* 3. Moving Worker Marker — 3D code-drawn walking female partner */}
-          {((effHasPartnerLocation && effPartnerLat != null && effPartnerLng != null) ||
-            (mode === 'tracking' && polylineCoords.length > 0)) && (
-            <MovingWorkerWoman3D
-              worker={{
-                latitude:
-                  effPartnerLat != null && isValidCoordinate(effPartnerLat, effPartnerLng ?? 0)
-                    ? effPartnerLat
-                    : polylineCoords[0].latitude,
-                longitude:
-                  effPartnerLng != null && isValidCoordinate(effPartnerLat ?? 0, effPartnerLng)
-                    ? effPartnerLng
-                    : polylineCoords[0].longitude,
-                heading: partnerBearing,
-                timestampMs: lastUpdateTimestamp || Date.now(),
-              }}
-              name={partnerName || 'Service Partner'}
-              zIndex={999}
-              serviceCategory={serviceCategory}
-              isLive={Boolean(isLiveConnected && !isGpsStale)}
-              statusLabel={liveLabel(Boolean(isLiveConnected && !isGpsStale), lastUpdateTimestamp ?? null, Date.now())}
-              isGpsStale={isGpsStale}
-            />
-          )}
+          {/* 3. Moving Worker Marker — real GPS coordinates, bearing rotation, trade icon */}
+          {effHasPartnerLocation &&
+            effPartnerLat != null &&
+            effPartnerLng != null &&
+            isValidCoordinate(effPartnerLat, effPartnerLng) && (
+              <MovingWorkerWoman3D
+                worker={{
+                  latitude: effPartnerLat,
+                  longitude: effPartnerLng,
+                  heading: partnerBearing,
+                  timestampMs: lastUpdateTimestamp ?? null,
+                }}
+                name={partnerName}
+                zIndex={999}
+                serviceCategory={serviceCategory}
+                isLive={Boolean(isLiveConnected && !isGpsStale)}
+                statusLabel={liveLabel(Boolean(isLiveConnected && !isGpsStale), lastUpdateTimestamp ?? null, Date.now())}
+                isGpsStale={isGpsStale}
+              />
+            )}
 
           {/* 4. Turn-by-Turn Road Route Polyline (High-fidelity Google Road Route) */}
           {polylineCoords.length >= 2 && (
